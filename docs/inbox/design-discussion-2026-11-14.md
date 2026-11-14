@@ -20,6 +20,7 @@ Notes from the first discussion. Statements are marked by source: said by Ivan, 
 - The daemon and the CLI are one program named `hopp`, so the old rocket is not broken while hopp is developed.
 - The daemon launches an agent in the folder it is given and does not work with git, repositories, branches or worktrees. Confirmed by Ivan as a fact; now in the daemon leaf.
 - Everything is hopp's own: state directory `~/.hopp`, socket, database and tmux session names. The exact tmux naming scheme is not chosen yet.
+- No roles in the daemon, one `parent` relation between sessions. Confirmed by Ivan; now in the daemon leaf.
 - Docs and code live in one repository. Docs are written in English.
 
 ## Read in the old rocket
