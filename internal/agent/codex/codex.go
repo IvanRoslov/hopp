@@ -117,7 +117,10 @@ func seedCodexTrust(worktreePath string) error {
 
 	path := filepath.Join(base, "config.toml")
 
-	unlock, err := lockFile(path + ".hopp-lock")
+	// Deliberately rocket's name, not hopp's: hopp and rocket both rewrite
+	// $CODEX_HOME/config.toml, and a flock only serializes writers of the
+	// same file.
+	unlock, err := lockFile(path + ".rocket-lock")
 	if err != nil {
 		return err
 	}
