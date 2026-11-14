@@ -18,7 +18,7 @@ Notes from the first discussion. Statements are marked by source: said by Ivan, 
 
 - hopp is a harness. Its first component is the daemon, which manages tmux sessions and lets agents talk to each other.
 - The daemon and the CLI are one program named `hopp`, so the old rocket is not broken while hopp is developed.
-- The daemon only needs to know "a tmux session in such-and-such folder". It does not need a repository or a worktree. Ivan's wording was "I think that is enough".
+- The daemon launches an agent in the folder it is given and does not work with git, repositories, branches or worktrees. Confirmed by Ivan as a fact; now in the daemon leaf.
 - Everything is hopp's own: state directory `~/.hopp`, socket, database and tmux session names. The exact tmux naming scheme is not chosen yet.
 - Docs and code live in one repository. Docs are written in English.
 
