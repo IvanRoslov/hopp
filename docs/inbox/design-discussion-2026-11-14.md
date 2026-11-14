@@ -19,6 +19,7 @@ Notes from the first discussion. Statements are marked by source: said by Ivan, 
 - hopp is a harness. Its first component is the daemon, which manages tmux sessions and lets agents talk to each other.
 - The daemon and the CLI are one program named `hopp`, so the old rocket is not broken while hopp is developed.
 - The daemon only needs to know "a tmux session in such-and-such folder". It does not need a repository or a worktree. Ivan's wording was "I think that is enough".
+- Everything is hopp's own: state directory `~/.hopp`, socket, database and tmux session names. The exact tmux naming scheme is not chosen yet.
 - Docs and code live in one repository. Docs are written in English.
 
 ## Read in the old rocket
@@ -43,5 +44,4 @@ Notes from the first discussion. Statements are marked by source: said by Ivan, 
 ## Open questions
 
 - Must sessions from different scenarios see each other and exchange messages? The answer decides between one shared daemon per machine and a core library that every scenario carries. Claude recommends one shared daemon.
-- Which names besides the program name must differ from rocket so both can run side by side (state directory, socket, tmux session names)?
 - Implementation language: rocket is written in Go; the language for hopp was not discussed.
