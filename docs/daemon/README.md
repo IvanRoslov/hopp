@@ -9,7 +9,7 @@ verified: 2026-11-14 — scaffold, nothing verified yet
 
 # daemon
 
-Демон: запускает агентов в tmux-сессиях с выбранным харнесом и моделью и доставляет сообщения между сессиями.
+Демон и его CLI — одна программа: запускает агентов в tmux-сессиях с выбранным харнесом и моделью и доставляет сообщения между сессиями.
 
 1. <TODO: the one fact an agent most needs about this component: what it owns and why it matters.>
 2. <TODO: what it depends on and what depends on it.>
