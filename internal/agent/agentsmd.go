@@ -7,15 +7,15 @@ import (
 	"regexp"
 )
 
-var hoppBlockRe = regexp.MustCompile(`(?s)<!-- rocket:start -->.*?<!-- rocket:end -->\n?`)
+var hoppBlockRe = regexp.MustCompile(`(?s)<!-- hopp:start -->.*?<!-- hopp:end -->\n?`)
 
-// UpsertAgentsMD writes the Rocket prompt block and preserves any other
+// UpsertAgentsMD writes the hopp prompt block and preserves any other
 // instructions. The prompt is written as given.
 func UpsertAgentsMD(worktreePath, systemPrompt string) error {
 	if systemPrompt == "" {
 		return nil
 	}
-	block := "<!-- rocket:start -->\n" + systemPrompt + "\n<!-- rocket:end -->\n"
+	block := "<!-- hopp:start -->\n" + systemPrompt + "\n<!-- hopp:end -->\n"
 	path := filepath.Join(worktreePath, "AGENTS.md")
 	perm := os.FileMode(0o644)
 	var existing []byte
