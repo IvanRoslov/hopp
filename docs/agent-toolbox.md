@@ -40,6 +40,7 @@ building — the queries, CLIs, and dashboards you actually use to see what happ
 
 - `make test` runs `go test ./...`.
 - `make build` builds the program into `bin/hopp`.
+- The Pi delivery extension tests run with `node --experimental-strip-types --test internal/agent/pi/delivery-extension.test.ts`; `go test` does not run them.
 
 ## 5. Verify the running system
 

@@ -4,7 +4,7 @@ repo: this repo, `cmd` and `internal`
 last-verified: 2026-11-14
 kind: leaf
 up: [[INDEX]]
-verified: 2026-11-14 — scaffold, nothing verified yet
+verified: 2026-11-14 — go test ./..., go vet ./... and the Pi extension tests on main
 ---
 
 # daemon
@@ -18,7 +18,7 @@ The daemon manages tmux sessions that run agents and lets the agents message eac
 5. The daemon has no roles: it does not know the words "orchestrator" or "worker", all sessions are equal, and any session may message any other. Who manages whom is knowledge of the layer above, which also supplies the prompt for each session.
 6. The one relation the daemon keeps is `parent`: which session launched which, to any depth. It is what lets a session list its children, stops the children when the parent is stopped, tells the parent when a child is stuck or has failed, and tells each agent its own id and its parent's id through the environment.
 7. The daemon is ported from the old rocket, not written from scratch. Message delivery and the reading of agent screens carry a long history of debugging against real agent CLIs, and rewriting them would throw that away.
-8. <TODO: what it depends on and what depends on it.>
+8. So far the repository holds the tmux runtime, the delivery clients and the five harness adapters (`claude-code`, `codex`, `kimi-code`, `pi`, `deepseek`), ported from rocket with their tests; there is no daemon process, store or CLI command yet. `internal/PORTED.md` records every change made to the ported code.
 
 <!-- Grow this leaf to up to 12 facts. When it answers several separate questions,
      turn this README into a node (kind: node, 3–7 facts) and give each question its
