@@ -12,4 +12,4 @@ Drop notes as `docs/inbox/<short-name>.md`. Don't let them accumulate — an ite
 
 <!-- Add notes here as wikilinks, e.g. a line linking docs/inbox/some-research with a short description. -->
 
-- [[docs/inbox/design-discussion-2026-11-14]] — первое обсуждение устройства hopp: зачем новая версия, что решено, что прочитано в старом rocket, открытые вопросы.
+- [[docs/inbox/design-discussion-2026-11-14]] — first design discussion: why a new version, what is decided, what was read in the old rocket, open questions.

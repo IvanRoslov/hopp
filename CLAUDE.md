@@ -2,7 +2,7 @@
 
 You are working in **hopp**. Its docs are the source of truth for how the system is built, how parts connect, and what rules govern it. They are the **memory of the orchestrator agent**, not just human documentation.
 
-Харнесс для оркестрации агентов.
+A harness for orchestrating AI agents.
 
 > **PRIME FRAME — <TODO: the one thing that governs every decision here>.**
 > <TODO: state the project's governing frame in 3-6 lines: what this system is for, what
@@ -44,6 +44,7 @@ Docs and code live in this one repo, so one PR carries both.
 - Read the tree for what is true, the code for how. Do not copy code mechanics into facts.
 - Code layout: <TODO: where the code lives (for example `apps/api`, `apps/web`, `packages/*`) once it exists. Until then the tree links the repo root.>
 - Code conventions: <TODO: language, formatter, linter, test runner, and the commands for each — or a link to where they live.> Build, run and test commands are in `docs/agent-toolbox.md`.
+- Language: docs are written in English.
 - Keep the `lint-docs` and `test-lint` targets when you add code targets to the `Makefile`.
 
 ## Authoring rules (enforced by `make lint-docs`)

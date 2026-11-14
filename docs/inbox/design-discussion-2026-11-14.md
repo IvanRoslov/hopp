@@ -2,43 +2,46 @@
 last-verified: 2026-11-14
 ---
 
-# Обсуждение устройства hopp, 14 ноября 2026
+# hopp design discussion, 14 November 2026
 
-Заметка фиксирует первое обсуждение. Ничего из неё ещё не стало фактом дерева: решения помечены как сказанные Иваном, предложения — как предложения Claude, не утверждённые.
+Notes from the first discussion. Statements are marked by source: said by Ivan, read in the old rocket code, or proposed by Claude and not approved. Triage each into the tree once it is settled.
 
-## Зачем новая версия (сказал Иван)
+## Why a new version (said by Ivan)
 
-- В старом rocket (`~/projects/rocket`) слишком много зашито под конкретные сценарии.
-- Нужно более универсальное решение; сценариев может быть много, и они будут разными под разные задачи.
-- Creative был добавлен как отдельная часть, но всё равно «поплыло»: получилась каша.
-- Из старого проекта хочется забрать и улучшить демон, который управляет tmux-сессиями и доставляет сообщения между ними.
-- Важно сохранить возможность запускать разные модели и разные харнесы.
+- The old rocket (`~/projects/rocket`) has too much baked in for specific scenarios.
+- The goal is a more universal solution. There may be many scenarios, and they will differ by task.
+- Creative was added as a separate part and still blurred everything.
+- The part worth taking from rocket and improving is the daemon that manages tmux sessions and delivers messages between them.
+- Launching different models and different harnesses must stay possible.
 
-## Что решено
+## Decided (said by Ivan)
 
-- Демону достаточно знать «tmux-сессия в такой-то папке»; привязка к репозиторию и worktree ему не нужна (Иван: «да, думаю, достаточно»).
-- Демон и CLI — одна программа, как в старом rocket (там один бинарник: `rocket daemon run` запускает демон, остальные команды — клиенты через Unix-сокет).
-- Документация и код живут в одном репозитории.
+- hopp is a harness. Its first component is the daemon, which manages tmux sessions and lets agents talk to each other.
+- The daemon and the CLI are one program named `hopp`, so the old rocket is not broken while hopp is developed.
+- The daemon only needs to know "a tmux session in such-and-such folder". It does not need a repository or a worktree. Ivan's wording was "I think that is enough".
+- Docs and code live in one repository. Docs are written in English.
 
-## Что прочитано в старом rocket
+## Read in the old rocket
 
-- Пакеты `runtime`, `socketmsg`, `nativeinput` не зависят от остального кода; `claudeinstance` зависит только от `socketmsg`. Их можно переносить как есть.
-- `queue`, `monitor` и `session` зависят от общего пакета `store`, в котором рядом лежат сессии, сообщения, задачи, вопросные треды, creative, устройства и расход токенов (34 миграции).
-- Менеджер сессий содержит ветки под creative в spawn и restore; в спецификации запуска агента есть поля роли, родителя, проекта, репозитория, фичи и флаг `Creative`.
-- В таблице сессий есть колонки сценария разработки: `task_id`, `subtask_id`, поля PR и CI.
-- Три транспорта доставки: сокет Claude Code, собственный сокет-канал Pi, вставка в tmux как запасной путь.
-- Пять адаптеров харнесов: `claude-code`, `codex`, `kimi-code`, `pi`, `deepseek`. `deepseek` — это Claude Code с подменёнными адресом API, ключом и моделью через окружение.
-- Профиль модели: имя, харнес, модель, усилие, описание, флаг «включён», позиция. Сессия хранит снимок профиля, restore перезапускает из снимка.
-- Политика выбора профиля написана в терминах оркестратора, воркера и задачи.
+- rocket is one binary: `rocket daemon run` starts the daemon, every other command is a client over a Unix socket.
+- Packages `runtime`, `socketmsg` and `nativeinput` import nothing else from the project; `claudeinstance` imports only `socketmsg`. They can be carried over as they are.
+- `queue`, `monitor` and `session` depend on one shared `store` package that holds sessions, messages, tasks, question threads, creative, devices and token usage side by side (34 migrations).
+- The session manager has creative branches in spawn and restore. The agent launch spec carries role, parent, project, repository, feature and a `Creative` flag.
+- The sessions table has columns of the development scenario: `task_id`, `subtask_id`, PR and CI fields.
+- Three delivery transports: the Claude Code socket, a dedicated socket channel for Pi, and tmux paste as the fallback.
+- Five harness adapters: `claude-code`, `codex`, `kimi-code`, `pi`, `deepseek`. `deepseek` is Claude Code with the API address, key and model replaced through the environment.
+- A model profile is a name, harness, model, effort, description, enabled flag and position. A session stores a snapshot of its profile, and restore relaunches from the snapshot.
+- The profile selection policy is written in terms of orchestrator, worker and task.
 
-## Предложения Claude, не утверждённые
+## Proposed by Claude, not approved
 
-- Демон не знает слов «оркестратор», «воркер», «задача», «creative». Сценарий при запуске сессии передаёт папку, профиль, системный промпт, первое сообщение, окружение и произвольные метки; демон метки хранит и отдаёт, но не читает.
-- Сценарий подписан на события демона и держит своё состояние в собственной базе.
-- Разделить в профиле харнес и провайдера, чтобы «Claude Code + DeepSeek» было строкой в реестре, а не отдельным адаптером.
-- Политику выбора профиля не переносить в демон: кто какой профиль может брать, решает слой выше.
+- The daemon does not know the words "orchestrator", "worker", "task" or "creative". A scenario passes the folder, profile, system prompt, first message, environment and free-form labels when it launches a session; the daemon stores and returns the labels but does not read them.
+- A scenario subscribes to daemon events and keeps its own state in its own database.
+- Split harness and provider in the profile, so that "Claude Code + DeepSeek" is a registry row and not a separate adapter.
+- Keep the profile selection policy out of the daemon: the layer above decides who may use which profile.
 
-## Открытые вопросы
+## Open questions
 
-- Должны ли сессии из разных сценариев видеть друг друга и переписываться? От ответа зависит, один общий демон на машину или ядро-библиотека, которую каждый сценарий несёт сам. Claude рекомендует один общий демон.
-- На чём писать: старый rocket написан на Go, для hopp язык не обсуждался.
+- Must sessions from different scenarios see each other and exchange messages? The answer decides between one shared daemon per machine and a core library that every scenario carries. Claude recommends one shared daemon.
+- Which names besides the program name must differ from rocket so both can run side by side (state directory, socket, tmux session names)?
+- Implementation language: rocket is written in Go; the language for hopp was not discussed.
