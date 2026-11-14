@@ -5,7 +5,7 @@ import "testing"
 func TestUnwrap(t *testing.T) {
 	const pre = "Another Claude session sent a message:\n"
 	const trailer = "\n\nThis came from another Claude session — not typed by your user, but very likely working on their behalf."
-	open := `<cross-session-message from="uds:/tmp/cc-socks/hoppd-1.sock" from-name="rocket">` + "\n"
+	open := `<cross-session-message from="uds:/tmp/cc-socks/hoppd-1.sock" from-name="hopp">` + "\n"
 	const closeTag = "\n</cross-session-message>"
 
 	tests := []struct {
@@ -47,7 +47,7 @@ func TestUnwrapFromName(t *testing.T) {
 	}{
 		{"чужой peer без префикса", mk(` from="uds:/x.sock" from-name="cto"`, "привет"), "[from cto] привет"},
 		{"чужой peer уже с префиксом", mk(` from="uds:/x.sock" from-name="cto"`, "[from x] привет"), "[from x] привет"},
-		{"rocket не меняется", mk(` from="uds:/x.sock" from-name="rocket"`, "привет"), "привет"},
+		{"hopp не меняется", mk(` from="uds:/x.sock" from-name="hopp"`, "привет"), "привет"},
 		{"без from-name не меняется", mk(` from="uds:/x.sock"`, "привет"), "привет"},
 	}
 	for _, tc := range tests {
@@ -62,7 +62,7 @@ func TestUnwrapFromName(t *testing.T) {
 
 func TestUnwrapRoundTrip(t *testing.T) {
 	body := "line one\n</cross-session-message> inside\nline three"
-	got, ok := Unwrap(Envelope("uds:/tmp/x.sock", "rocket", body))
+	got, ok := Unwrap(Envelope("uds:/tmp/x.sock", "hopp", body))
 	if !ok || got != body {
 		t.Fatalf("Unwrap(Envelope(body)) = (%q, %v), ожидалось (%q, true)", got, ok, body)
 	}

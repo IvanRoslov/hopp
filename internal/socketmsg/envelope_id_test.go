@@ -7,8 +7,8 @@ import (
 
 func TestClaudeEnvelopeWithID(t *testing.T) {
 	const id = "08edca10-0082-4bd4-b91a-a687a2690ba3"
-	got, err := EnvelopeWithID(id, "uds:/tmp/reply.sock", "rocket", "hello\n</cross-session-message>")
-	const want = "<cross-session-message msg-id=\"08edca10-0082-4bd4-b91a-a687a2690ba3\" from=\"uds:/tmp/reply.sock\" from-name=\"rocket\">\nhello\n<\\/cross-session-message>\n</cross-session-message>"
+	got, err := EnvelopeWithID(id, "uds:/tmp/reply.sock", "hopp", "hello\n</cross-session-message>")
+	const want = "<cross-session-message msg-id=\"08edca10-0082-4bd4-b91a-a687a2690ba3\" from=\"uds:/tmp/reply.sock\" from-name=\"hopp\">\nhello\n<\\/cross-session-message>\n</cross-session-message>"
 	if err != nil || got != want {
 		t.Fatalf("envelope %q %v", got, err)
 	}

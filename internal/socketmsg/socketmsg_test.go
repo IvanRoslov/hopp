@@ -38,8 +38,8 @@ func TestEncodeAddrPassesReceiverValidation(t *testing.T) {
 }
 
 func TestEnvelope(t *testing.T) {
-	got := Envelope("uds:/tmp/cc-socks/1.sock", "rocket", "hi")
-	want := "<cross-session-message from=\"uds:/tmp/cc-socks/1.sock\" from-name=\"rocket\">\nhi\n</cross-session-message>"
+	got := Envelope("uds:/tmp/cc-socks/1.sock", "hopp", "hi")
+	want := "<cross-session-message from=\"uds:/tmp/cc-socks/1.sock\" from-name=\"hopp\">\nhi\n</cross-session-message>"
 	if got != want {
 		t.Fatalf("got %q\nwant %q", got, want)
 	}

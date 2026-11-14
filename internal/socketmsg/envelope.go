@@ -94,7 +94,7 @@ func Unwrap(s string) (string, bool) {
 	body := escapedCloseTag.ReplaceAllString(rest[:end], "</$1")
 	// Peer, не являющийся rocket, мог написать прямо в сокет без префикса
 	// `[from X]` в теле; имя есть только в атрибуте, восстанавливаем его.
-	if m := fromNameAttr.FindStringSubmatch(s[:loc[1]]); m != nil && m[1] != "rocket" && !strings.HasPrefix(body, "[from ") {
+	if m := fromNameAttr.FindStringSubmatch(s[:loc[1]]); m != nil && m[1] != "hopp" && !strings.HasPrefix(body, "[from ") {
 		body = "[from " + m[1] + "] " + body
 	}
 	return body, true
