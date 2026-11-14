@@ -1,0 +1,219 @@
+package runtime
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestParseKimiComposerSnapshots(t *testing.T) {
+	cases := map[string]KimiComposer{
+		"kimi-idle.pane":        KimiEmpty,
+		"kimi-draft.pane":       KimiDraft,
+		"kimi-busy-queued.pane": KimiBusy,
+		"kimi-finished.pane":    KimiEmpty,
+		"kimi-agentsmd.pane":    KimiEmpty,
+	}
+	for name, want := range cases {
+		got, ok := ParseKimiComposer(readPane(t, name))
+		if !ok || got != want {
+			t.Errorf("%s: ParseKimiComposer = %v, %v; want %v", name, got, ok, want)
+		}
+	}
+}
+
+func TestParseKimiComposerNegatives(t *testing.T) {
+	names := []string{"kimi-trust.pane", "kimi-question.pane"}
+	all, err := filepath.Glob("testdata/*.pane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range all {
+		if !strings.HasPrefix(filepath.Base(p), "kimi-") {
+			names = append(names, filepath.Base(p))
+		}
+	}
+	for _, name := range names {
+		if got, ok := ParseKimiComposer(readPane(t, name)); ok {
+			t.Errorf("%s: ParseKimiComposer = %v, true; want not recognized", name, got)
+		}
+	}
+	if _, ok := ParseKimiComposer(""); ok {
+		t.Error("empty pane recognized")
+	}
+}
+
+// A draft typed over several rows, and the pane captured with escapes.
+func TestParseKimiComposerMultilineDraftWithEscapes(t *testing.T) {
+	pane := strings.Join([]string{
+		" \x1b[2m╭──────────────╮\x1b[0m",
+		" │ > \x1b[1mfirst\x1b[0m       │",
+		" │   second     │",
+		" ╰──────────────╯",
+		" Never Ask  K3.1 Pro",
+		"            context: 0% (0/1M)",
+	}, "\n")
+	if got, ok := ParseKimiComposer(pane); !ok || got != KimiDraft {
+		t.Fatalf("got %v, %v", got, ok)
+	}
+	empty := strings.Replace(strings.Replace(pane, "\x1b[1mfirst\x1b[0m", "     ", 1), "second", "      ", 1)
+	if got, ok := ParseKimiComposer(empty); !ok || got != KimiEmpty {
+		t.Fatalf("empty: got %v, %v", got, ok)
+	}
+}
+
+func TestParseKimiStartScreenTrust(t *testing.T) {
+	p, ok := ParseKimiStartScreen(readPane(t, "kimi-trust.pane"))
+	if !ok {
+		t.Fatal("trust screen not recognized")
+	}
+	if p.Title != "Trust this folder?" {
+		t.Errorf("Title = %q", p.Title)
+	}
+	if len(p.Options) != 2 || p.Options[0] != "Trust and continue" || p.Options[1] != "Exit" {
+		t.Errorf("Options = %q", p.Options)
+	}
+	if !strings.Contains(p.Context, "/.rocket/scratch/kimi-recon/untrusted") {
+		t.Errorf("Context lacks the rejoined path: %q", p.Context)
+	}
+	if strings.Contains(p.Context, "navigate") {
+		t.Errorf("Context holds the key hint: %q", p.Context)
+	}
+	if p.Raw == "" {
+		t.Error("Raw empty")
+	}
+	if c := KimiStartScreenCursor(readPane(t, "kimi-trust.pane")); c != 0 {
+		t.Errorf("cursor = %d, want 0", c)
+	}
+	moved := strings.Replace(strings.Replace(readPane(t, "kimi-trust.pane"), "   ❯ Trust and continue", "     Trust and continue", 1), "     Exit", "   ❯ Exit", 1)
+	if c := KimiStartScreenCursor(moved); c != 1 {
+		t.Errorf("moved cursor = %d, want 1", c)
+	}
+	if q, ok := ParseKimiStartScreen(moved); !ok || !q.SameDialog(p) {
+		t.Error("moving the cursor changed the dialog identity")
+	}
+}
+
+func TestKimiCacheHintCompactSelected(t *testing.T) {
+	pane := readPane(t, "kimi-cache-hint.pane")
+	if !KimiCacheHintDialog(pane) || !KimiCacheHintCompactSelected(pane) {
+		t.Fatal("cache hint with compact selected not recognized")
+	}
+	moved := strings.Replace(strings.Replace(pane, "   ❯ Compact and continue", "     Compact and continue", 1), "     Continue as-is", "   ❯ Continue as-is", 1)
+	if !KimiCacheHintDialog(moved) {
+		t.Fatal("cache hint not recognized after the cursor left compact")
+	}
+	if KimiCacheHintCompactSelected(moved) {
+		t.Fatal("compact recognized as selected after the cursor moved")
+	}
+	for _, name := range []string{"kimi-trust.pane", "kimi-question.pane", "kimi-idle.pane"} {
+		other := readPane(t, name)
+		if KimiCacheHintDialog(other) || KimiCacheHintCompactSelected(other) {
+			t.Errorf("%s recognized as a cache hint", name)
+		}
+	}
+}
+
+// Kimi's AskUserQuestion widget is a journal interaction (Activity reports
+// blocked), not a start screen; composer and other agents' panes are not
+// start screens either.
+func TestParseKimiStartScreenNegatives(t *testing.T) {
+	all, err := filepath.Glob("testdata/*.pane")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range all {
+		name := filepath.Base(p)
+		if name == "kimi-trust.pane" || name == "kimi-cache-hint.pane" {
+			continue
+		}
+		if got, ok := ParseKimiStartScreen(readPane(t, name)); ok {
+			t.Errorf("%s: recognized as Kimi start screen %+v", name, got)
+		}
+		if KimiStartScreenCursor(readPane(t, name)) != -1 {
+			t.Errorf("%s: cursor without a screen", name)
+		}
+	}
+}
+
+// Codex's start-screen parser must keep ignoring Kimi's screen (its options
+// are unnumbered) and vice versa.
+func TestCodexStartScreenIgnoresKimiTrust(t *testing.T) {
+	if _, ok := ParseStartScreen(readPane(t, "kimi-trust.pane")); ok {
+		t.Fatal("Codex parser matched Kimi trust screen")
+	}
+}
+
+// The queue footer is Kimi's own statement about the queue: the explicit total
+// once the body scrolls, and whether Ctrl-S steers now or after the task.
+func TestKimiComposerQueueFoot(t *testing.T) {
+	busy, ok := parseKimiComposer(readPane(t, "kimi-busy-queued.pane"))
+	if !ok {
+		t.Fatal("busy pane not parsed")
+	}
+	if busy.queueTotal != 1 || !busy.steerable || !busy.steerableQueue("reply QUEUED_OK") {
+		t.Fatalf("busy = total %d, steerable %v; want 1/true and ownership", busy.queueTotal, busy.steerable)
+	}
+	if busy.steerableQueue("another message") {
+		t.Error("foreign text recognized as the steerable queue item")
+	}
+
+	scrolled := strings.Replace(readPane(t, "kimi-busy-queued.pane"),
+		"↑ to edit · ctrl-s to steer immediately",
+		"2 queued · ↑ to edit · ctrl-s to steer immediately", 1)
+	k, ok := parseKimiComposer(scrolled)
+	if !ok || k.queueTotal != 2 || !k.steerable {
+		t.Fatalf("scrolled = %+v, %v; want total 2 and a steerable foot", k, ok)
+	}
+	if k.steerableQueue("reply QUEUED_OK") {
+		t.Error("one visible row with a hidden total of 2 treated as exclusive")
+	}
+
+	afterTask := strings.Replace(readPane(t, "kimi-busy-queued.pane"),
+		"ctrl-s to steer immediately", "will send after current task", 1)
+	if k, _ := parseKimiComposer(afterTask); k.steerable || k.steerableQueue("reply QUEUED_OK") {
+		t.Error("a queue that sends after the current task was treated as steerable")
+	}
+
+	clipped := strings.Replace(readPane(t, "kimi-busy-queued.pane"),
+		"ctrl-s to steer immediately", "ctrl-s to steer imme…", 1)
+	if k, _ := parseKimiComposer(clipped); k.steerable {
+		t.Error("a clipped footer was treated as advertising immediate steering")
+	}
+
+	noFoot := strings.Replace(readPane(t, "kimi-busy-queued.pane"),
+		"   ↑ to edit · ctrl-s to steer immediately\n", "", 1)
+	if k, ok := parseKimiComposer(noFoot); !ok || k.steerable || k.steerableQueue("reply QUEUED_OK") {
+		t.Fatalf("missing footer = %+v, %v; want no steer", k, ok)
+	}
+
+	if k, ok := parseKimiComposer(readPane(t, "kimi-draft.pane")); !ok || k.steerableQueue("draft not submitted") {
+		t.Fatal("a draft composer was treated as steerable")
+	}
+}
+
+// hasQueue is the pre-injection evidence: visible rows, a queue footer, or a
+// committed busy state all mean Kimi already holds pending input. It is
+// broader than KimiBusy on purpose (a scrolled/clipped queue may not parse as
+// busy, but delivery still must not type into it).
+func TestKimiComposerHasQueueEvidence(t *testing.T) {
+	busy, _ := parseKimiComposer(readPane(t, "kimi-busy-queued.pane"))
+	if !busy.hasQueue {
+		t.Error("busy queue pane has no queue evidence")
+	}
+	for _, name := range []string{"kimi-idle.pane", "kimi-finished.pane", "kimi-draft.pane"} {
+		if k, _ := parseKimiComposer(readPane(t, name)); k.hasQueue {
+			t.Errorf("%s: queue evidence on a pane without a queue", name)
+		}
+	}
+	noFoot := strings.Replace(readPane(t, "kimi-busy-queued.pane"),
+		"   ↑ to edit · ctrl-s to steer immediately\n", "", 1)
+	if k, _ := parseKimiComposer(noFoot); !k.hasQueue {
+		t.Error("visible queue rows without a footer are not queue evidence")
+	}
+	onlyFoot := strings.Replace(readPane(t, "kimi-busy-queued.pane"),
+		"   ❯ reply QUEUED_OK\n", "", 1)
+	if k, _ := parseKimiComposer(onlyFoot); !k.hasQueue || k.state != KimiEmpty {
+		t.Errorf("footer-only queue = %+v, want queue evidence without a committed busy state", k)
+	}
+}
