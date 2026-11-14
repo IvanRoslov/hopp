@@ -637,12 +637,14 @@ func trustPersisted(path string, keys []string) (bool, error) {
 }
 
 // lockClaudeJSON acquires an exclusive flock on a sidecar lock file next to
-// path (path + ".hopp-lock"), serializing concurrent read-modify-write
+// path (path + ".rocket-lock"), serializing concurrent read-modify-write
 // cycles against ~/.claude.json across goroutines/processes. The caller
 // must invoke the returned func (typically via defer) to release the lock
 // and close the file descriptor.
 func lockClaudeJSON(path string) (func(), error) {
-	lockPath := path + ".hopp-lock"
+	// Deliberately rocket's name, not hopp's: hopp and rocket both rewrite
+	// ~/.claude.json, and a flock only serializes writers of the same file.
+	lockPath := path + ".rocket-lock"
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open lock file %s: %w", lockPath, err)
