@@ -16,3 +16,7 @@ Rename table, applied by `scripts/port_pkg.sh` to Go sources and to hook scripts
 
 | Package | Changes beyond the rename table | Tests dropped |
 |---|---|---|
+| `activity` | None. | None. |
+| `socketmsg` | None. Left as is on purpose: `envelope.go` still compares the `from-name` attribute with `"rocket"` (the name the daemon sends as); the ported test `envelope_test.go` asserts that value, so it changes together with the daemon's sender name. | None. |
+| `nativeinput` | None. | None. |
+| `claudeinstance` | None. | None. |
