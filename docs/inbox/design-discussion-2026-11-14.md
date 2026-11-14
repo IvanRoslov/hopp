@@ -21,6 +21,7 @@ Notes from the first discussion. Statements are marked by source: said by Ivan, 
 - The daemon launches an agent in the folder it is given and does not work with git, repositories, branches or worktrees. Confirmed by Ivan as a fact; now in the daemon leaf.
 - Everything is hopp's own: state directory `~/.hopp`, socket, database and tmux session names. The exact tmux naming scheme is not chosen yet.
 - No roles in the daemon, one `parent` relation between sessions. Confirmed by Ivan; now in the daemon leaf.
+- Scope is a full port: hopp must cover all five harnesses rocket supports (`claude-code`, `codex`, `kimi-code`, `pi`, `deepseek`), not Claude Code first.
 - Docs and code live in one repository. Docs are written in English.
 
 ## Read in the old rocket
