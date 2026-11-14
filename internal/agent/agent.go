@@ -1,0 +1,296 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/IvanRoslov/hopp/internal/activity"
+)
+
+// ErrNoSignal indicates the agent adapter could not find any activity
+// signal (e.g. no transcript file) for the given reference.
+var ErrNoSignal = errors.New("no activity signal")
+
+// ActivityRef identifies the agent session/worktree to inspect for
+// activity state.
+type ActivityRef struct {
+	SessionID    string
+	WorktreePath string
+	// Since, when set, is when the session's current agent process was
+	// launched (spawn or the latest restore). Probes that must ignore an
+	// earlier run's transcript in the same worktree (StartupProber) count
+	// only records at or after it. Zero means no bound.
+	Since time.Time
+}
+
+// Tokens holds token usage for one actual model in an agent transcript.
+// Reasoning is a subset of Output, not an additional chargeable category.
+type Tokens struct {
+	Input, CacheWrite, CacheRead, Output, Reasoning, Messages int64
+}
+
+// Usage is the token usage of all transcripts belonging to one worktree.
+// Found reports whether a matching transcript was found, even if it has no
+// token usage records.
+type Usage struct {
+	Models          map[string]Tokens
+	FirstAt, LastAt time.Time
+	Found           bool
+}
+
+// UsageReader is an optional adapter capability for reading native session
+// transcripts. Since excludes records from an earlier use of the worktree.
+type UsageReader interface {
+	Usage(ctx context.Context, worktreePath string, since time.Time) (Usage, error)
+}
+
+// StartupProber is an optional adapter capability for agents whose CLI may
+// stop on an interactive start screen (trust, update, …) before the first
+// turn. While HasStartedTurn is false the monitor reads the pane for such a
+// screen (runtime.ParseStartScreen); once it is true the check stops.
+type StartupProber interface {
+	// HasStartedTurn reports whether the session's transcript records at least one task_started.
+	HasStartedTurn(ctx context.Context, ref ActivityRef) (bool, error)
+}
+
+// ChatEntry is one entry in a session's chat transcript, as returned by
+// Agent.TranscriptTail.
+type ChatEntry struct {
+	Role     string // "user" | "assistant" | "tool" | "quiz_answer"
+	Text     string // message text; for Role=="tool", a short digest of the tool call
+	ToolName string // set only when Role=="tool" (e.g. "Bash", "Edit")
+	TS       int64  // unix seconds from the transcript record; 0 if absent
+	// Quiz carries the untruncated interactive-quiz payload for whitelisted
+	// tools (AskUserQuestion): the full tool_use input (questions/options)
+	// on the Role=="tool" entry that asked, and the raw toolUseResult
+	// (questions echo + answers map) on the Role=="quiz_answer" entry that
+	// answered. Nil for everything else — the 120-rune Text digest limit
+	// stays global, this field is the additive escape hatch for quizzes.
+	Quiz json.RawMessage
+}
+
+// NativeTransportPiUDS is the only native transport implemented so far.
+const NativeTransportPiUDS = "pi-uds-v1"
+
+type NativeLaunch struct {
+	Transport  string
+	InstanceID string
+	Endpoint   string
+}
+
+// Validate rejects a native declaration Rocket cannot honor. The zero value is
+// the supported legacy transport; pi-uds-v1 needs both its launch instance and
+// its endpoint. Anything else must fail the launch before the runtime starts,
+// never silently start the session on another transport.
+func (n NativeLaunch) Validate() error {
+	if n.Transport == "" {
+		if n.InstanceID != "" || n.Endpoint != "" {
+			return fmt.Errorf("native launch: instance/endpoint declared without a transport")
+		}
+		return nil
+	}
+	if n.Transport != NativeTransportPiUDS {
+		return fmt.Errorf("native launch: unsupported transport %q", n.Transport)
+	}
+	if n.InstanceID == "" || n.Endpoint == "" {
+		return fmt.Errorf("native launch: incomplete %s declaration (instance=%q endpoint=%q)", n.Transport, n.InstanceID, n.Endpoint)
+	}
+	return nil
+}
+
+type NativeLaunchProvider interface {
+	PrepareNativeLaunch(spec LaunchSpec) (NativeLaunch, error)
+}
+
+// LaunchSpec contains all configuration needed to launch an agent.
+type LaunchSpec struct {
+	NativeDelivery         NativeLaunch
+	ClaudeLaunchGeneration string
+
+	SessionID    string
+	ParentID     string
+	WorktreePath string
+	SystemPrompt string
+	FirstMessage string
+	Model        string
+	// Effort is the reasoning-effort level to launch with, one of the
+	// agent's Efforts(); empty means the agent's default and passes no flag.
+	Effort         string
+	PermissionMode string
+	SocketPath     string
+}
+
+// FirstMessageByInput marks agents whose interactive CLI cannot accept a
+// positional first prompt. The session manager queues it for pane delivery.
+type FirstMessageByInput interface{ FirstMessageByInput() bool }
+
+func TakesFirstMessageByInput(a Agent) bool {
+	v, ok := a.(FirstMessageByInput)
+	return ok && v.FirstMessageByInput()
+}
+
+// BracketedPaster marks agents whose TUI needs bracketed paste for injected
+// text. The queue uses this capability when it delivers messages.
+type BracketedPaster interface{ BracketedPaste() bool }
+
+func WantsBracketedPaste(a Agent) bool {
+	v, ok := a.(BracketedPaster)
+	return ok && v.BracketedPaste()
+}
+
+// TurnFailureReporter is implemented by agents whose journal records why a
+// turn failed (Kimi: turn.ended reason=failed with the provider's error,
+// e.g. an exhausted quota). Activity reports such a session blocked; the
+// monitor uses this to tell the parent once per failed turn.
+type TurnFailureReporter interface {
+	// LastTurnFailure reports whether the latest turn of ref's session
+	// failed, with an ID unique per turn (stable across calls) and the
+	// error text. No journal is ErrNoSignal.
+	LastTurnFailure(ctx context.Context, ref ActivityRef) (turnID, msg string, ok bool, err error)
+}
+
+// PaneDialecter is implemented by agents whose TUI needs rocket's
+// agent-specific pane parsers (runtime.PaneDialect*): Kimi Code's composer
+// box and unnumbered start screens. The queue, the injector and the monitor
+// read such panes with those parsers.
+type PaneDialecter interface{ PaneDialect() string }
+
+// PaneDialectOf returns a's pane dialect, "" for the default parsers.
+func PaneDialectOf(a Agent) string {
+	if v, ok := a.(PaneDialecter); ok {
+		return v.PaneDialect()
+	}
+	return ""
+}
+
+// BusyInputAccepter is implemented by agents whose composer takes new input
+// while a turn is running and keeps it in the agent's own queue (Codex). For
+// them the message queue treats an active session as ready to receive.
+type BusyInputAccepter interface{ AcceptsInputWhileBusy() bool }
+
+// AcceptsInputWhileBusy reports whether a takes input while busy.
+func AcceptsInputWhileBusy(a Agent) bool {
+	b, ok := a.(BusyInputAccepter)
+	return ok && b.AcceptsInputWhileBusy()
+}
+
+// DeliveryConfirmer is implemented by agents whose transcript proves that
+// injected text reached the model, so the queue can mark a message
+// delivered only once it is recorded there.
+type DeliveryConfirmer interface {
+	// ConfirmDelivered reports whether the session's transcript holds a user
+	// message whose text equals text (whitespace-normalized), recorded
+	// strictly after since; at is the timestamp of the first such record.
+	// A record also matches when a contiguous run of its whole lines equals
+	// text: Codex joins messages queued back to back into one record, so one
+	// record may confirm several different messages.
+	ConfirmDelivered(ctx context.Context, ref ActivityRef, text string, since time.Time) (found bool, at time.Time, err error)
+}
+
+// Catalog sources (Catalog.Source).
+const (
+	CatalogSourceCLI     = "cli"
+	CatalogSourceCache   = "cache"
+	CatalogSourceBuiltin = "builtin"
+)
+
+// Catalog is the list of models an agent offers and where it came from.
+type Catalog struct {
+	Source    string    // CatalogSourceCLI | CatalogSourceCache | CatalogSourceBuiltin
+	FetchedAt time.Time // when the source fetched it; zero for builtin
+	Warning   string    // why a better source was skipped; empty when all went well
+	Models    []CatalogModel
+}
+
+// CatalogModel is one model of an agent's catalog.
+type CatalogModel struct {
+	ID, Name, Description string
+	// Main marks a current model (codex: visibility=list; claude-code:
+	// section=main); the rest are previous generations.
+	Main bool
+	// Efforts are the levels LaunchSpec.Effort may take with this model, in
+	// increasing order; empty means the model has no effort knob.
+	Efforts       []string
+	DefaultEffort string
+}
+
+// Agent represents an AI coding agent that can be launched with a given spec.
+type Agent interface {
+	// Name returns the name of the agent (e.g., "claude-code").
+	Name() string
+
+	// Available checks if the agent is available for use (e.g., executable in PATH).
+	Available() error
+
+	// SetupWorkspace prepares the workspace for agent launch.
+	// In phase 1, this writes the system prompt to a file if provided.
+	SetupWorkspace(spec LaunchSpec) error
+
+	// Efforts returns the reasoning-effort levels LaunchSpec.Effort may take
+	// for this agent, in increasing order; nil if the agent has no such knob.
+	Efforts() []string
+
+	// Catalog returns the models this agent offers, from the best source
+	// available (the agent's own CLI, its on-disk cache, or a builtin
+	// snapshot). A broken or missing source is not an error: the adapter
+	// falls back and explains why in Catalog.Warning.
+	Catalog(ctx context.Context) (Catalog, error)
+
+	// LaunchCommand returns the command and arguments needed to launch the agent.
+	LaunchCommand(spec LaunchSpec) []string
+
+	// Env returns environment variables needed for the agent.
+	Env(spec LaunchSpec) map[string]string
+
+	// Activity returns the raw activity state and last-work timestamp for
+	// the given agent session, based on source signals (e.g. transcript
+	// files). Thresholds (e.g. downgrading Ready to Idle) are applied by
+	// the monitor, not here. Returns ErrNoSignal if no signal is found.
+	Activity(ctx context.Context, ref ActivityRef) (activity.State, time.Time, error)
+
+	// TranscriptTail returns chat entries recorded after cursor (""=from
+	// the start of the current transcript) and the new cursor to resume
+	// from on the next call. The cursor is opaque to callers: store and
+	// return it verbatim. Returns ErrNoSignal if no transcript is found.
+	TranscriptTail(ctx context.Context, ref ActivityRef, cursor string) ([]ChatEntry, string, error)
+
+	// TranscriptStat returns the modification time (unix seconds) and size
+	// (bytes) of the current transcript file, for cheap polling of whether
+	// the chat has changed. Returns ErrNoSignal if no transcript is found.
+	TranscriptStat(ctx context.Context, ref ActivityRef) (mtime int64, size int64, err error)
+}
+
+// LaunchEnvScrubber is an optional adapter capability for credentials that
+// must be absent from the actual launched process, including inherited ones.
+type LaunchEnvScrubber interface {
+	ScrubLaunchEnv(spec LaunchSpec) []string
+}
+
+// LaunchEnvUnsets returns the variable names a wants removed after env merging.
+func LaunchEnvUnsets(a Agent, spec LaunchSpec) []string {
+	s, ok := a.(LaunchEnvScrubber)
+	if !ok {
+		return nil
+	}
+	return s.ScrubLaunchEnv(spec)
+}
+
+// builders holds agent constructor functions, populated by agent implementations via Register.
+var builders = map[string]func() Agent{}
+
+// Register registers an agent builder under the given name.
+func Register(name string, builder func() Agent) {
+	builders[name] = builder
+}
+
+// ClaudeSocketCompatible is an explicitly inherited optional inbox capability.
+// Wrappers that expose only Agent do not acquire it through their names.
+type ClaudeSocketCompatible interface{ ClaudeSocketCompatible() bool }
+
+func SupportsClaudeSocket(a Agent) bool {
+	v, ok := a.(ClaudeSocketCompatible)
+	return ok && v.ClaudeSocketCompatible()
+}
