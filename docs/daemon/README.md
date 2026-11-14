@@ -17,7 +17,8 @@ The daemon manages tmux sessions that run agents and lets the agents message eac
 4. The daemon launches an agent in the folder it is given and knows nothing more about that folder. It does not work with git, repositories, branches or worktrees: whoever asks for the session prepares the folder beforehand and cleans it up afterwards.
 5. The daemon has no roles: it does not know the words "orchestrator" or "worker", all sessions are equal, and any session may message any other. Who manages whom is knowledge of the layer above, which also supplies the prompt for each session.
 6. The one relation the daemon keeps is `parent`: which session launched which, to any depth. It is what lets a session list its children, stops the children when the parent is stopped, tells the parent when a child is stuck or has failed, and tells each agent its own id and its parent's id through the environment.
-7. <TODO: what it depends on and what depends on it.>
+7. The daemon is ported from the old rocket, not written from scratch. Message delivery and the reading of agent screens carry a long history of debugging against real agent CLIs, and rewriting them would throw that away.
+8. <TODO: what it depends on and what depends on it.>
 
 <!-- Grow this leaf to up to 12 facts. When it answers several separate questions,
      turn this README into a node (kind: node, 3–7 facts) and give each question its
