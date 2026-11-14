@@ -17,4 +17,6 @@ find "$dst" -maxdepth 1 -type f \( -name '*.go' -o -name '*.sh' -o -name '*.ts' 
     s{ROCKET_}{HOPP_}g; s{RocketSessionID}{HoppSessionID}g;
     s{rocketd-}{hoppd-}g; s{\.rocket/}{.hopp/}g; s{\.rocket-prompt\.md}{.hopp-prompt.md}g;
     s{rocket-(launch\.sh|inject-|tmp-|pi-|lock|managed)}{hopp-$1}g;'
+# Renames change identifier lengths, which breaks gofmt column alignment.
+find "$dst" -maxdepth 1 -type f -name '*.go' -print0 | xargs -0 gofmt -w
 echo "ported internal/$pkg from rocket@$COMMIT"

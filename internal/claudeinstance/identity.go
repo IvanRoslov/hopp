@@ -11,19 +11,19 @@ import (
 )
 
 type Launch struct {
-	BindingRevision                           uint64
+	BindingRevision                         uint64
 	HoppSessionID, Generation, PaneIdentity string
-	PanePID                                   int
-	PaneStart                                 time.Time
-	StartedAt                                 time.Time
+	PanePID                                 int
+	PaneStart                               time.Time
+	StartedAt                               time.Time
 }
 type Identity struct {
 	HoppSessionID, LaunchGeneration, ClaudeSessionID string
-	PID                                                int
-	ProcessStart                                       time.Time
-	PaneIdentity                                       string
-	PeerProtocol                                       int
-	Kind, SocketPath, JournalPath                      string
+	PID                                              int
+	ProcessStart                                     time.Time
+	PaneIdentity                                     string
+	PeerProtocol                                     int
+	Kind, SocketPath, JournalPath                    string
 }
 type Liveness string
 
