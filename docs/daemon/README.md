@@ -1,6 +1,6 @@
 ---
 component: daemon
-repo: this repo, `daemon`
+repo: this repo, `cmd` and `internal`
 last-verified: 2026-11-14
 kind: leaf
 up: [[INDEX]]
@@ -25,4 +25,4 @@ The daemon manages tmux sessions that run agents and lets the agents message eac
      own leaf in this directory; the node must link every leaf, and every doc in the
      directory must be listed here once it holds three or more. -->
 
-Code: [daemon](daemon)
+Code: [cmd](cmd), [internal](internal)

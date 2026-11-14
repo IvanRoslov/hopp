@@ -38,8 +38,8 @@ building — the queries, CLIs, and dashboards you actually use to see what happ
 
 ## 4. Tests
 
-<TODO: unit, integration, e2e — the commands, where the logs land, and how to run a
-single case. Note anything that skips silently.>
+- `make test` runs `go test ./...`.
+- `make build` builds the program into `bin/hopp`.
 
 ## 5. Verify the running system
 

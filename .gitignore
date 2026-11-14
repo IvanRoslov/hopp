@@ -5,6 +5,8 @@ superpowers/
 # Python (the docs linter)
 __pycache__/
 *.pyc
+# Go build output
+bin/
 # OS / local
 .DS_Store
 .env

@@ -42,8 +42,8 @@ Docs and code live in this one repo, so one PR carries both.
 - You changed behaviour? Fix the fact in the same PR. A PR that changes what the tree says and leaves the fact stale is not done.
 - A leaf's `Code:` line links a directory of this repo. Moving or renaming that directory breaks the leaf; `make lint-docs` catches it, and CI runs the docs lint on every PR, code-only ones included.
 - Read the tree for what is true, the code for how. Do not copy code mechanics into facts.
-- Code layout: <TODO: where the code lives (for example `apps/api`, `apps/web`, `packages/*`) once it exists. Until then the tree links the repo root.>
-- Code conventions: <TODO: language, formatter, linter, test runner, and the commands for each — or a link to where they live.> Build, run and test commands are in `docs/agent-toolbox.md`.
+- Code layout: the Go module is at the repository root, the program is `cmd/hopp`, packages are under `internal/`, and `internal/PORTED.md` records what came from rocket.
+- Code conventions: Go 1.25, `gofmt`, `go vet ./...`, `go test ./...`. Build, run and test commands are in `docs/agent-toolbox.md`.
 - Language: docs are written in English.
 - Keep the `lint-docs` and `test-lint` targets when you add code targets to the `Makefile`.
 
