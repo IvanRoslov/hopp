@@ -51,6 +51,11 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnReq) (store.Session, error
 	if err := ag.Available(); err != nil {
 		return store.Session{}, validationErr("agent_unavailable", "agent unavailable: "+err.Error())
 	}
+	if v, ok := ag.(agent.PermissionModeValidator); ok {
+		if err := v.ValidatePermissionMode(req.PermissionMode); err != nil {
+			return store.Session{}, validationErr("invalid_permission_mode", err.Error())
+		}
+	}
 
 	if req.ParentID != "" {
 		if _, err := m.st.GetSession(req.ParentID); err != nil {

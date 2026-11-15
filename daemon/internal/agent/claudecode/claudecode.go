@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/IvanRoslov/hopp/internal/agent"
@@ -685,8 +687,15 @@ const sessionSettingsJSON = `{"crossSessionInbound":"accept"}`
 // evaluation, and cross-session messaging is gated behind a feature flag, so
 // setting any of them would silently disable the session's inbox — the very
 // channel sessionSettingsJSON opens up. Same for Env below.
+//
+// Without a permission mode, or with bypassPermissions, the session skips
+// permission prompts (--dangerously-skip-permissions), as rocket's workers
+// do. Any other mode is passed alone, so Claude Code asks as that mode says.
 func (c *ClaudeCode) LaunchCommand(spec agent.LaunchSpec) []string {
 	cmd := []string{"claude", "--dangerously-skip-permissions", "--settings", sessionSettingsJSON}
+	if spec.PermissionMode != "" && spec.PermissionMode != permissionModeBypass {
+		cmd = []string{"claude", "--settings", sessionSettingsJSON}
+	}
 
 	if spec.SystemPrompt != "" {
 		cmd = append(cmd, "--append-system-prompt", spec.SystemPrompt)
@@ -709,6 +718,22 @@ func (c *ClaudeCode) LaunchCommand(spec agent.LaunchSpec) []string {
 	}
 
 	return cmd
+}
+
+// permissionModeBypass is the mode that keeps --dangerously-skip-permissions.
+const permissionModeBypass = "bypassPermissions"
+
+// permissionModes are the values `claude --permission-mode` accepts
+// (Claude Code 2.1.325, `claude --help`).
+var permissionModes = []string{"acceptEdits", "auto", permissionModeBypass, "manual", "dontAsk", "plan"}
+
+// ValidatePermissionMode implements agent.PermissionModeValidator: the empty
+// mode or one of permissionModes.
+func (c *ClaudeCode) ValidatePermissionMode(mode string) error {
+	if mode == "" || slices.Contains(permissionModes, mode) {
+		return nil
+	}
+	return fmt.Errorf("Claude Code does not accept permission mode %q; use one of: %s", mode, strings.Join(permissionModes, ", "))
 }
 
 // Efforts returns the levels `claude --effort` accepts (claude --help).

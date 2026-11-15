@@ -257,3 +257,25 @@ func TestSpawnFailureMarksErrored(t *testing.T) {
 		t.Errorf("state_changed = %v, %v, %v", data, ok, err)
 	}
 }
+
+func TestSpawnRejectsInvalidPermissionMode(t *testing.T) {
+	e := testManager(t)
+	sessiontest.FakeAgent.PermissionModes = []string{"manual", "plan"}
+	_, err := e.m.Spawn(context.Background(), SpawnReq{Dir: mkdir(t, "pm"), Profile: fakeProfile(), PermissionMode: "default"})
+	if validationCode(err) != "invalid_permission_mode" {
+		t.Fatalf("err = %v, want invalid_permission_mode", err)
+	}
+	if !strings.Contains(err.Error(), "manual, plan") {
+		t.Errorf("error %q should list the accepted modes", err)
+	}
+	all, err := e.st.ListSessions(store.SessionFilter{All: true})
+	if err != nil || len(all) != 0 {
+		t.Errorf("left sessions %+v (err %v)", all, err)
+	}
+	if len(sessiontest.FakeAgent.LaunchCalls) != 0 {
+		t.Errorf("launched %+v", sessiontest.FakeAgent.LaunchCalls)
+	}
+	if _, err := e.m.Spawn(context.Background(), SpawnReq{Dir: mkdir(t, "pm2"), Profile: fakeProfile(), PermissionMode: "plan"}); err != nil {
+		t.Fatalf("accepted mode refused: %v", err)
+	}
+}

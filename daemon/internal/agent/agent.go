@@ -290,6 +290,14 @@ func Register(name string, builder func() Agent) {
 // Wrappers that expose only Agent do not acquire it through their names.
 type ClaudeSocketCompatible interface{ ClaudeSocketCompatible() bool }
 
+// PermissionModeValidator is implemented by an agent that honours
+// LaunchSpec.PermissionMode and knows which values its CLI accepts. A launch
+// whose mode it rejects is refused before anything is recorded. An agent
+// without it ignores the mode.
+type PermissionModeValidator interface {
+	ValidatePermissionMode(mode string) error
+}
+
 func SupportsClaudeSocket(a Agent) bool {
 	v, ok := a.(ClaudeSocketCompatible)
 	return ok && v.ClaudeSocketCompatible()

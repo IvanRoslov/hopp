@@ -135,12 +135,12 @@ func TestLaunchCommandFull(t *testing.T) {
 		SystemPrompt:   "You are a code assistant.",
 		FirstMessage:   "Help me write a function.",
 		Model:          "claude-opus",
-		PermissionMode: "strict",
+		PermissionMode: "bypassPermissions",
 	}
 
 	cmd := cc.LaunchCommand(spec)
 
-	// Expected: ["claude", "--dangerously-skip-permissions", "--settings", <json>, "--append-system-prompt", "You are a code assistant.", "--model", "claude-opus", "--permission-mode", "strict", "--", "Help me write a function."]
+	// Expected: ["claude", "--dangerously-skip-permissions", "--settings", <json>, "--append-system-prompt", "You are a code assistant.", "--model", "claude-opus", "--permission-mode", "bypassPermissions", "--", "Help me write a function."]
 	expectedLen := 12
 	if len(cmd) != expectedLen {
 		t.Errorf("expected %d args, got %d: %v", expectedLen, len(cmd), cmd)
@@ -162,7 +162,7 @@ func TestLaunchCommandFull(t *testing.T) {
 		t.Errorf("model args wrong: [%s, %s]", cmd[6], cmd[7])
 	}
 
-	if cmd[8] != "--permission-mode" || cmd[9] != "strict" {
+	if cmd[8] != "--permission-mode" || cmd[9] != "bypassPermissions" {
 		t.Errorf("permission-mode args wrong: [%s, %s]", cmd[8], cmd[9])
 	}
 

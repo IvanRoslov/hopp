@@ -4,7 +4,9 @@ package sessiontest
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -157,6 +159,21 @@ type Agent struct {
 	LaunchCalls  []agent.LaunchSpec
 	EnvOverrides map[string]string
 	EffortLevels []string
+	// PermissionModes, when set, is the list ValidatePermissionMode accepts
+	// (besides the empty mode).
+	PermissionModes []string
+}
+
+func (a *Agent) ValidatePermissionMode(mode string) error {
+	if mode == "" || a.PermissionModes == nil {
+		return nil
+	}
+	for _, m := range a.PermissionModes {
+		if m == mode {
+			return nil
+		}
+	}
+	return fmt.Errorf("permission mode %q is not one of %s", mode, strings.Join(a.PermissionModes, ", "))
 }
 
 func (a *Agent) Name() string              { return a.AgentName }
