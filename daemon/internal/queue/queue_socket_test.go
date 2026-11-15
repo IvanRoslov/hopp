@@ -27,6 +27,7 @@ type fakeSocket struct {
 	attempts        int
 	snapshots       []claudeinstance.Snapshot
 	beforeClaim     func()
+	onSend          func(claudeinstance.Snapshot)
 }
 
 func (f *fakeSocket) Resolve(context.Context, store.Session) claudeinstance.Resolution {
@@ -58,6 +59,9 @@ func (f *fakeSocket) Prepare(_ context.Context, _ store.Session, name, text stri
 	return v, nil
 }
 func (f *fakeSocket) Send(_ context.Context, v claudeinstance.Snapshot) (SocketOutcome, error) {
+	if f.onSend != nil {
+		f.onSend(v)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++

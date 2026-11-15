@@ -91,6 +91,12 @@ func (q *Queue) deliverClaude(ctx context.Context, msg store.Message, sess store
 		}
 		return true, ""
 	}
+	// Claimed: the message no longer waits, so a wait reason recorded by an
+	// earlier pass (possibly in this same deliver call, which msg predates)
+	// must not show during the socket write.
+	if err := q.st.ClearClaimedReason(msg.ID); err != nil {
+		slog.Warn("queue: clear Claude wait reason", "id", msg.ID, "error", err)
+	}
 	outcome, sendErr := q.socket.Send(ctx, snapshot)
 	if sendErr != nil {
 		slog.Warn("queue: Claude delivery awaits outcome/proof", "id", msg.ID, "outcome", outcome, "error", sendErr)

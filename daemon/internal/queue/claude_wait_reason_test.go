@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IvanRoslov/hopp/internal/activity"
+	"github.com/IvanRoslov/hopp/internal/claudeinstance"
 	"github.com/IvanRoslov/hopp/internal/store"
 )
 
@@ -111,5 +113,30 @@ func removeRegistry(t *testing.T, dir string, pid int) {
 	t.Helper()
 	if e := os.Remove(filepath.Join(dir, fmt.Sprintf("%d.json", pid))); e != nil {
 		t.Fatal(e)
+	}
+}
+
+// TestClaimedMessageHasNoWaitReasonDuringSend: once a message is claimed it is
+// no longer waiting, so the socket write never sees a stale wait reason on it.
+func TestClaimedMessageHasNoWaitReasonDuringSend(t *testing.T) {
+	h := newTestQueue(t)
+	h.addRunningSession(t, "recv", activity.Ready)
+	f := installClaudeSocket(t, h, false)
+	id, _ := h.st.AddMessage(store.Message{ToSession: "recv", Body: "feedback"})
+	deliverPasses(h, id, 300*time.Millisecond)
+	if m, _ := h.st.GetMessage(id); m.Status != "queued" || m.Reason == "" {
+		t.Fatalf("no wait reason before the cause cleared: %+v", m)
+	}
+	var atSend store.Message
+	f.onSend = func(claudeinstance.Snapshot) { atSend, _ = h.st.GetMessage(id) }
+	f.mu.Lock()
+	f.available = true
+	f.mu.Unlock()
+	deliverPasses(h, id, time.Second)
+	if f.sendCount() != 1 {
+		t.Fatalf("sends %d", f.sendCount())
+	}
+	if atSend.Status != "delivering" || atSend.Reason != "" {
+		t.Fatalf("row during the socket write %+v, want delivering with no reason", atSend)
 	}
 }
