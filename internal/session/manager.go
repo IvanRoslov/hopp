@@ -56,6 +56,15 @@ type Manager struct {
 	// input to the message queue; nil until the queue is wired.
 	firstMessage func(sessionID, body string) error
 
+	// ownerProbe reports whether the live tmux session tmuxName belongs to
+	// the hopp session id; every Destroy asks it first (see destroyOwned).
+	// Defaults to comparing the tmux session's HOPP_SESSION_ID with id.
+	ownerProbe func(ctx context.Context, tmuxName, id string) (bool, error)
+
+	// paneOnlyShell reports whether a tmux session's pane holds only a bare
+	// shell; defaults to runtime.PaneOnlyShell, shared with the monitor.
+	paneOnlyShell func(ctx context.Context, tmuxName string) (bool, error)
+
 	// mu serializes Spawn, Kill, Restore, and Reconcile end-to-end. Without
 	// it, a Kill racing a concurrent Spawn between the session's
 	// AddSession (state "spawning") and its final UpdateSession (state
@@ -69,8 +78,32 @@ type Manager struct {
 func NewManager(st *store.Store, b *bus.Bus, rt runtime.Runtime, cfg *config.Config) *Manager {
 	return &Manager{
 		st: st, bus: b, rt: rt, cfg: cfg,
-		claudeProbe: claudeinstance.SystemProbe{},
+		claudeProbe:   claudeinstance.SystemProbe{},
+		ownerProbe:    tmuxOwner,
+		paneOnlyShell: runtime.PaneOnlyShell,
 	}
+}
+
+// tmuxOwner is the default owner probe: the tmux session carries
+// HOPP_SESSION_ID equal to id in its environment.
+func tmuxOwner(ctx context.Context, tmuxName, id string) (bool, error) {
+	v, ok, err := runtime.SessionEnv(ctx, tmuxName, "HOPP_SESSION_ID")
+	if err != nil {
+		return false, err
+	}
+	return ok && v == id, nil
+}
+
+// SetOwnerProbe overrides the check that a live tmux session belongs to a
+// hopp session. Tests use it to avoid running tmux.
+func (m *Manager) SetOwnerProbe(f func(ctx context.Context, tmuxName, id string) (bool, error)) {
+	m.ownerProbe = f
+}
+
+// SetPaneProber overrides the check that tells whether a live tmux session's
+// pane holds only a bare shell. Tests use it to avoid running tmux/ps.
+func (m *Manager) SetPaneProber(f func(ctx context.Context, tmuxName string) (bool, error)) {
+	m.paneOnlyShell = f
 }
 
 // SetWake installs the queue's wake function before sessions are launched.

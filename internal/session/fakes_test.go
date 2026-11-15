@@ -211,6 +211,13 @@ func testManager(t *testing.T) testEnv {
 	testFakeInputAgent = &fakeAgent{name: "fake-input", firstByInput: true}
 	rt := &fakeRuntime{}
 	m := NewManager(st, bus.New(st), rt, cfg)
+	// The default owner probe reads the tmux environment; the fake keeps one
+	// per name, so the same rule runs against it.
+	m.SetOwnerProbe(func(ctx context.Context, tmuxName, id string) (bool, error) {
+		v, ok := rt.sessionEnv(tmuxName, "HOPP_SESSION_ID")
+		return ok && v == id, nil
+	})
+	m.SetPaneProber(func(ctx context.Context, tmuxName string) (bool, error) { return false, nil })
 	return testEnv{m: m, st: st, rt: rt, cfg: cfg}
 }
 
@@ -237,4 +244,32 @@ func validationCode(err error) string {
 		return ve.Code
 	}
 	return ""
+}
+
+// addLiveSession records a running session whose tmux session exists in the
+// fake runtime with this id in its environment, as Spawn leaves it.
+func addLiveSession(t *testing.T, e testEnv, id, parent, dir string) {
+	t.Helper()
+	if err := e.st.AddSession(store.Session{ID: id, ParentID: parent, WorktreePath: dir, TmuxName: id, Agent: "fake",
+		State: "running", Model: "m1", Effort: "high", SystemPrompt: "be brief", PermissionMode: "plan",
+		Env: map[string]string{"FOO": "bar"}, Prompt: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	e.rt.mu.Lock()
+	defer e.rt.mu.Unlock()
+	if e.rt.aliveMap == nil {
+		e.rt.aliveMap = map[string]bool{}
+		e.rt.envs = map[string]map[string]string{}
+	}
+	e.rt.aliveMap[id] = true
+	e.rt.envs[id] = map[string]string{"HOPP_SESSION_ID": id}
+}
+
+func sessionState(t *testing.T, st *store.Store, id string) string {
+	t.Helper()
+	s, err := st.GetSession(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.State
 }
