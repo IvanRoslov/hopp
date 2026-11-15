@@ -42,8 +42,8 @@ Docs and code live in this one repo, so one PR carries both.
 - You changed behaviour? Fix the fact in the same PR. A PR that changes what the tree says and leaves the fact stale is not done.
 - A leaf's `Code:` line links a directory of this repo. Moving or renaming that directory breaks the leaf; `make lint-docs` catches it, and CI runs the docs lint on every PR, code-only ones included.
 - Read the tree for what is true, the code for how. Do not copy code mechanics into facts.
-- Code layout: the Go module is at the repository root, the program is `cmd/hopp`, packages are under `internal/`, and `internal/PORTED.md` records what came from rocket.
-- Code conventions: Go 1.25, `gofmt`, `go vet ./...`, `go test ./...`. Build, run and test commands are in `docs/agent-toolbox.md`.
+- Code layout: all code lives in `daemon/`. The Go module is `daemon/` (module path `github.com/IvanRoslov/hopp`; the directory name and the module path differ on purpose), the program is `daemon/cmd/hopp`, packages are under `daemon/internal/`, and `daemon/internal/PORTED.md` records what came from rocket. The `Makefile` and the build output `bin/hopp` stay at the repository root.
+- Code conventions: Go 1.25, `gofmt`, `go vet ./...`, `go test ./...`, run inside `daemon/` (or `make test` from the root). Build, run and test commands are in `docs/agent-toolbox.md`.
 - Language: docs are written in English.
 - Keep the `lint-docs` and `test-lint` targets when you add code targets to the `Makefile`.
 
