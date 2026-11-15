@@ -18,6 +18,7 @@ import (
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/config"
 	"github.com/IvanRoslov/hopp/internal/heartbeat"
+	"github.com/IvanRoslov/hopp/internal/mailwatch"
 	"github.com/IvanRoslov/hopp/internal/monitor"
 	"github.com/IvanRoslov/hopp/internal/nativeinput"
 	"github.com/IvanRoslov/hopp/internal/queue"
@@ -123,6 +124,8 @@ func Run(cfg *config.Config) error {
 	go hb.Run(ctx)
 	uc := usage.New(st, b, usage.Options{})
 	go uc.Run(ctx)
+	// Tell a session that mail waits in the mailbox of its name.
+	go mailwatch.New(st, cfg, q.Wake).Run(ctx)
 
 	shutdownCalled := make(chan struct{})
 	var shutdownOnce func()

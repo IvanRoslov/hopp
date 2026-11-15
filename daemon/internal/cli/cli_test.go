@@ -917,3 +917,128 @@ func TestUsageTreeTotals(t *testing.T) {
 		t.Errorf("total line %q, want input 123 output 13 messages 3", total)
 	}
 }
+
+// TestInboxDefaultsToCallerAndNeedsMailbox: the mailbox is --mailbox, else
+// $HOPP_SESSION_ID; with neither, a usage error naming --mailbox.
+func TestInboxDefaultsToCallerAndNeedsMailbox(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/mailboxes/me/inbox", 200, map[string]any{"messages": []any{}})
+	f.on("GET /v1/mailboxes/box/inbox", 200, map[string]any{"messages": []any{}})
+	_, errOut, code := runCLI(t, f, "inbox")
+	if code != 3 || !strings.Contains(errOut, "--mailbox") {
+		t.Fatalf("no mailbox: exit %d stderr %q", code, errOut)
+	}
+	t.Setenv("HOPP_SESSION_ID", "me")
+	if _, errOut, code := runCLI(t, f, "inbox"); code != 0 || f.last(t).Path != "/v1/mailboxes/me/inbox" {
+		t.Fatalf("from env: exit %d %s %+v", code, errOut, f.last(t))
+	}
+	if _, errOut, code := runCLI(t, f, "inbox", "--mailbox", "box"); code != 0 || f.last(t).Path != "/v1/mailboxes/box/inbox" {
+		t.Fatalf("flag: exit %d %s %+v", code, errOut, f.last(t))
+	}
+}
+
+func TestInboxListNextPeek(t *testing.T) {
+	f := newFakeAPI(t)
+	now := time.Now().Unix()
+	f.on("GET /v1/mailboxes/box/inbox", 200, map[string]any{"messages": []any{
+		map[string]any{"id": 3, "mailbox": "box", "from": "s1", "body": "first line\nmore", "status": "unread", "created_at": now},
+		map[string]any{"id": 4, "mailbox": "box", "from": "", "body": "x", "status": "unread", "created_at": now - 600},
+	}})
+	out, errOut, code := runCLI(t, f, "inbox", "--mailbox", "box")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if q := f.last(t).Query; q != "status=unread" {
+		t.Errorf("query %q", q)
+	}
+	for _, want := range []string{"2 unread", "#3", "s1", "just now", "first line", "#4", "10m"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("list %q lacks %q", out, want)
+		}
+	}
+	if strings.Contains(out, "more") {
+		t.Errorf("list shows more than the first line: %q", out)
+	}
+	f.on("POST /v1/mailboxes/box/inbox/next", 200, map[string]any{"id": 3, "from": "s1", "body": "first line\nmore", "status": "read", "created_at": now})
+	out, _, code = runCLI(t, f, "inbox", "next", "--mailbox", "box")
+	if code != 0 || !strings.Contains(out, "#3 from s1") || !strings.Contains(out, "first line\nmore") {
+		t.Errorf("next: exit %d %q", code, out)
+	}
+	f.on("GET /v1/mailboxes/box/inbox/4", 200, map[string]any{"id": 4, "from": "", "body": "x", "status": "unread", "created_at": now})
+	out, _, code = runCLI(t, f, "inbox", "peek", "#4", "--mailbox", "box")
+	if code != 0 || !strings.Contains(out, "#4 from -") {
+		t.Errorf("peek: exit %d %q", code, out)
+	}
+	if _, _, code := runCLI(t, f, "inbox", "peek", "x", "--mailbox", "box"); code != 3 {
+		t.Errorf("peek bad id: exit %d", code)
+	}
+	f.handle("POST /v1/mailboxes/box/inbox/next", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
+	out, _, code = runCLI(t, f, "inbox", "next", "--mailbox", "box")
+	if code != 0 || !strings.Contains(out, "inbox is empty") {
+		t.Errorf("drained: exit %d %q", code, out)
+	}
+}
+
+func TestMailboxCommands(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/mailboxes", 201, map[string]any{"name": "cto"})
+	f.on("DELETE /v1/mailboxes/cto", 200, map[string]any{"removed": "cto"})
+	f.on("GET /v1/mailboxes", 200, map[string]any{"mailboxes": []any{map[string]any{"name": "cto", "unread": 2, "total": 5, "created_at": 1}}})
+	if out, errOut, code := runCLI(t, f, "mailbox", "add", "cto"); code != 0 || f.last(t).Body["name"] != "cto" || !strings.Contains(out, "cto") {
+		t.Fatalf("add: %d %s %q", code, errOut, out)
+	}
+	out, _, code := runCLI(t, f, "mailbox", "ls")
+	if code != 0 || !strings.Contains(out, "cto") || !strings.Contains(out, "2") {
+		t.Errorf("ls: %d %q", code, out)
+	}
+	if _, errOut, code := runCLI(t, f, "mailbox", "rm", "cto"); code != 0 || f.last(t).Method != "DELETE" {
+		t.Errorf("rm: %d %s", code, errOut)
+	}
+}
+
+// TestSendToInboxReturnsAtOnce: a message stored in a mailbox has no
+// delivery to follow, so --wait returns at once and says where it went.
+func TestSendToInboxReturnsAtOnce(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/messages", 202, map[string]any{"id": 9, "to": "cto", "status": "inbox"})
+	out, errOut, code := runCLI(t, f, "send", "cto", "hello", "--wait")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "inbox") || !strings.Contains(out, "cto") {
+		t.Errorf("output %q", out)
+	}
+	if len(f.all()) != 1 {
+		t.Errorf("polled after an inbox delivery: %+v", f.all())
+	}
+}
+
+func TestFirstLine(t *testing.T) {
+	if got := firstLine("one\ntwo"); got != "one" {
+		t.Errorf("firstLine(multiline) = %q, want one", got)
+	}
+	if got := firstLine("short"); got != "short" {
+		t.Errorf("firstLine(short) = %q", got)
+	}
+	long := strings.Repeat("x", 100)
+	got := firstLine(long)
+	if !strings.HasSuffix(got, "…") || len([]rune(got)) != 73 {
+		t.Errorf("firstLine(long) = %q, want it truncated to 72 runes plus an ellipsis", got)
+	}
+}
+
+func TestAge(t *testing.T) {
+	now := time.Now()
+	cases := map[string]int64{
+		"just now": now.Unix(),
+		"5m":       now.Add(-5 * time.Minute).Unix(),
+		"3h":       now.Add(-3 * time.Hour).Unix(),
+		"2d":       now.Add(-48 * time.Hour).Unix(),
+		"-":        0,
+	}
+	for want, in := range cases {
+		if got := age(in); got != want {
+			t.Errorf("age(%v) = %q, want %q", in, got, want)
+		}
+	}
+}

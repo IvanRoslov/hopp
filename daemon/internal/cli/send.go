@@ -97,9 +97,20 @@ func newSendCmd() *cobra.Command {
 			var resp struct {
 				ID     int64  `json:"id"`
 				Status string `json:"status"`
+				To     string `json:"to,omitempty"`
 			}
 			if err := c.Post("/v1/messages", reqBody, &resp); err != nil {
 				return err
+			}
+
+			// A mailbox whose session is not running holds the message
+			// until that session reads it, so there is no delivery to poll.
+			if resp.Status == "inbox" {
+				if flags.JSON {
+					return printJSON(cmd, resp)
+				}
+				cmd.Printf("message %d stored in the inbox of %s (its session is not running)\n", resp.ID, resp.To)
+				return nil
 			}
 
 			if !wait {

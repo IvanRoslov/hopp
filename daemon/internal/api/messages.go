@@ -83,6 +83,23 @@ func handlePostMessage(w http.ResponseWriter, r *http.Request, d Deps) {
 	}
 
 	toSess, err := d.Store.GetSession(req.To)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if err != nil || (toSess.State != "spawning" && toSess.State != "running") {
+		// No live session of that id: a registered mailbox of the name holds
+		// the message until a session of that id is up and reads it.
+		isBox, boxErr := d.Store.HasMailbox(req.To)
+		if boxErr != nil {
+			writeErr(w, http.StatusInternalServerError, "internal_error", boxErr.Error())
+			return
+		}
+		if isBox {
+			postToMailbox(w, d, req)
+			return
+		}
+	}
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "session_not_found", "recipient session not found")
@@ -192,4 +209,29 @@ func handleGetMessage(w http.ResponseWriter, r *http.Request, d Deps) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toMessageResponse(m))
+}
+
+// postToMailbox stores a message to a registered mailbox whose session is
+// not live, as rocket's deliverToAgent did for an agent that was down: 202
+// {"id","to","status":"inbox"} and the event mailbox.received.
+func postToMailbox(w http.ResponseWriter, d Deps, req postMessageRequest) {
+	if req.From != "" {
+		if _, err := d.Store.GetSession(req.From); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeErr(w, http.StatusBadRequest, "from_unknown", "sender session not found")
+				return
+			}
+			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+	}
+	id, err := d.Store.AddInboxMessage(store.InboxMessage{Mailbox: req.To, From: req.From, Body: req.Body})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	if d.Bus != nil {
+		d.Bus.Publish("mailbox.received", "", map[string]any{"id": id, "mailbox": req.To, "from": req.From})
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"id": id, "to": req.To, "status": "inbox"})
 }

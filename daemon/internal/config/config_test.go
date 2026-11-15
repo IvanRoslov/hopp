@@ -164,3 +164,17 @@ child_stall_threshold: 20m
 		t.Errorf("config = %+v", cfg)
 	}
 }
+
+// TestMailboxNotifyIntervalDefault: rocket's agent_notify_interval default
+// (5m), under the key mailbox_notify_interval.
+func TestMailboxNotifyIntervalDefault(t *testing.T) {
+	home := t.TempDir()
+	cfg, err := Load(home)
+	if err != nil || cfg.MailboxNotifyInterval != 5*time.Minute {
+		t.Fatalf("default = %v %v, want 5m", cfg.MailboxNotifyInterval, err)
+	}
+	os.WriteFile(filepath.Join(home, "config.yaml"), []byte("mailbox_notify_interval: 30s\n"), 0o644)
+	if cfg, err = Load(home); err != nil || cfg.MailboxNotifyInterval != 30*time.Second {
+		t.Fatalf("from yaml = %v %v, want 30s", cfg.MailboxNotifyInterval, err)
+	}
+}

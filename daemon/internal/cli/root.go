@@ -56,6 +56,8 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newModelsCmd())
 	root.AddCommand(newSendCmd())
 	root.AddCommand(newMessagesCmd())
+	root.AddCommand(newInboxCmd())
+	root.AddCommand(newMailboxCmd())
 	root.AddCommand(newChatCmd())
 	root.AddCommand(newAnswerCmd())
 	root.AddCommand(newEventsCmd())

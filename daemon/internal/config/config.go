@@ -51,6 +51,10 @@ type Config struct {
 	// ChildStallThreshold is rocket's worker_stall_threshold under a neutral
 	// name: how long a child session may look stuck before its parent hears.
 	ChildStallThreshold time.Duration `yaml:"child_stall_threshold"`
+	// MailboxNotifyInterval is rocket's agent_notify_interval under hopp's
+	// name: the anti-spam floor between two "N unread" notices to the session
+	// of a mailbox. A new notice also needs mail newer than the last one.
+	MailboxNotifyInterval time.Duration `yaml:"mailbox_notify_interval"`
 	// InputStallThreshold is how long a session may sit on interactive input
 	// — a pending AskUserQuestion quiz, or activity "waiting_input" — before
 	// it is flagged as waiting at a terminal. A zero value means "unset":
@@ -114,6 +118,7 @@ func Load(home string) (*Config, error) {
 		LargeMessageThreshold: 2048,
 		SocketDelivery:        true,
 		ChildStallThreshold:   15 * time.Minute,
+		MailboxNotifyInterval: 5 * time.Minute,
 		InputStallThreshold:   DefaultInputStallThreshold,
 		ComposerBusyDeadline:  DefaultComposerBusyDeadline,
 		Home:                  home,
