@@ -145,6 +145,7 @@ func (m *Manager) SetClaudeProbe(p claudeinstance.Probe) { m.claudeProbe = p }
 func (m *Manager) markErrored(id string, cause error) {
 	_ = m.st.UpdateSessionState(id, "errored")
 	m.clearPendingForTerminal(id)
+	m.withdrawAsksOf(id)
 	m.bus.Publish("session.state_changed", id, map[string]any{
 		"from": "spawning", "to": "errored", "reason": cause.Error(),
 	})

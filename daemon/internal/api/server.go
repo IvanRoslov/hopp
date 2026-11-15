@@ -57,6 +57,7 @@ func NewHandler(d Deps) http.Handler {
 	registerQuizRoutes(mux, d)
 	registerUsageRoutes(mux, d)
 	registerInboxRoutes(mux, d)
+	registerAskRoutes(mux, d)
 	registerInternalActivityRoutes(mux, d)
 	registerInternalQuizRoutes(mux, d)
 

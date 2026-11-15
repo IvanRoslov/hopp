@@ -1042,3 +1042,114 @@ func TestAge(t *testing.T) {
 		}
 	}
 }
+
+func TestAskWithoutSessionIsUsageError(t *testing.T) {
+	f := newFakeAPI(t)
+	if _, errOut, code := runCLI(t, f, "ask", "Ship it?"); code != 3 || !strings.Contains(errOut, "--from") {
+		t.Fatalf("exit %d stderr %q", code, errOut)
+	}
+	if len(f.all()) != 0 {
+		t.Errorf("a request was sent: %+v", f.all())
+	}
+}
+
+func TestAskFromEnvAndWait(t *testing.T) {
+	old := pollInterval
+	pollInterval = 5 * time.Millisecond
+	defer func() { pollInterval = old }()
+	f := newFakeAPI(t)
+	t.Setenv("HOPP_SESSION_ID", "s1")
+	f.on("POST /v1/asks", 201, map[string]any{"id": 7, "status": "open"})
+	var polls int
+	f.handle("GET /v1/asks/7", func(w http.ResponseWriter, r *http.Request) {
+		polls++
+		w.Header().Set("Content-Type", "application/json")
+		if polls < 3 {
+			fmt.Fprint(w, `{"id":7,"status":"open"}`)
+			return
+		}
+		fmt.Fprint(w, `{"id":7,"status":"answered","choice":"yes","answer":"after lunch"}`)
+	})
+	out, errOut, code := runCLI(t, f, "ask", "Ship it?", "--option", "yes", "--option", "no", "--label", "run=42", "--attach", "/tmp/plan.md", "--wait")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	b := f.all()[0].Body
+	opts, _ := b["options"].([]any)
+	labels, _ := b["labels"].(map[string]any)
+	att, _ := b["attachments"].([]any)
+	if b["from"] != "s1" || b["body"] != "Ship it?" || len(opts) != 2 || labels["run"] != "42" || len(att) != 1 {
+		t.Fatalf("create body %v", b)
+	}
+	if !strings.Contains(out, "ask 7") || !strings.Contains(out, "yes") || !strings.Contains(out, "after lunch") {
+		t.Errorf("output %q", out)
+	}
+
+	// Withdrawn while waiting: exit 1.
+	f.handle("GET /v1/asks/7", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":7,"status":"withdrawn","reason":"session_ended"}`)
+	})
+	if _, errOut, code := runCLI(t, f, "ask", "Ship it?", "--wait"); code != 1 || !strings.Contains(errOut, "session_ended") {
+		t.Fatalf("withdrawn: exit %d stderr %q", code, errOut)
+	}
+
+	// The daemon stops while waiting: a clean exit.
+	f.handle("GET /v1/asks/7", func(w http.ResponseWriter, r *http.Request) {
+		f.on("GET /v1/health", 503, map[string]any{"error": map[string]any{"code": "gone", "message": "gone"}})
+		w.WriteHeader(503)
+	})
+	if _, errOut, code := runCLI(t, f, "ask", "Ship it?", "--wait"); code != 0 || !strings.Contains(errOut, "the daemon stopped") {
+		t.Fatalf("daemon gone: exit %d stderr %q", code, errOut)
+	}
+}
+
+func TestReplyByNumberAndText(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/asks/7", 200, map[string]any{"id": 7, "status": "open", "body": "Ship it?", "options": []string{"yes", "no"}})
+	f.on("POST /v1/asks/7/answer", 200, map[string]any{"id": 7, "status": "answered"})
+	for _, tc := range []struct {
+		args       []string
+		choice     string
+		answerText string
+	}{
+		{[]string{"reply", "7", "2"}, "no", ""},
+		{[]string{"reply", "7", "yes", "-m", "after lunch"}, "yes", "after lunch"},
+	} {
+		if _, errOut, code := runCLI(t, f, tc.args...); code != 0 {
+			t.Fatalf("%v: exit %d %s", tc.args, code, errOut)
+		}
+		b := f.last(t).Body
+		if b["choice"] != tc.choice || (tc.answerText != "" && b["answer"] != tc.answerText) {
+			t.Errorf("%v: body %v", tc.args, b)
+		}
+	}
+	if _, _, code := runCLI(t, f, "reply", "7", "maybe"); code != 3 {
+		t.Errorf("unknown choice: exit %d, want 3", code)
+	}
+	f.on("GET /v1/asks/8", 200, map[string]any{"id": 8, "status": "open", "body": "Name?", "options": []string{}})
+	f.on("POST /v1/asks/8/answer", 200, map[string]any{"id": 8, "status": "answered"})
+	if _, errOut, code := runCLI(t, f, "reply", "8", "-m", "hopp"); code != 0 || f.last(t).Body["answer"] != "hopp" {
+		t.Fatalf("text only: exit %d %s %v", code, errOut, f.last(t).Body)
+	}
+	if _, _, code := runCLI(t, f, "reply", "8"); code != 3 {
+		t.Errorf("no answer at all: exit %d, want 3", code)
+	}
+}
+
+func TestAsksAndWaitingPrint(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/asks", 200, map[string]any{"asks": []any{map[string]any{"id": 7, "from": "s1", "status": "open", "body": "Ship it?\nmore", "options": []string{"yes", "no"}, "labels": map[string]string{"run": "42"}, "created_at": time.Now().Unix()}}})
+	out, errOut, code := runCLI(t, f, "asks", "--label", "run=42")
+	if code != 0 || !strings.Contains(out, "#7") || !strings.Contains(out, "Ship it?") || !strings.Contains(f.last(t).Query, "label=run%3D42") {
+		t.Fatalf("asks: exit %d %s %q %q", code, errOut, out, f.last(t).Query)
+	}
+	f.on("GET /v1/waiting", 200, map[string]any{
+		"asks":      []any{map[string]any{"id": 7, "from": "s1", "status": "open", "body": "Ship it?", "created_at": 1}},
+		"questions": []any{map[string]any{"session": "s2", "question": map[string]any{"questions": []any{map[string]any{"question": "Allow?", "header": "Bash"}}}}},
+	})
+	out, errOut, code = runCLI(t, f, "waiting")
+	if code != 0 || !strings.Contains(out, "#7") || !strings.Contains(out, "s2") || !strings.Contains(out, "Allow?") || !strings.Contains(out, "hopp answer s2") {
+		t.Fatalf("waiting: exit %d %s %q", code, errOut, out)
+	}
+}

@@ -83,6 +83,7 @@ func (m *Manager) terminate(ctx context.Context, sess store.Session, final strin
 	// happened, and a leftover pending_quiz is harmless clutter, not a
 	// correctness issue worth failing the whole call over).
 	m.clearPendingForTerminal(sess.ID)
+	m.withdrawAsksOf(sess.ID)
 	if final == "killed" {
 		m.bus.Publish("session.killed", sess.ID, nil)
 	} else {
@@ -107,6 +108,7 @@ func (m *Manager) destroyOwned(ctx context.Context, sess store.Session) error {
 	if !owned {
 		_ = m.st.UpdateSessionState(sess.ID, "errored")
 		m.clearPendingForTerminal(sess.ID)
+		m.withdrawAsksOf(sess.ID)
 		m.bus.Publish("session.state_changed", sess.ID, map[string]any{
 			"from": sess.State, "to": "errored", "reason": "tmux_not_owned",
 		})

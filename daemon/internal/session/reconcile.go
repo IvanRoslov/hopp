@@ -56,6 +56,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 				continue
 			}
 			m.clearPendingForTerminal(sess.ID)
+			m.withdrawAsksOf(sess.ID)
 			m.bus.Publish("session.state_changed", sess.ID, map[string]any{
 				"from": sess.State, "to": "errored", "reason": "tmux_missing",
 			})
@@ -76,6 +77,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 				continue
 			}
 			m.clearPendingForTerminal(sess.ID)
+			m.withdrawAsksOf(sess.ID)
 			m.bus.Publish("session.state_changed", sess.ID, map[string]any{
 				"from": sess.State, "to": "errored", "reason": "dir_missing",
 			})
