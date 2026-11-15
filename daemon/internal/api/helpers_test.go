@@ -83,3 +83,14 @@ func decodeErr(t *testing.T, resp *http.Response) errBody {
 	}
 	return body
 }
+
+// getJSON is rocket's GET helper from its tasks_test.go (the tasks tests are
+// not ported; the chat tests use the helper).
+func getJSON(t *testing.T, url string) *http.Response {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return resp
+}

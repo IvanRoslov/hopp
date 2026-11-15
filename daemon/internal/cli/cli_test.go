@@ -606,3 +606,65 @@ func TestEventsFollowExitsCleanlyWhenDaemonGoes(t *testing.T) {
 		t.Errorf("stdout %q stderr %q", out, errOut)
 	}
 }
+
+func TestChatPrintsEntries(t *testing.T) {
+	f := newFakeAPI(t)
+	ts := time.Date(2026, 11, 15, 10, 4, 5, 0, time.Local).Unix()
+	f.on("GET /v1/sessions/s1/chat", 200, map[string]any{
+		"entries": []any{
+			map[string]any{"role": "user", "text": "hello\nsecond line", "ts": ts},
+			map[string]any{"role": "tool", "tool_name": "Bash", "text": `{"command":"ls"}`, "ts": ts},
+			map[string]any{"role": "assistant", "text": "done", "ts": ts},
+			map[string]any{"role": "permission", "text": "Bash command", "ts": ts, "permission": map[string]any{"title": "Bash command", "answer_label": "Yes", "answered_via": "terminal"}},
+		},
+		"next_cursor": "c1",
+		"session":     map[string]any{"id": "s1", "state": "running", "activity": "ready"},
+	})
+	out, errOut, code := runCLI(t, f, "chat", "s1", "--limit", "7")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if q := f.last(t).Query; !strings.Contains(q, "limit=7") {
+		t.Errorf("query = %q", q)
+	}
+	want := "10:04:05 user: hello\n  second line\n10:04:05 tool Bash: {\"command\":\"ls\"}\n10:04:05 assistant: done\n10:04:05 permission: Bash command -> Yes (terminal)\n"
+	if out != want {
+		t.Errorf("output = %q, want %q", out, want)
+	}
+}
+
+// TestChatFollowExitsWhenDaemonGoes: --follow polls with the cursor and, once
+// the daemon stops answering, says so and exits 0.
+func TestChatFollowExitsWhenDaemonGoes(t *testing.T) {
+	old := chatFollowInterval
+	chatFollowInterval = 10 * time.Millisecond
+	defer func() { chatFollowInterval = old }()
+	f := newFakeAPI(t)
+	var calls int
+	var cursors []string
+	f.handle("GET /v1/sessions/s1/chat", func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		cursors = append(cursors, r.URL.Query().Get("cursor"))
+		w.Header().Set("Content-Type", "application/json")
+		switch calls {
+		case 1:
+			fmt.Fprint(w, `{"entries":[{"role":"user","text":"one","ts":0}],"next_cursor":"c1","session":{"id":"s1","state":"running"}}`)
+		case 2:
+			fmt.Fprint(w, `{"entries":[{"role":"assistant","text":"two","ts":0}],"next_cursor":"c2","session":{"id":"s1","state":"running"}}`)
+		default:
+			f.on("GET /v1/health", 503, map[string]any{"error": map[string]any{"code": "gone", "message": "gone"}})
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"error":{"code":"gone","message":"gone"}}`)
+		}
+	})
+	out, errOut, code := runCLI(t, f, "chat", "s1", "--follow")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "user: one") || !strings.Contains(out, "assistant: two") || !strings.Contains(errOut, "the daemon stopped") {
+		t.Errorf("stdout %q stderr %q", out, errOut)
+	}
+	if len(cursors) < 3 || cursors[0] != "" || cursors[1] != "c1" || cursors[2] != "c2" {
+		t.Errorf("cursors = %q, want \"\", c1, c2", cursors)
+	}
+}
