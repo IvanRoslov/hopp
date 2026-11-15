@@ -17,6 +17,7 @@ import (
 	"github.com/IvanRoslov/hopp/internal/api"
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/config"
+	"github.com/IvanRoslov/hopp/internal/heartbeat"
 	"github.com/IvanRoslov/hopp/internal/monitor"
 	"github.com/IvanRoslov/hopp/internal/nativeinput"
 	"github.com/IvanRoslov/hopp/internal/queue"
@@ -93,6 +94,7 @@ func Run(cfg *config.Config) error {
 	socketSender.SetStore(st)
 	socketSender.SetReceipts(receipts)
 	q.SetSocketSender(socketSender)
+	hb := heartbeat.New(st, b, cfg, mon.Activity, q.Wake)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -116,6 +118,8 @@ func Run(cfg *config.Config) error {
 	// whose delivery worker races the recovery pass. See Queue.Recover.
 	q.Recover(ctx)
 	go q.Run(ctx)
+
+	go hb.Run(ctx)
 
 	shutdownCalled := make(chan struct{})
 	var shutdownOnce func()
