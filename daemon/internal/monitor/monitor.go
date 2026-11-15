@@ -79,6 +79,9 @@ type Monitor struct {
 	// pane of a session claiming waiting_input — see correctStaleInputWait.
 	inputWaitMiss  map[string]int
 	claudeWaitMiss map[string]claudeWaitCounter
+	// claudeStops: the last qualified hook of a Claude session was Stop
+	// (claudeStopMark); see stopEndsTurn. In memory only.
+	claudeStops map[string]claudeStopMark
 	// permMiss counts consecutive sweeps that saw no permission dialog on
 	// the pane of a session holding a permission quiz — see pollPermission.
 	permMiss map[string]int

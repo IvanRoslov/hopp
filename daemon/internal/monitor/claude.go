@@ -160,6 +160,14 @@ func (m *Monitor) PushClaudeUpdate(ctx context.Context, sessionID string, state 
 		return "binding refused"
 	}
 	m.mu.Lock()
+	if event.HookEventName == "Stop" && next == string(activity.Ready) {
+		if m.claudeStops == nil {
+			m.claudeStops = make(map[string]claudeStopMark)
+		}
+		m.claudeStops[sessionID] = claudeStopMark{conversation: event.ClaudeSessionID, generation: event.LaunchGeneration, at: time.Unix(0, event.At)}
+	} else {
+		delete(m.claudeStops, sessionID)
+	}
 	delete(m.cache, sessionID)
 	delete(m.push, sessionID)
 	m.mu.Unlock()
@@ -199,7 +207,7 @@ func (m *Monitor) pollClaudeSession(ctx context.Context, sess store.Session, a a
 		m.applyClaude(ctx, sess, r.observation, activity.Exited, time.Now(), "claude-exact-root-dead")
 		return
 	}
-	state, ts, e := claudeJournalActivity(ctx, r.Identity)
+	state, ts, endTurn, e := claudeJournalTurn(ctx, r.Identity)
 	if errors.Is(e, errNoJournal) && r.State == claudeinstance.Verified && r.registryIdle {
 		// A root launched without a prompt (a persistent agent) has no journal
 		// until its first turn, and that turn is the first queued message:
@@ -228,6 +236,9 @@ func (m *Monitor) pollClaudeSession(ctx context.Context, sess store.Session, a a
 	}
 	if r.State != claudeinstance.Verified && state != activity.Blocked {
 		return
+	}
+	if state == activity.Active && m.stopEndsTurn(sess.ID, r.Identity, ts, endTurn) {
+		state = activity.Ready
 	}
 	if sess.Activity == string(activity.WaitingInput) && state != activity.Blocked {
 		// A qualified Notification is a suspicion until the pane has been
@@ -287,4 +298,30 @@ func (m *Monitor) clearClaudeWait(ctx context.Context, sess store.Session, obser
 	count.misses++
 	m.claudeWaitMiss[sess.ID] = count
 	return count.misses >= inputWaitMissThreshold
+}
+
+// claudeStopMark records the last qualified hook of a Claude session when it
+// was Stop: the bound conversation and launch generation it came from, and
+// the time the turn ended.
+type claudeStopMark struct {
+	conversation, generation string
+	at                       time.Time
+}
+
+// stopEndsTurn reports whether the journal's "active" (its last counted
+// record is younger than 30 seconds) belongs to the turn a qualified Stop
+// already ended: the last qualified hook for this exact conversation and
+// launch was Stop, and the journal's last counted record is not newer than
+// it or is the assistant's end_turn record. A record that starts or
+// continues work after the Stop (a user record, a queue operation, an
+// assistant tool_use) is newer and not end_turn, so a new turn shows active.
+// Without such a Stop the journal rule is unchanged.
+func (m *Monitor) stopEndsTurn(sessionID string, id claudeinstance.Identity, lastAt time.Time, endTurn bool) bool {
+	m.mu.Lock()
+	mark, ok := m.claudeStops[sessionID]
+	m.mu.Unlock()
+	if !ok || mark.conversation != id.ClaudeSessionID || mark.generation != id.LaunchGeneration {
+		return false
+	}
+	return !lastAt.After(mark.at) || endTurn
 }
