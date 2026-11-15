@@ -92,6 +92,10 @@ func quizAnswerTestDeps(t *testing.T) (Deps, *quizAnswerFakeRuntime) {
 	return d, rt
 }
 
+// quizAPIWidgetPane is the AskUserQuestion widget of quizAPIPendingJSON as
+// Claude Code draws it: an answer re-reads the pane and needs it there.
+const quizAPIWidgetPane = " ☐ Color\nWhich color?\n❯ 1. Red\n     warm\n  2. Green\n  3. Blue\n────\n  Chat about this\nEnter to select · ↑/↓ to navigate · Esc to cancel\n"
+
 const quizAPIPendingJSON = `{"questions":[{"question":"Which color?","header":"Color","multiSelect":false,"options":[{"label":"Red","description":"warm"},{"label":"Green"},{"label":"Blue"}]}],"asked_at":42}`
 
 // quizAPITenOptionPendingJSON has 10 options, enough for an in-range
@@ -229,6 +233,7 @@ func TestChatSession_PendingQuizExposed(t *testing.T) {
 
 func TestPostQuizAnswer_HappyPathSingleSelect(t *testing.T) {
 	d, rt := quizAnswerTestDeps(t)
+	rt.pane = quizAPIWidgetPane
 	srv := newTestServer(t, d)
 	seedQuizSession(t, d.Store, "sess1")
 	if err := d.Store.SetPendingQuiz("sess1", quizAPIPendingJSON); err != nil {
@@ -372,7 +377,8 @@ func TestPostQuizAnswer_InvalidAnswerIs400(t *testing.T) {
 // quiz_answer_in_flight, and once the first injection resolves, a new
 // answer is accepted again.
 func TestPostQuizAnswer_InFlightIs409(t *testing.T) {
-	d, _ := quizAnswerTestDeps(t)
+	d, rt := quizAnswerTestDeps(t)
+	rt.pane = quizAPIWidgetPane
 	// A real, longer-than-instant sleep between keystrokes so the first
 	// injection is still in flight when the second POST lands right after.
 	d.Manager.SetQuizTiming(func(time.Duration) { time.Sleep(30 * time.Millisecond) }, 2*time.Second)
@@ -432,7 +438,8 @@ func TestPostQuizAnswer_InFlightIs409(t *testing.T) {
 // session.quiz_answer_unconfirmed on the bus within the (short,
 // test-only) timeout quizAnswerTestDeps configures.
 func TestPostQuizAnswer_UnconfirmedTimerFires(t *testing.T) {
-	d, _ := quizAnswerTestDeps(t)
+	d, rt := quizAnswerTestDeps(t)
+	rt.pane = quizAPIWidgetPane
 	srv := newTestServer(t, d)
 	seedQuizSession(t, d.Store, "sess1")
 	if err := d.Store.SetPendingQuiz("sess1", quizAPIPendingJSON); err != nil {

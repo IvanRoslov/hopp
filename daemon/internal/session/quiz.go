@@ -327,7 +327,21 @@ func (m *Manager) AnswerQuiz(ctx context.Context, id string, answers []QuizAnswe
 		return validationErr("quiz_answer_in_flight", "a quiz answer is already being injected for session: "+id)
 	}
 
+	// Re-read the pane right before typing, as answerPermission does: a
+	// human may have answered in the terminal, and the question stays
+	// recorded until the PostToolUse hook clears it. Keys sent then would
+	// land in the agent's composer.
 	h := runtime.Handle{Name: sess.TmuxName}
+	pane, err := m.rt.Capture(ctx, h, quizCaptureLines)
+	if err != nil {
+		m.clearQuizInFlight(id)
+		return fmt.Errorf("re-read pane before answering quiz: %w", err)
+	}
+	if len(quiz.Questions) == 0 || !quizWidgetShows(pane, quiz.Questions[0].Question) {
+		m.clearQuizInFlight(id)
+		return validationErr("prompt_changed", "the question on the pane changed or closed; re-read the session")
+	}
+
 	go m.runQuizAnswer(id, h, steps, nil, nil)
 
 	return nil
@@ -473,4 +487,54 @@ func (m *Manager) SetQuizTiming(sleep func(time.Duration), unconfirmedTimeout ti
 	if unconfirmedTimeout > 0 {
 		m.quizUnconfirmedTimeout = unconfirmedTimeout
 	}
+}
+
+// quizCaptureLines is how deep the pane is read before answering an
+// AskUserQuestion: enough for a long question with its options.
+const quizCaptureLines = 80
+
+// quizWidgetTrailerRows is how many non-blank rows may follow the widget's
+// footer: the widget is the bottom of a pane that waits on it.
+const quizWidgetTrailerRows = 2
+
+// quizWidgetShows reports whether the pane ends in Claude Code's
+// AskUserQuestion widget showing question: the last widget footer row
+// (runtime.LooksLikeQuizWidget) sits at the bottom, and question, with
+// whitespace folded so a wrapped line still matches, appears above it after
+// any earlier footer. An old widget higher up in the scrollback does not
+// count.
+func quizWidgetShows(pane, question string) bool {
+	want := strings.Join(strings.Fields(question), " ")
+	if want == "" {
+		return false
+	}
+	rows := strings.Split(pane, "\n")
+	footer := -1
+	for i := len(rows) - 1; i >= 0; i-- {
+		if runtime.LooksLikeQuizWidget(rows[i]) {
+			footer = i
+			break
+		}
+	}
+	if footer < 0 {
+		return false
+	}
+	trailer := 0
+	for _, r := range rows[footer+1:] {
+		if strings.TrimSpace(r) != "" {
+			trailer++
+		}
+	}
+	if trailer > quizWidgetTrailerRows {
+		return false
+	}
+	start := 0
+	for i := footer - 1; i >= 0; i-- {
+		if runtime.LooksLikeQuizWidget(rows[i]) {
+			start = i + 1
+			break
+		}
+	}
+	body := strings.Join(strings.Fields(strings.Join(rows[start:footer], " ")), " ")
+	return strings.Contains(body, want)
 }

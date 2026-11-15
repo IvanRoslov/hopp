@@ -18,7 +18,7 @@ const quizManagerMultiPendingJSON = `{"questions":[{"question":"Which fruits?","
 func noopSleep(time.Duration) {}
 
 func TestAnswerQuiz_UnknownSessionIsNotFound(t *testing.T) {
-	m, _, _, _ := answerTestManager(t)
+	m, _, _, _ := quizTestManager(t)
 	m.SetQuizTiming(noopSleep, 50*time.Millisecond)
 
 	err := m.AnswerQuiz(context.Background(), "does-not-exist", []QuizAnswer{{QuestionIndex: 0, OptionIndices: []int{0}}})
@@ -26,7 +26,7 @@ func TestAnswerQuiz_UnknownSessionIsNotFound(t *testing.T) {
 }
 
 func TestAnswerQuiz_NoPendingQuizIsConflict(t *testing.T) {
-	m, st, _, _ := answerTestManager(t)
+	m, st, _, _ := quizTestManager(t)
 	m.SetQuizTiming(noopSleep, 50*time.Millisecond)
 	seedRunningSession(t, st, "sess1")
 
@@ -35,7 +35,7 @@ func TestAnswerQuiz_NoPendingQuizIsConflict(t *testing.T) {
 }
 
 func TestAnswerQuiz_InvalidAnswersIsQuizAnswerInvalid(t *testing.T) {
-	m, st, _, _ := answerTestManager(t)
+	m, st, _, _ := quizTestManager(t)
 	m.SetQuizTiming(noopSleep, 50*time.Millisecond)
 	seedRunningSession(t, st, "sess1")
 	if err := st.SetPendingQuiz("sess1", quizManagerPendingJSON); err != nil {
@@ -52,7 +52,7 @@ func TestAnswerQuiz_InvalidAnswersIsQuizAnswerInvalid(t *testing.T) {
 // suppresses the unconfirmed timer (no session.quiz_answer_unconfirmed
 // event within the (short, test-only) timeout).
 func TestAnswerQuiz_HappyPathSendsKeysAndWaitsForResolved(t *testing.T) {
-	m, st, b, rt := answerTestManager(t)
+	m, st, b, rt := quizTestManager(t)
 	m.SetQuizTiming(noopSleep, 200*time.Millisecond)
 	seedRunningSession(t, st, "sess1")
 	if err := st.SetPendingQuiz("sess1", quizManagerPendingJSON); err != nil {
@@ -110,7 +110,7 @@ loop:
 // timer publishes session.quiz_answer_unconfirmed if no resolved event
 // arrives before the (short, test-only) timeout.
 func TestAnswerQuiz_UnconfirmedFiresWithoutResolved(t *testing.T) {
-	m, st, b, _ := answerTestManager(t)
+	m, st, b, _ := quizTestManager(t)
 	m.SetQuizTiming(noopSleep, 50*time.Millisecond)
 	seedRunningSession(t, st, "sess1")
 	if err := st.SetPendingQuiz("sess1", quizManagerPendingJSON); err != nil {
@@ -146,7 +146,7 @@ func TestAnswerQuiz_UnconfirmedFiresWithoutResolved(t *testing.T) {
 // "quiz_answer_in_flight", and once session.quiz_resolved arrives for the
 // first injection, the flag clears and a new quiz can be answered again.
 func TestAnswerQuiz_SecondCallWhileInFlightIs409ThenClearsAfterResolved(t *testing.T) {
-	m, st, b, _ := answerTestManager(t)
+	m, st, b, _ := quizTestManager(t)
 	// A real (short) sleep between keystrokes, so the first injection is
 	// still in flight when we fire the second AnswerQuiz call right after.
 	m.SetQuizTiming(func(time.Duration) { time.Sleep(20 * time.Millisecond) }, 2*time.Second)
@@ -192,7 +192,7 @@ func TestAnswerQuiz_SecondCallWhileInFlightIs409ThenClearsAfterResolved(t *testi
 // sequence, injection stops sending further keys rather than running the
 // full sequence to completion.
 func TestAnswerQuiz_ResolveMidInjectionAbortsRemainingKeys(t *testing.T) {
-	m, st, b, rt := answerTestManager(t)
+	m, st, b, rt := quizTestManager(t)
 	// 20ms between keystrokes gives the watcher goroutine plenty of time to
 	// observe quiz_resolved and close the abort channel before the next
 	// step's abort check runs.
@@ -201,6 +201,7 @@ func TestAnswerQuiz_ResolveMidInjectionAbortsRemainingKeys(t *testing.T) {
 	if err := st.SetPendingQuiz("sess1", quizManagerMultiPendingJSON); err != nil {
 		t.Fatalf("SetPendingQuiz: %v", err)
 	}
+	rt.captureOut = quizWidgetPane("Fruits", "Which fruits?", "Apple", "Banana", "Cherry", "Date")
 
 	// Selecting all 4 options produces 6 steps (4 digits + Tab + final
 	// Enter, per quizKeySequence's multi-select shape).
@@ -248,7 +249,7 @@ func TestAnswerQuiz_ResolveMidInjectionAbortsRemainingKeys(t *testing.T) {
 // resolved event itself just raced this call's bus subscription and was
 // missed), no session.quiz_answer_unconfirmed is published.
 func TestAnswerQuiz_UnconfirmedSkippedWhenPendingQuizAlreadyCleared(t *testing.T) {
-	m, st, b, _ := answerTestManager(t)
+	m, st, b, _ := quizTestManager(t)
 	m.SetQuizTiming(noopSleep, 50*time.Millisecond)
 	seedRunningSession(t, st, "sess1")
 	if err := st.SetPendingQuiz("sess1", quizManagerPendingJSON); err != nil {

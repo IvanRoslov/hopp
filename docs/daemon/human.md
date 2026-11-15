@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (62e0978) and the live checks of 2026-11-15 against ~/.hopp
+verified: 2026-11-15 — against the code on main (d1c2a2f and the commit after it) and the live checks of 2026-11-15 against ~/.hopp
 ---
 
 # What the human sees and decides
@@ -16,8 +16,8 @@ The human reads what an agent said, answers the question an agent's screen waits
 
 ### Answering an agent's screen
 
-4. hopp can answer four kinds of question an agent's screen waits on: a Claude Code permission dialog, a Claude Code question to the user (`AskUserQuestion`), and the start screens of Codex and Kimi Code. `hopp answer <id>` shows the question, `hopp answer <id> <choice>` answers it, and the session JSON carries it as `question`. An `AskUserQuestion` question reaches hopp through its own hook and is seen. A permission dialog is looked for only once the session reports that it waits on the human (`waiting_input`, from Claude Code's Notification hook), and on macOS every Claude activity hook update is rejected (`producer process missing or restarted`): the process the hook names as its producer is a `/bin/sh` subshell that has already exited. So a dialog in a `manual` session stays unseen by hopp and only the terminal can answer it.
-5. Right before pressing a key for a dialog or a start screen, hopp reads the pane again; when it no longer shows the same question (a human answered in the terminal, or it closed), nothing is sent and the answer is refused with `prompt_changed`. An `AskUserQuestion` answer gets no such re-read: answered in the terminal a moment before, the question is still recorded until its hook clears it, so hopp's key lands in the agent's composer. An answer while another one is still being typed is refused with `quiz_answer_in_flight`, and one to a session with no question with `no_pending_quiz`.
+4. hopp can answer four kinds of question an agent's screen waits on: a Claude Code permission dialog, a Claude Code question to the user (`AskUserQuestion`), and the start screens of Codex and Kimi Code. `hopp answer <id>` shows the question, `hopp answer <id> <choice>` answers it, and the session JSON carries it as `question`. An `AskUserQuestion` question reaches hopp through its own hook. A permission dialog is looked for once the session reports that it waits on the human (`waiting_input`, from Claude Code's Notification hook).
+5. Right before pressing a key, hopp reads the pane again; when it no longer shows the same dialog, start screen or `AskUserQuestion` widget (a human answered in the terminal, or it closed), nothing is sent and the answer is refused with `prompt_changed`. An answer while another one is still being typed is refused with `quiz_answer_in_flight`, and one to a session with no question with `no_pending_quiz`.
 
 ### Decision requests
 
