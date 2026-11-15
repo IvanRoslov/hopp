@@ -294,3 +294,133 @@ func TestJSONFlagPrintsAPIBody(t *testing.T) {
 		t.Errorf("--json output = %q (%v)", out, err)
 	}
 }
+
+func TestModelsLsMarksDefault(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/model-profiles", 200, map[string]any{"default": "fast", "profiles": []any{
+		map[string]any{"name": "fast", "agent": "codex", "model": "", "effort": "low", "description": "quick", "enabled": true},
+		map[string]any{"name": "slow", "agent": "claude-code", "model": "opus", "effort": "", "description": "deep", "enabled": false},
+	}})
+	out, errOut, code := runCLI(t, f, "models", "ls")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 3 || !strings.HasPrefix(lines[1], "fast *") || strings.Contains(lines[2], "*") ||
+		strings.Join(strings.Fields(lines[2]), " ") != "slow claude-code opus - no deep" {
+		t.Errorf("table:\n%s", out)
+	}
+}
+
+func TestModelsCommandsCallTheAPI(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/model-profiles", 201, map[string]any{"name": "x"})
+	f.on("PATCH /v1/model-profiles/x", 200, map[string]any{"name": "x"})
+	f.on("PUT /v1/model-profiles/default", 200, map[string]any{"default": "x"})
+	f.routes["DELETE /v1/model-profiles/x"] = func([]byte) (int, any) { return 204, nil }
+	for _, tc := range []struct {
+		args       []string
+		method     string
+		path       string
+		wantFields map[string]any
+	}{
+		{[]string{"models", "add", "x", "--agent", "codex", "--effort", "low"}, "POST", "/v1/model-profiles", map[string]any{"name": "x", "agent": "codex", "effort": "low"}},
+		{[]string{"models", "set", "x", "--disable", "--model", "m"}, "PATCH", "/v1/model-profiles/x", map[string]any{"enabled": false, "model": "m"}},
+		{[]string{"models", "default", "x"}, "PUT", "/v1/model-profiles/default", map[string]any{"name": "x"}},
+		{[]string{"models", "rm", "x"}, "DELETE", "/v1/model-profiles/x", nil},
+	} {
+		if _, errOut, code := runCLI(t, f, tc.args...); code != 0 {
+			t.Fatalf("%v: exit %d: %s", tc.args, code, errOut)
+		}
+		r := f.last(t)
+		if r.Method != tc.method || r.Path != tc.path {
+			t.Errorf("%v: request %s %s", tc.args, r.Method, r.Path)
+		}
+		for k, v := range tc.wantFields {
+			if r.Body[k] != v {
+				t.Errorf("%v: body[%s] = %v, want %v", tc.args, k, r.Body[k], v)
+			}
+		}
+		if _, ok := r.Body["description"]; tc.method == "PATCH" && ok {
+			t.Errorf("set sent an unchanged field: %v", r.Body)
+		}
+	}
+	if _, _, code := runCLI(t, f, "models", "set", "x"); code != 3 {
+		t.Errorf("set without changes: exit %d, want 3", code)
+	}
+}
+
+func TestEventsQuery(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/events", 200, map[string]any{"events": []any{
+		map[string]any{"id": 7, "ts": 0, "type": "session.spawned", "session_id": "s1", "data": map[string]any{"dir": "/x"}},
+	}})
+	out, errOut, code := runCLI(t, f, "events", "--session", "s1", "--limit", "5")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if q := f.last(t).Query; !strings.Contains(q, "session=s1") || !strings.Contains(q, "limit=5") {
+		t.Errorf("query = %q", q)
+	}
+	if !strings.Contains(out, "session.spawned s1") || !strings.Contains(out, `{"dir":"/x"}`) {
+		t.Errorf("output = %q", out)
+	}
+}
+
+func TestLogsReadsTheFileWithoutTheDaemon(t *testing.T) {
+	flags = globalFlags{}
+	home := t.TempDir()
+	t.Setenv("HOPP_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "logs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "logs", "hoppd.log"), []byte("one\ntwo\nthree\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := NewRootCmd()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	// No --socket: under go test connect() would refuse, so passing proves
+	// that logs never contacts the daemon.
+	root.SetArgs([]string{"logs", "-n", "2"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "two\nthree\n" {
+		t.Errorf("logs = %q", out.String())
+	}
+}
+
+func TestDoctorListsFiveAdapters(t *testing.T) {
+	f := newFakeAPI(t)
+	out, _, _ := runCLI(t, f, "doctor")
+	for _, name := range []string{"claude-code", "codex", "deepseek", "kimi-code", "pi"} {
+		if !strings.Contains(out, "agent:"+name+":") {
+			t.Errorf("doctor output lacks %s:\n%s", name, out)
+		}
+	}
+	for _, want := range []string{"tmux:", "state:", "daemon: running (pid 1, version test)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor output lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "agent:") != 5 {
+		t.Errorf("doctor lists %d agents, want 5:\n%s", strings.Count(out, "agent:"), out)
+	}
+}
+
+func TestDoctorDoesNotStartTheDaemon(t *testing.T) {
+	f := newFakeAPI(t)
+	dead := filepath.Join(filepath.Dir(f.sock), "none.sock")
+	root := NewRootCmd()
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"--socket", dead, "doctor"})
+	_ = root.Execute()
+	if !strings.Contains(out.String(), "daemon: not running") {
+		t.Errorf("doctor output:\n%s", out.String())
+	}
+	if _, err := os.Stat(dead); !os.IsNotExist(err) {
+		t.Errorf("a daemon socket appeared: %v", err)
+	}
+}

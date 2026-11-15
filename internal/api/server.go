@@ -25,14 +25,23 @@ type Deps struct {
 	Manager   *session.Manager
 	Shutdown  func()
 	StartedAt time.Time
+	// Catalogs caches each agent's model catalog; NewHandler builds one in
+	// front of the real adapters when it is nil.
+	Catalogs *CatalogCache
 }
 
 // NewHandler builds the routed http.Handler for hopp's API.
 func NewHandler(d Deps) http.Handler {
+	if d.Catalogs == nil {
+		d.Catalogs = NewCatalogCache(fetchAgentCatalog)
+	}
 	mux := http.NewServeMux()
 
 	registerHealthRoutes(mux, d)
 	registerSessionRoutes(mux, d)
+	registerModelProfileRoutes(mux, d)
+	registerModelCatalogRoutes(mux, d)
+	registerEventsRoutes(mux, d)
 
 	// Any path not matched by a more specific route above is a 404,
 	// rendered in the standard error JSON shape. This is a prefix pattern,

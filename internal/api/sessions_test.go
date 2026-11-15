@@ -109,7 +109,7 @@ func (e apiEnv) create(t *testing.T, body map[string]any) sessionOut {
 	return out
 }
 
-func errCode(t *testing.T, e apiEnv, method, path string, body any) (int, string) {
+func sessErrCode(t *testing.T, e apiEnv, method, path string, body any) (int, string) {
 	t.Helper()
 	var out errBody
 	code := e.call(t, method, path, body, &out)
@@ -134,14 +134,14 @@ func TestCreateSession(t *testing.T) {
 
 func TestCreateSessionRelativeDirIs400(t *testing.T) {
 	e := newAPIEnv(t)
-	code, ecode := errCode(t, e, "POST", "/v1/sessions", map[string]any{"dir": "relative/path"})
+	code, ecode := sessErrCode(t, e, "POST", "/v1/sessions", map[string]any{"dir": "relative/path"})
 	if code != http.StatusBadRequest || ecode != "dir_not_absolute" {
 		t.Errorf("status %d code %q", code, ecode)
 	}
 	if all, _ := e.st.ListSessions(store.SessionFilter{All: true}); len(all) != 0 {
 		t.Errorf("left sessions: %+v", all)
 	}
-	code, ecode = errCode(t, e, "POST", "/v1/sessions", map[string]any{})
+	code, ecode = sessErrCode(t, e, "POST", "/v1/sessions", map[string]any{})
 	if code != http.StatusBadRequest || ecode != "bad_request" {
 		t.Errorf("missing dir: status %d code %q", code, ecode)
 	}
@@ -151,11 +151,11 @@ func TestCreateSessionDuplicateIDIs409(t *testing.T) {
 	e := newAPIEnv(t)
 	dir := t.TempDir()
 	e.create(t, map[string]any{"dir": dir, "id": "s1"})
-	code, ecode := errCode(t, e, "POST", "/v1/sessions", map[string]any{"dir": dir, "id": "s1"})
+	code, ecode := sessErrCode(t, e, "POST", "/v1/sessions", map[string]any{"dir": dir, "id": "s1"})
 	if code != http.StatusConflict || ecode != "session_exists" {
 		t.Errorf("status %d code %q", code, ecode)
 	}
-	code, ecode = errCode(t, e, "POST", "/v1/sessions", map[string]any{"dir": dir, "parent": "ghost"})
+	code, ecode = sessErrCode(t, e, "POST", "/v1/sessions", map[string]any{"dir": dir, "parent": "ghost"})
 	if code != http.StatusNotFound || ecode != "parent_not_found" {
 		t.Errorf("unknown parent: status %d code %q", code, ecode)
 	}
@@ -200,7 +200,7 @@ func TestListSessionsFilters(t *testing.T) {
 			t.Errorf("%q -> %v, want %v", query, got, want)
 		}
 	}
-	code, ecode := errCode(t, e, "GET", "/v1/sessions?label=nokv", nil)
+	code, ecode := sessErrCode(t, e, "GET", "/v1/sessions?label=nokv", nil)
 	if code != http.StatusBadRequest || ecode != "bad_request" {
 		t.Errorf("bad label: status %d code %q", code, ecode)
 	}
@@ -218,7 +218,7 @@ func TestGetSessionListsChildren(t *testing.T) {
 	if out.ID != "p" || !reflect.DeepEqual(out.Children, []string{"c1"}) {
 		t.Errorf("got %+v", out)
 	}
-	code, ecode := errCode(t, e, "GET", "/v1/sessions/ghost", nil)
+	code, ecode := sessErrCode(t, e, "GET", "/v1/sessions/ghost", nil)
 	if code != http.StatusNotFound || ecode != "session_not_found" {
 		t.Errorf("unknown: status %d code %q", code, ecode)
 	}
@@ -243,7 +243,7 @@ func TestKillCascadesAndReturnsSession(t *testing.T) {
 	if code := e.call(t, "POST", "/v1/sessions/d/kill", map[string]any{"final": "done"}, &out); code != http.StatusOK || out.State != "done" {
 		t.Errorf("done: status %d, %+v", code, out)
 	}
-	code, ecode := errCode(t, e, "POST", "/v1/sessions/d/kill", map[string]any{"final": "errored"})
+	code, ecode := sessErrCode(t, e, "POST", "/v1/sessions/d/kill", map[string]any{"final": "errored"})
 	if code != http.StatusBadRequest || ecode != "invalid_state" {
 		t.Errorf("bad final: status %d code %q", code, ecode)
 	}
@@ -253,7 +253,7 @@ func TestRestore(t *testing.T) {
 	e := newAPIEnv(t)
 	dir := t.TempDir()
 	e.create(t, map[string]any{"dir": dir, "id": "s1"})
-	code, ecode := errCode(t, e, "POST", "/v1/sessions/s1/restore", nil)
+	code, ecode := sessErrCode(t, e, "POST", "/v1/sessions/s1/restore", nil)
 	if code != http.StatusBadRequest || ecode != "restore_not_allowed" {
 		t.Errorf("alive: status %d code %q", code, ecode)
 	}
