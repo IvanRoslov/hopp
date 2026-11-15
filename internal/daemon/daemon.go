@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/IvanRoslov/hopp/internal/agent"
 	_ "github.com/IvanRoslov/hopp/internal/agent/adapters" // register the five harness adapters
 	"github.com/IvanRoslov/hopp/internal/api"
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/config"
+	"github.com/IvanRoslov/hopp/internal/monitor"
 	"github.com/IvanRoslov/hopp/internal/runtime"
 	"github.com/IvanRoslov/hopp/internal/session"
 	"github.com/IvanRoslov/hopp/internal/store"
@@ -61,6 +63,8 @@ func Run(cfg *config.Config) error {
 	rt := runtime.NewTmux()
 	mgr := session.NewManager(st, b, rt, cfg)
 
+	mon := monitor.New(st, b, rt, cfg, agent.Get)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
@@ -68,6 +72,11 @@ func Run(cfg *config.Config) error {
 	if err := mgr.Reconcile(ctx); err != nil {
 		slog.Error("reconcile failed (non-fatal)", "error", err)
 	}
+
+	// Sweep activity synchronously once, after reconcile. Run below still
+	// does its own initial sweep; that duplicate is harmless.
+	mon.SweepOnce(ctx)
+	go mon.Run(ctx)
 
 	shutdownCalled := make(chan struct{})
 	var shutdownOnce func()
@@ -86,6 +95,7 @@ func Run(cfg *config.Config) error {
 		Bus:       b,
 		Cfg:       cfg,
 		Manager:   mgr,
+		Monitor:   mon,
 		Shutdown:  shutdownOnce,
 		StartedAt: time.Now(),
 	}

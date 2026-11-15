@@ -1,0 +1,613 @@
+// Package monitor implements rocket's activity cascade: a periodic sweep
+// over live sessions that determines each session's activity state by
+// checking, in order, whether the tmux session is gone, whether its pane
+// holds only a bare shell, and finally the agent adapter's own signal —
+// merged against any push notification the API has received in the
+// meantime.
+package monitor
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/IvanRoslov/hopp/internal/activity"
+	"github.com/IvanRoslov/hopp/internal/agent"
+	"github.com/IvanRoslov/hopp/internal/bus"
+	"github.com/IvanRoslov/hopp/internal/claudeinstance"
+	"github.com/IvanRoslov/hopp/internal/config"
+	"github.com/IvanRoslov/hopp/internal/runtime"
+	"github.com/IvanRoslov/hopp/internal/session"
+	"github.com/IvanRoslov/hopp/internal/socketmsg"
+	"github.com/IvanRoslov/hopp/internal/store"
+)
+
+// pushEntry records the last state pushed for a session, via PushUpdate.
+type pushEntry struct {
+	state activity.State
+	ts    time.Time
+}
+
+// paneProber checks whether a tmux session's pane(s) hold only a bare shell
+// process (i.e. the agent has exited and nothing replaced it), via tmux/ps.
+// It is a small unexported interface so tests can fake process inspection
+// without shelling out.
+type paneProber interface {
+	// onlyShellRunning reports whether every process attached to tmuxName's
+	// pane(s) is a bare shell. Returns an error if the check could not be
+	// performed (e.g. tmux/ps failed); callers should treat an error as
+	// "inconclusive" and skip this check, not as "exited".
+	onlyShellRunning(ctx context.Context, tmuxName string) (bool, error)
+}
+
+// execProber is the real paneProber; the probe itself lives in
+// runtime.PaneOnlyShell so Manager.Restore shares it.
+type execProber struct{}
+
+func (execProber) onlyShellRunning(ctx context.Context, tmuxName string) (bool, error) {
+	return runtime.PaneOnlyShell(ctx, tmuxName)
+}
+
+// chatStat records the last-observed transcript (mtime, size) for a session,
+// as reported by agent.Agent.TranscriptStat.
+type chatStat struct {
+	mtime int64
+	size  int64
+}
+
+// Monitor runs the activity polling cascade and exposes a push path for
+// out-of-band updates (e.g. from an API endpoint fed by the agent itself).
+type Monitor struct {
+	st                *store.Store
+	bus               *bus.Bus
+	rt                runtime.Runtime
+	cfg               *config.Config
+	resolveAgent      func(name string) (agent.Agent, error)
+	prober            paneProber
+	claudeProbe       claudeinstance.Probe
+	claudeSessionsDir string
+
+	mu       sync.Mutex
+	push     map[string]pushEntry
+	cache    map[string]activity.State
+	chat     map[string]chatStat
+	quizMiss map[string]int
+	// inputWaitMiss counts consecutive sweeps that saw no prompt on the
+	// pane of a session claiming waiting_input — see correctStaleInputWait.
+	inputWaitMiss  map[string]int
+	claudeWaitMiss map[string]claudeWaitCounter
+	// permMiss counts consecutive sweeps that saw no permission dialog on
+	// the pane of a session holding a permission quiz — see pollPermission.
+	permMiss map[string]int
+	// permNext is the dialog a session's pane shows instead of its pending
+	// one, until it is confirmed — see permissionChangeConfirmed.
+	permNext map[string]permissionCandidate
+	// startScreens is checkStartScreen's per-session memory.
+	startScreens map[string]*startScreenState
+	// turnFailures is the last failed turn reportTurnFailure told someone
+	// about, per session: a backstop for its journal event.
+	turnFailures map[string]string
+	// wake wakes a recipient's delivery worker (the queue's Wake); see
+	// SetWake.
+	wake func(sessionID string)
+}
+
+// New builds a Monitor. resolveAgent is typically agent.Get.
+func New(st *store.Store, b *bus.Bus, rt runtime.Runtime, cfg *config.Config, resolveAgent func(name string) (agent.Agent, error)) *Monitor {
+	return &Monitor{
+		st:                st,
+		bus:               b,
+		rt:                rt,
+		cfg:               cfg,
+		resolveAgent:      resolveAgent,
+		prober:            execProber{},
+		claudeProbe:       claudeinstance.SystemProbe{},
+		claudeSessionsDir: socketmsg.SessionsDir(),
+		push:              make(map[string]pushEntry),
+		cache:             make(map[string]activity.State),
+		chat:              make(map[string]chatStat),
+		quizMiss:          make(map[string]int),
+
+		inputWaitMiss: make(map[string]int),
+		permMiss:      make(map[string]int),
+		permNext:      make(map[string]permissionCandidate),
+		startScreens:  make(map[string]*startScreenState),
+	}
+}
+
+// SweepOnce runs a single synchronous pass of the activity polling cascade
+// over all live sessions. It exists so callers (namely the daemon at
+// startup) can force activity state in the store to be current before
+// depending on it, without waiting for Run's background ticker.
+//
+// In particular, the daemon must call SweepOnce AFTER session reconciliation
+// but BEFORE queue.Recover: otherwise Recover's startup Wakes can hit
+// recipients whose store activity is stale from before a restart (e.g. still
+// "active" from the crash moment), causing delivery to needlessly wait a
+// full poll cycle before re-checking.
+func (m *Monitor) SweepOnce(ctx context.Context) {
+	m.sweep(ctx)
+}
+
+// Run polls the activity cascade at cfg.ActivityPollInterval, blocking until
+// ctx is cancelled. It performs one immediate sweep before the first tick.
+func (m *Monitor) Run(ctx context.Context) {
+	m.sweep(ctx)
+
+	ticker := time.NewTicker(m.cfg.ActivityPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.sweep(ctx)
+		}
+	}
+}
+
+// PushUpdate records an out-of-band activity signal for sessionID and
+// immediately applies the merge+store+event logic for it (the fast reaction
+// path). Invalid states are ignored.
+func (m *Monitor) PushUpdate(sessionID string, state activity.State, ts time.Time) {
+	if sess, e := m.st.GetSession(sessionID); e == nil && m.isClaude(sess) {
+		return
+	}
+
+	if !state.Valid() {
+		slog.Warn("monitor: ignoring invalid pushed activity state", "session", sessionID, "state", state)
+		return
+	}
+
+	m.mu.Lock()
+	m.push[sessionID] = pushEntry{state: state, ts: ts}
+	m.mu.Unlock()
+
+	sess, err := m.st.GetSession(sessionID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("monitor: get session for push", "session", sessionID, "error", err)
+		}
+		return
+	}
+
+	m.applyMerge(sess, state, ts, false, "push")
+}
+
+// Activity returns the last known activity state for sessionID: from the
+// in-memory cache if present, else falling back to the store.
+func (m *Monitor) Activity(sessionID string) (activity.State, bool) {
+	if sess, e := m.st.GetSession(sessionID); e == nil && m.isClaude(sess) {
+		return activity.State(sess.Activity), sess.Activity != ""
+	}
+
+	m.mu.Lock()
+	st, ok := m.cache[sessionID]
+	m.mu.Unlock()
+	if ok {
+		return st, true
+	}
+
+	sess, err := m.st.GetSession(sessionID)
+	if err != nil || sess.Activity == "" {
+		return "", false
+	}
+	return activity.State(sess.Activity), true
+}
+
+// sweep runs one pass of the polling cascade over all live (spawning or
+// running) sessions.
+func (m *Monitor) sweep(ctx context.Context) {
+	sessions, err := m.st.ListSessions(store.SessionFilter{All: false})
+	if err != nil {
+		slog.Error("monitor: list sessions", "error", err)
+		return
+	}
+
+	liveSet := make(map[string]bool)
+	liveNames, err := m.rt.List(ctx)
+	if err != nil {
+		slog.Error("monitor: list runtime sessions", "error", err)
+	} else {
+		for _, n := range liveNames {
+			liveSet[n] = true
+		}
+	}
+
+	sessionIDs := make(map[string]bool)
+	for _, sess := range sessions {
+		sessionIDs[sess.ID] = true
+		m.pollSession(ctx, sess, liveSet, err == nil)
+		m.pollChat(ctx, sess)
+		m.pollQuiz(ctx, sess)
+		m.pollPermission(ctx, sess)
+	}
+
+	// Prune stale entries from cache, push and chat maps whose sessions no
+	// longer exist.
+	m.mu.Lock()
+	for id := range m.cache {
+		if !sessionIDs[id] {
+			delete(m.cache, id)
+		}
+	}
+	for id := range m.push {
+		if !sessionIDs[id] {
+			delete(m.push, id)
+		}
+	}
+	for id := range m.chat {
+		if !sessionIDs[id] {
+			delete(m.chat, id)
+		}
+	}
+	for id := range m.quizMiss {
+		if !sessionIDs[id] {
+			delete(m.quizMiss, id)
+		}
+	}
+	for id := range m.claudeWaitMiss {
+		if !sessionIDs[id] {
+			delete(m.claudeWaitMiss, id)
+		}
+	}
+	for id := range m.inputWaitMiss {
+		if !sessionIDs[id] {
+			delete(m.inputWaitMiss, id)
+		}
+	}
+	for id := range m.permMiss {
+		if !sessionIDs[id] {
+			delete(m.permMiss, id)
+		}
+	}
+	for id := range m.permNext {
+		if !sessionIDs[id] {
+			delete(m.permNext, id)
+		}
+	}
+	for id := range m.startScreens {
+		if !sessionIDs[id] {
+			delete(m.startScreens, id)
+		}
+	}
+	for id := range m.turnFailures {
+		if !sessionIDs[id] {
+			delete(m.turnFailures, id)
+		}
+	}
+	m.mu.Unlock()
+}
+
+// quizRenderGrace is how old a pending quiz must be before pollQuiz starts
+// pane-checking it: right after the PreToolUse hook fires the widget takes
+// a moment to render, and checking too early would read its absence as
+// "already closed".
+const quizRenderGrace = 10 * time.Second
+
+// quizMissThreshold is how many consecutive sweeps must observe the pane
+// WITHOUT the quiz widget before pollQuiz declares the quiz closed. Two
+// misses (~2 poll intervals) filter out transient capture glitches.
+const quizMissThreshold = 2
+
+// pollQuiz is the cancelled-quiz backstop. The precise close signal is the
+// PostToolUse quiz hook (POST /v1/internal/quiz resolved), but Claude Code
+// does NOT fire PostToolUse for a REJECTED tool call (Esc'd quiz), and the
+// Stop hook was observed not firing at all on CLI v2.1.215 — so a quiz
+// declined in the terminal would otherwise leave pending_quiz stale
+// forever, gating message delivery. While a session has a pending quiz
+// older than quizRenderGrace, this checks the pane tail each sweep: the
+// AskUserQuestion widget always renders at the bottom of the pane while
+// open (runtime.LooksLikeQuizWidget), so quizMissThreshold consecutive
+// sweeps without it mean the quiz is closed — clear pending and publish
+// session.quiz_resolved, exactly as the resolved hook would.
+//
+// A permission quiz (source "permission") is not an AskUserQuestion widget
+// and is left to pollPermission.
+func (m *Monitor) pollQuiz(ctx context.Context, sess store.Session) {
+	if q, ok := session.ParseQuiz(sess.PendingQuiz); sess.PendingQuiz == "" || (ok && q.IsPermission()) {
+		m.mu.Lock()
+		delete(m.quizMiss, sess.ID)
+		m.mu.Unlock()
+		return
+	}
+
+	var quiz struct {
+		AskedAt int64 `json:"asked_at"`
+	}
+	if err := json.Unmarshal([]byte(sess.PendingQuiz), &quiz); err == nil &&
+		quiz.AskedAt > 0 && time.Since(time.Unix(quiz.AskedAt, 0)) < quizRenderGrace {
+		return
+	}
+
+	out, err := m.rt.Capture(ctx, runtime.Handle{Name: sess.TmuxName}, 15)
+	if err != nil {
+		// Pane gone or capture failed — best-effort skip; a dead session's
+		// pending_quiz is cleared by its terminal state transition.
+		return
+	}
+	if runtime.LooksLikeQuizWidget(out) {
+		m.mu.Lock()
+		delete(m.quizMiss, sess.ID)
+		m.mu.Unlock()
+		return
+	}
+
+	m.mu.Lock()
+	m.quizMiss[sess.ID]++
+	misses := m.quizMiss[sess.ID]
+	if misses >= quizMissThreshold {
+		delete(m.quizMiss, sess.ID)
+	}
+	m.mu.Unlock()
+	if misses < quizMissThreshold {
+		return
+	}
+
+	if err := m.st.ClearPendingQuiz(sess.ID); err != nil {
+		slog.Warn("monitor: clear stale pending quiz", "session", sess.ID, "error", err)
+		return
+	}
+	slog.Info("monitor: pending quiz closed without resolved hook (widget gone)", "session", sess.ID)
+	m.bus.Publish("session.quiz_resolved", sess.ID, map[string]any{})
+}
+
+// pollChat checks whether sess's transcript has changed since the last
+// sweep (via the agent's cheap TranscriptStat) and, if so, publishes
+// session.chat_updated. The first observation of a session is seeded
+// silently (no event), so daemon startup doesn't produce a spurious ping for
+// every already-running session. ErrNoSignal (no transcript yet) and any
+// agent-resolution failure are skipped silently — this is a best-effort
+// ping, not a correctness-critical path.
+func (m *Monitor) pollChat(ctx context.Context, sess store.Session) {
+	ag, err := m.resolveAgent(sess.Agent)
+	if err != nil {
+		return
+	}
+
+	mtime, size, err := ag.TranscriptStat(ctx, agent.ActivityRef{SessionID: sess.ID, WorktreePath: sess.WorktreePath})
+	if err != nil {
+		return
+	}
+
+	m.mu.Lock()
+	prev, seen := m.chat[sess.ID]
+	m.chat[sess.ID] = chatStat{mtime: mtime, size: size}
+	m.mu.Unlock()
+
+	if !seen {
+		return
+	}
+	if prev.mtime == mtime && prev.size == size {
+		return
+	}
+
+	m.bus.Publish("session.chat_updated", sess.ID, map[string]any{})
+}
+
+// pollSession runs the cascade for a single session: tmux-dead check,
+// pane-only-shell check, then the agent's own signal, and applies the
+// result. For spawning sessions, tmux checks are skipped since the session
+// may not exist yet; only the agent Activity signal applies.
+func (m *Monitor) pollSession(ctx context.Context, sess store.Session, liveSet map[string]bool, haveLiveSet bool) {
+	if m.resolveAgent != nil {
+		if a, e := m.resolveAgent(sess.Agent); e == nil && agent.SupportsClaudeSocket(a) {
+			m.pollClaudeSession(ctx, sess, a, liveSet, haveLiveSet)
+			return
+		}
+	}
+
+	var (
+		state  activity.State
+		ts     time.Time
+		exited bool
+		ag     agent.Agent
+	)
+
+	// For spawning sessions, skip tmux-dead and pane-prober checks; only agent
+	// Activity applies since the tmux session may not exist yet.
+	if sess.State != "spawning" {
+		switch {
+		case haveLiveSet && !liveSet[sess.TmuxName]:
+			state, ts, exited = activity.Exited, time.Now(), true
+		default:
+			if only, err := m.prober.onlyShellRunning(ctx, sess.TmuxName); err == nil && only {
+				state, ts, exited = activity.Exited, time.Now(), true
+			}
+		}
+	}
+
+	if !exited {
+		var err error
+		ag, err = m.resolveAgent(sess.Agent)
+		if err != nil {
+			slog.Error("monitor: resolve agent", "session", sess.ID, "agent", sess.Agent, "error", err)
+			return
+		}
+
+		// Since = this launch, so an adapter can tell its own run's journal
+		// from an earlier one in the same worktree (Kimi after a restore).
+		ref := agent.ActivityRef{SessionID: sess.ID, WorktreePath: sess.WorktreePath}
+		if launched := m.sessionLaunchedAt(sess); launched > 0 {
+			ref.Since = time.Unix(launched, 0)
+		}
+		rawState, rawTS, err := ag.Activity(ctx, ref)
+		switch {
+		case errors.Is(err, agent.ErrNoSignal):
+			state = activity.State(sess.Activity)
+			if state == "" {
+				state = activity.Ready
+			}
+			if sess.ActivityTS == 0 {
+				// No stored timestamp yet (fresh running/spawning session
+				// that hasn't reported any signal): use now as a fresh
+				// grace period rather than the epoch, which would make the
+				// Ready->Idle threshold in applyMerge fire instantly and
+				// mark a brand-new session idle before it has had any
+				// chance to become active.
+				ts = time.Now()
+			} else {
+				ts = time.Unix(sess.ActivityTS, 0)
+			}
+			// For spawning sessions with no signal and empty activity, don't write anything.
+			if sess.State == "spawning" && sess.Activity == "" {
+				return
+			}
+		case err != nil:
+			slog.Error("monitor: agent activity", "session", sess.ID, "error", err)
+			return
+		default:
+			state, ts = rawState, rawTS
+			if state == activity.Blocked {
+				m.reportTurnFailure(ctx, sess, ag, ref)
+			}
+		}
+	}
+
+	if !exited {
+		state, ts = m.correctStaleInputWait(ctx, sess, state, ts)
+		state, ts = m.checkStartScreen(ctx, sess, ag, state, ts)
+	}
+
+	m.applyMerge(sess, state, ts, exited, "poll")
+}
+
+// inputWaitMissThreshold is how many consecutive sweeps must observe a
+// prompt-free pane before correctStaleInputWait clears waiting_input. Two
+// misses (~2 poll intervals) filter out transient capture glitches, exactly
+// as quizMissThreshold does for the quiz backstop.
+const inputWaitMissThreshold = 2
+
+// correctStaleInputWait is the waiting_input truth-check.
+//
+// waiting_input has exactly one source: Claude Code's Notification hook
+// (see internal/agent/claudecode, activityHookEvents), which fires not only
+// for a real permission prompt but also when the agent has merely been idle
+// for a while — and nothing ever un-sets it. The transcript-based Activity
+// signal never reports waiting_input, so the flag survives sweep after
+// sweep as the pushed entry out-timestamping the poll candidate, and a live
+// session keeps claiming it waits on the human in `rocket status`, on the
+// dashboard and in /v1/tasks.
+//
+// So the hook's report is treated as a suspicion the pane must confirm:
+// while a session claims waiting_input, each sweep reads the bottom of its
+// pane — reusing the Capture the sweep already does for pollQuiz — and
+// inputWaitMissThreshold consecutive sweeps showing nothing that waits on a
+// human (runtime.LooksLikeInputWait) drop the suspicion: the stale pushed
+// entry is discarded so it cannot win applyMerge, and a waiting_input poll
+// candidate becomes ready. Any other candidate (e.g. active from a fresh
+// transcript) is then left to speak for itself.
+//
+// The miss streak is deliberately NOT reset once it fires: the stale signal
+// keeps arriving every sweep, so resetting would let the flag flap straight
+// back. It is reset only by a session that stops claiming waiting_input, by
+// a prompt actually appearing on the pane, or by the session going away
+// (pruned in sweep).
+//
+// Two cases never clear the flag: a pending quiz, which is a real wait on
+// the human and whose end pollQuiz owns, and a capture error, which is
+// inconclusive.
+func (m *Monitor) correctStaleInputWait(ctx context.Context, sess store.Session, state activity.State, ts time.Time) (activity.State, time.Time) {
+	if !m.claimsInputWait(sess, state) || sess.PendingQuiz != "" {
+		m.forgetInputWaitMisses(sess.ID)
+		return state, ts
+	}
+
+	out, err := m.rt.Capture(ctx, runtime.Handle{Name: sess.TmuxName}, inputWaitCaptureLines)
+	if err != nil {
+		return state, ts
+	}
+	if runtime.LooksLikeInputWait(out) {
+		m.forgetInputWaitMisses(sess.ID)
+		return state, ts
+	}
+
+	m.mu.Lock()
+	m.inputWaitMiss[sess.ID]++
+	misses := m.inputWaitMiss[sess.ID]
+	m.mu.Unlock()
+	if misses < inputWaitMissThreshold {
+		return state, ts
+	}
+
+	m.mu.Lock()
+	delete(m.push, sess.ID)
+	m.mu.Unlock()
+
+	if state == activity.WaitingInput {
+		state, ts = activity.Ready, time.Now()
+	}
+	if sess.Activity == string(activity.WaitingInput) {
+		slog.Info("monitor: stale waiting_input cleared (no prompt on pane)", "session", sess.ID)
+	}
+	return state, ts
+}
+
+func (m *Monitor) forgetInputWaitMisses(sessionID string) {
+	m.mu.Lock()
+	delete(m.inputWaitMiss, sessionID)
+	m.mu.Unlock()
+}
+
+// claimsInputWait reports whether anything currently says this session waits
+// on the human: this sweep's poll candidate (which for a session with no
+// transcript signal is the stored state), or a pushed entry not yet merged
+// — the usual case, since the Notification hook's report reaches the
+// monitor as a push and outlives every poll candidate by timestamp.
+func (m *Monitor) claimsInputWait(sess store.Session, candidate activity.State) bool {
+	if candidate == activity.WaitingInput {
+		return true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pe, ok := m.push[sess.ID]
+	return ok && pe.state == activity.WaitingInput
+}
+
+// inputWaitCaptureLines is how many bottom pane rows the waiting_input
+// truth-check reads. A permission prompt (caption + options + footer) fits
+// well within it, and it matches what pollQuiz captures.
+const inputWaitCaptureLines = 15
+
+// applyMerge merges candidate (state, ts) against any pushed entry for
+// sess.ID — the newer timestamp wins, except an exited candidate from the
+// poll cascade (forceWin) always wins — applies the Ready→Idle threshold,
+// and if the result differs from the stored activity, persists it and
+// publishes a session.activity_changed event.
+func (m *Monitor) applyMerge(sess store.Session, candState activity.State, candTS time.Time, forceWin bool, source string) {
+	m.mu.Lock()
+	pe, hasPush := m.push[sess.ID]
+	m.mu.Unlock()
+
+	finalState, finalTS := candState, candTS
+	if hasPush && !forceWin && pe.ts.After(candTS) {
+		finalState, finalTS = pe.state, pe.ts
+	}
+
+	if finalState == activity.Ready && !finalTS.IsZero() && time.Since(finalTS) > m.cfg.ReadyToIdle {
+		finalState = activity.Idle
+	}
+
+	m.mu.Lock()
+	m.cache[sess.ID] = finalState
+	m.mu.Unlock()
+
+	if string(finalState) == sess.Activity {
+		return
+	}
+
+	if err := m.st.UpdateSessionActivity(sess.ID, string(finalState), finalTS.Unix()); err != nil {
+		slog.Error("monitor: update session activity", "session", sess.ID, "error", err)
+		return
+	}
+
+	m.bus.Publish("session.activity_changed", sess.ID, map[string]any{
+		"from":   sess.Activity,
+		"to":     string(finalState),
+		"source": source,
+	})
+}

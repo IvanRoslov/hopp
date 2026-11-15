@@ -1,6 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
@@ -36,4 +40,46 @@ func errCode(body map[string]any) string {
 	e, _ := body["error"].(map[string]any)
 	c, _ := e["code"].(string)
 	return c
+}
+
+// testDeps is rocket's minimal Deps for handler tests.
+func testDeps(t *testing.T, shutdown func()) Deps {
+	t.Helper()
+	if shutdown == nil {
+		shutdown = func() {}
+	}
+	return Deps{
+		Cfg:       &config.Config{},
+		Shutdown:  shutdown,
+		StartedAt: time.Now().Add(-42 * time.Second),
+	}
+}
+
+// postJSON posts payload as JSON to url.
+func postJSON(t *testing.T, url string, payload any) *http.Response {
+	t.Helper()
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	resp, err := http.Post(url, "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
+func bytesReader(b []byte) io.Reader {
+	return bytes.NewReader(b)
+}
+
+// decodeErr decodes the error body of resp and closes it.
+func decodeErr(t *testing.T, resp *http.Response) errBody {
+	t.Helper()
+	defer resp.Body.Close()
+	var body errBody
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	return body
 }

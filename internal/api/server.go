@@ -10,6 +10,7 @@ import (
 
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/config"
+	"github.com/IvanRoslov/hopp/internal/monitor"
 	"github.com/IvanRoslov/hopp/internal/session"
 	"github.com/IvanRoslov/hopp/internal/store"
 )
@@ -28,6 +29,8 @@ type Deps struct {
 	// Catalogs caches each agent's model catalog; NewHandler builds one in
 	// front of the real adapters when it is nil.
 	Catalogs *CatalogCache
+	// Monitor receives the activity the agents' hooks report.
+	Monitor *monitor.Monitor
 }
 
 // NewHandler builds the routed http.Handler for hopp's API.
@@ -42,6 +45,8 @@ func NewHandler(d Deps) http.Handler {
 	registerModelProfileRoutes(mux, d)
 	registerModelCatalogRoutes(mux, d)
 	registerEventsRoutes(mux, d)
+	registerInternalActivityRoutes(mux, d)
+	registerInternalQuizRoutes(mux, d)
 
 	// Any path not matched by a more specific route above is a 404,
 	// rendered in the standard error JSON shape. This is a prefix pattern,
