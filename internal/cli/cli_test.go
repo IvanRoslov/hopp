@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeAPI is an HTTP server on a temp unix socket that records every request
@@ -22,6 +24,7 @@ type fakeAPI struct {
 	mu       sync.Mutex
 	requests []recorded
 	routes   map[string]func(body []byte) (int, any)
+	raw      map[string]http.HandlerFunc
 }
 
 type recorded struct {
@@ -66,7 +69,12 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 		f.requests = append(f.requests, rec)
 	}
 	h := f.routes[r.Method+" "+r.URL.Path]
+	rh := f.raw[r.Method+" "+r.URL.Path]
 	f.mu.Unlock()
+	if rh != nil {
+		rh(w, r)
+		return
+	}
 	if h == nil {
 		w.WriteHeader(404)
 		w.Write([]byte(`{"error":{"code":"not_found","message":"no route"}}`))
@@ -80,6 +88,24 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 
 func (f *fakeAPI) on(route string, status int, body any) {
 	f.routes[route] = func([]byte) (int, any) { return status, body }
+}
+
+// handle serves route with h as is, for answers that are not one JSON body
+// (an event stream).
+func (f *fakeAPI) handle(route string, h http.HandlerFunc) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.raw == nil {
+		f.raw = map[string]http.HandlerFunc{}
+	}
+	f.raw[route] = h
+}
+
+// all returns every recorded request but the health checks.
+func (f *fakeAPI) all() []recorded {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]recorded(nil), f.requests...)
 }
 
 func (f *fakeAPI) last(t *testing.T) recorded {
@@ -422,5 +448,161 @@ func TestDoctorDoesNotStartTheDaemon(t *testing.T) {
 	}
 	if _, err := os.Stat(dead); !os.IsNotExist(err) {
 		t.Errorf("a daemon socket appeared: %v", err)
+	}
+}
+
+func TestSendFromEnv(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/messages", 201, map[string]any{"id": 5, "status": "queued", "body": "hi"})
+	t.Setenv("HOPP_SESSION_ID", "me")
+	out, errOut, code := runCLI(t, f, "send", "you", "hi")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	b := f.last(t).Body
+	if b["from"] != "me" || b["to"] != "you" || b["body"] != "hi" {
+		t.Errorf("request body = %v", b)
+	}
+	if out != "message 5 queued\n" {
+		t.Errorf("output = %q", out)
+	}
+}
+
+func TestSendWithoutSessionSendsNoFrom(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/messages", 201, map[string]any{"id": 5, "status": "queued", "body": "hi"})
+	if _, errOut, code := runCLI(t, f, "send", "you", "hi"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if _, has := f.last(t).Body["from"]; has {
+		t.Errorf("request body = %v, want no from", f.last(t).Body)
+	}
+}
+
+func TestSendFileBody(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/messages", 201, map[string]any{"id": 6, "status": "queued", "body": ""})
+	path := filepath.Join(t.TempDir(), "msg.md")
+	if err := os.WriteFile(path, []byte("line `one`\nline two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, errOut, code := runCLI(t, f, "send", "you", "--file", path); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if got := f.last(t).Body["body"]; got != "line `one`\nline two\n" {
+		t.Errorf("body = %q", got)
+	}
+}
+
+func TestSendWaitExitsOneOnFailed(t *testing.T) {
+	defer setPollIntervalForTest(t, 10*time.Millisecond)()
+	f := newFakeAPI(t)
+	f.on("POST /v1/messages", 201, map[string]any{"id": 8, "status": "queued", "body": "hi"})
+	f.on("GET /v1/messages/8", 200, map[string]any{"id": 8, "status": "failed", "reason": "recipient_gone"})
+	out, errOut, code := runCLI(t, f, "send", "you", "hi", "--wait")
+	if code != 1 {
+		t.Fatalf("exit %d, want 1: %s", code, errOut)
+	}
+	if !strings.Contains(out, "message 8 queued") || !strings.Contains(errOut, "message 8 failed: recipient_gone") {
+		t.Errorf("stdout %q stderr %q", out, errOut)
+	}
+}
+
+func TestSendUnknownRecipientExitsOne(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/messages", 404, map[string]any{"error": map[string]any{"code": "session_not_found", "message": "recipient session not found"}})
+	_, errOut, code := runCLI(t, f, "send", "nosuch", "hi")
+	if code != 1 || !strings.Contains(errOut, "recipient session not found") {
+		t.Fatalf("exit %d stderr %q", code, errOut)
+	}
+}
+
+func TestMessagesListsHistory(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/messages", 200, map[string]any{"messages": []any{
+		map[string]any{"id": 1, "from": "a", "to": "b", "body": "one\ntwo", "status": "delivered", "created_at": 0},
+		map[string]any{"id": 2, "to": "a", "body": "x", "status": "failed", "reason": "timeout", "created_at": 0},
+	}})
+	out, errOut, code := runCLI(t, f, "messages", "a", "--limit", "7")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if q := f.last(t).Query; !strings.Contains(q, "session=a") || !strings.Contains(q, "limit=7") {
+		t.Errorf("query = %q", q)
+	}
+	for _, want := range []string{"#1 ", "a -> b delivered\n  one\n  two\n", "- -> a failed (timeout)\n  x\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output %q lacks %q", out, want)
+		}
+	}
+}
+
+// TestEventsFollowStreamsAndExitsWhenStreamEnds: --follow asks the stream
+// for events after the tail it printed, passes the session and labels on,
+// prints what arrives, and exits 0 when the daemon closes the stream.
+func TestEventsFollowStreamsAndExitsWhenStreamEnds(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/events", 200, map[string]any{"events": []any{
+		map[string]any{"id": 4, "ts": 0, "type": "old", "session_id": "s1", "data": map[string]any{"labels": map[string]any{"team": "a"}}},
+	}})
+	var gotQuery string
+	f.handle("GET /v1/events/stream", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, ": ping\n\n")
+		fmt.Fprint(w, "id: 5\nevent: new\ndata: {\"id\":5,\"ts\":0,\"type\":\"new\",\"session_id\":\"s1\",\"data\":{\"labels\":{\"team\":\"a\"}}}\n\n")
+	})
+	out, errOut, code := runCLI(t, f, "events", "--follow", "--session", "s1", "--label", "team=a")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, want := range []string{"since=4", "session=s1", "label=team%3Da"} {
+		if !strings.Contains(gotQuery, want) {
+			t.Errorf("stream query %q lacks %q", gotQuery, want)
+		}
+	}
+	if !strings.Contains(out, "4 ") || !strings.Contains(out, " old s1") || !strings.Contains(out, " new s1") {
+		t.Errorf("output = %q", out)
+	}
+}
+
+func TestEventsLabelFilterOnTail(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/events", 200, map[string]any{"events": []any{
+		map[string]any{"id": 1, "ts": 0, "type": "mine", "session_id": "s1", "data": map[string]any{"labels": map[string]any{"team": "a"}}},
+		map[string]any{"id": 2, "ts": 0, "type": "theirs", "session_id": "s2", "data": map[string]any{"labels": map[string]any{"team": "b"}}},
+		map[string]any{"id": 3, "ts": 0, "type": "bare", "session_id": "s3"},
+	}})
+	out, errOut, code := runCLI(t, f, "events", "--label", "team=a")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, " mine ") || strings.Contains(out, "theirs") || strings.Contains(out, "bare") {
+		t.Errorf("output = %q", out)
+	}
+	if _, _, code := runCLI(t, f, "events", "--label", "nokey"); code != 3 {
+		t.Errorf("bad --label exit %d, want 3", code)
+	}
+}
+
+// TestEventsFollowExitsCleanlyWhenDaemonGoes: the stream breaks off and the
+// daemon no longer answers — --follow says so and exits 0 instead of
+// failing on its polling fallback.
+func TestEventsFollowExitsCleanlyWhenDaemonGoes(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/events", 200, map[string]any{"events": []any{}})
+	f.handle("GET /v1/events/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "id: 1\nevent: e\ndata: {\"id\":1,\"ts\":0,\"type\":\"e\"}\n\n")
+		w.(http.Flusher).Flush()
+		f.on("GET /v1/health", 503, map[string]any{"error": map[string]any{"code": "gone", "message": "gone"}})
+		panic(http.ErrAbortHandler) // drop the connection mid-stream
+	})
+	out, errOut, code := runCLI(t, f, "events", "--follow")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, " e -") || !strings.Contains(errOut, "the daemon stopped") {
+		t.Errorf("stdout %q stderr %q", out, errOut)
 	}
 }

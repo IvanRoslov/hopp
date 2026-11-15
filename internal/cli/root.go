@@ -53,6 +53,8 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newRestoreCmd())
 	root.AddCommand(newAttachCmd())
 	root.AddCommand(newModelsCmd())
+	root.AddCommand(newSendCmd())
+	root.AddCommand(newMessagesCmd())
 	root.AddCommand(newEventsCmd())
 	root.AddCommand(newLogsCmd())
 	root.AddCommand(newDoctorCmd())

@@ -48,6 +48,8 @@ func NewHandler(d Deps) http.Handler {
 	registerModelProfileRoutes(mux, d)
 	registerModelCatalogRoutes(mux, d)
 	registerEventsRoutes(mux, d)
+	registerSSERoutes(mux, d)
+	registerMessageRoutes(mux, d)
 	registerInternalActivityRoutes(mux, d)
 	registerInternalQuizRoutes(mux, d)
 
