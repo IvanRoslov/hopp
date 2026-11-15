@@ -187,8 +187,9 @@ func TestAnswerPermission_RecapturesAtSharedDepth(t *testing.T) {
 	rt.mu.Lock()
 	lines := append([]int(nil), rt.captureLines...)
 	rt.mu.Unlock()
-	if len(lines) != 1 || lines[0] != runtime.PermissionCaptureLines {
-		t.Errorf("capture depths = %v, want [%d]", lines, runtime.PermissionCaptureLines)
+	// Two captures, a settle apart, both at the shared depth.
+	if len(lines) != 2 || lines[0] != runtime.PermissionCaptureLines || lines[1] != runtime.PermissionCaptureLines {
+		t.Errorf("capture depths = %v, want [%d %d]", lines, runtime.PermissionCaptureLines, runtime.PermissionCaptureLines)
 	}
 }
 

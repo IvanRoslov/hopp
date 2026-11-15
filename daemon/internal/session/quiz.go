@@ -332,12 +332,15 @@ func (m *Manager) AnswerQuiz(ctx context.Context, id string, answers []QuizAnswe
 	// recorded until the PostToolUse hook clears it. Keys sent then would
 	// land in the agent's composer.
 	h := runtime.Handle{Name: sess.TmuxName}
-	pane, err := m.rt.Capture(ctx, h, quizCaptureLines)
-	if err != nil {
+	if len(quiz.Questions) == 0 {
+		m.clearQuizInFlight(id)
+		return validationErr("prompt_changed", "the question on the pane changed or closed; re-read the session")
+	}
+	shows := func(pane string) bool { return quizWidgetShows(pane, quiz.Questions[0].Question) }
+	if ok, _, err := m.settledPaneShows(ctx, h, quizCaptureLines, shows); err != nil {
 		m.clearQuizInFlight(id)
 		return fmt.Errorf("re-read pane before answering quiz: %w", err)
-	}
-	if len(quiz.Questions) == 0 || !quizWidgetShows(pane, quiz.Questions[0].Question) {
+	} else if !ok {
 		m.clearQuizInFlight(id)
 		return validationErr("prompt_changed", "the question on the pane changed or closed; re-read the session")
 	}
@@ -537,4 +540,32 @@ func quizWidgetShows(pane, question string) bool {
 	}
 	body := strings.Join(strings.Fields(strings.Join(rows[start:footer], " ")), " ")
 	return strings.Contains(body, want)
+}
+
+// answerSettle is the pause between the two captures that must both show
+// the question before hopp presses a key. Live (Claude Code 2.1.325), a
+// capture taken right after a human's key still showed the old dialog,
+// and one taken 0.5 seconds later showed the redrawn screen; 400 ms stays
+// just inside that and adds little to an answer's latency.
+const answerSettle = 400 * time.Millisecond
+
+// settledPaneShows reports whether two captures of h, answerSettle apart
+// (through quizSleepFn, so tests do not wait), both satisfy shows. It
+// narrows the window in which a human's answer in the terminal and hopp's
+// key cross; it cannot close it.
+// It also returns the second capture, the screen the keys are built for.
+func (m *Manager) settledPaneShows(ctx context.Context, h runtime.Handle, lines int, shows func(string) bool) (bool, string, error) {
+	pane, err := m.rt.Capture(ctx, h, lines)
+	if err != nil {
+		return false, "", err
+	}
+	if !shows(pane) {
+		return false, pane, nil
+	}
+	m.quizSleepFn(answerSettle)
+	pane, err = m.rt.Capture(ctx, h, lines)
+	if err != nil {
+		return false, "", err
+	}
+	return shows(pane), pane, nil
 }

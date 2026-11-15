@@ -46,6 +46,9 @@ type fakeRuntime struct {
 	// captureAfterKeys, when set, is what Capture returns once any key
 	// has been sent (the screen changed in response).
 	captureAfterKeys string
+	// captureSeq, when not empty, is returned one pane per Capture (before
+	// the fields above); once used up, Capture falls back to them.
+	captureSeq []string
 }
 
 func (f *fakeRuntime) Create(ctx context.Context, spec runtime.CreateSpec) (runtime.Handle, error) {
@@ -82,6 +85,11 @@ func (f *fakeRuntime) Capture(ctx context.Context, h runtime.Handle, lines int) 
 	f.captureLines = append(f.captureLines, lines)
 	if f.captureErr != nil {
 		return "", f.captureErr
+	}
+	if len(f.captureSeq) > 0 {
+		out := f.captureSeq[0]
+		f.captureSeq = f.captureSeq[1:]
+		return out, nil
 	}
 	if f.captureAfterKeys != "" && len(f.sentKeys) > 0 {
 		return f.captureAfterKeys, nil

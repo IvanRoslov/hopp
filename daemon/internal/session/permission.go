@@ -205,10 +205,6 @@ func (m *Manager) answerPermission(ctx context.Context, sess store.Session, quiz
 	}()
 
 	h := runtime.Handle{Name: sess.TmuxName}
-	pane, err := m.rt.Capture(ctx, h, runtime.PermissionCaptureLines)
-	if err != nil {
-		return fmt.Errorf("re-read pane before answering permission prompt: %w", err)
-	}
 	unnumbered := quiz.IsStartScreen() && quiz.Permission.Unnumbered
 	parse := runtime.ParsePermissionPrompt
 	switch {
@@ -217,7 +213,15 @@ func (m *Manager) answerPermission(ctx context.Context, sess store.Session, quiz
 	case quiz.IsStartScreen():
 		parse = runtime.ParseStartScreen
 	}
-	if p, ok := parse(pane); !ok || !p.SameDialog(quiz.PermissionPrompt()) {
+	shows := func(pane string) bool {
+		p, ok := parse(pane)
+		return ok && p.SameDialog(quiz.PermissionPrompt())
+	}
+	ok, pane, err := m.settledPaneShows(ctx, h, runtime.PermissionCaptureLines, shows)
+	if err != nil {
+		return fmt.Errorf("re-read pane before answering permission prompt: %w", err)
+	}
+	if !ok {
 		return validationErr("prompt_changed", "the permission dialog on the pane changed or closed; re-read the session")
 	}
 
