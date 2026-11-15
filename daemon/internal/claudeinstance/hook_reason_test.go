@@ -43,3 +43,22 @@ func TestValidateHookNamesTheFailedCheck(t *testing.T) {
 		})
 	}
 }
+
+// A producer that is alive under the bound Claude passes; one that has
+// exited by the time the daemon checks (the old command-substitution
+// subshell) fails.
+func TestValidateHookProducerMustBeAlive(t *testing.T) {
+	l, r, p := fixture()
+	id := Resolve(context.Background(), l, nil, r, p, "/tmp/p").Identity
+	now := time.Now()
+	p.processes[12] = Process{PID: 12, PPID: 11, Start: now, Name: "sh"}
+	e := HookEvent{ClaudeSessionID: id.ClaudeSessionID, HookEventName: "Stop", LaunchGeneration: l.Generation, ProducerPID: 12, ProducerStart: now, At: now.UnixNano()}
+	if err := ValidateHook(context.Background(), id, e, "ready", 0, now, p); err != nil {
+		t.Fatalf("live hook shell under Claude refused: %v", err)
+	}
+	e.ProducerPID = 13 // exited: not in the process table
+	err := ValidateHook(context.Background(), id, e, "ready", 0, now, p)
+	if err == nil || !strings.Contains(err.Error(), "producer process missing") {
+		t.Fatalf("exited producer: err = %v", err)
+	}
+}

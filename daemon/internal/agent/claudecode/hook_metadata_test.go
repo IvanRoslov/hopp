@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -37,7 +38,7 @@ func TestHookExtractsOnlyBoundedMetadata(t *testing.T) {
 			probe := `import os
 from types import SimpleNamespace
 def run(args, **kwargs):
-    assert args == ["ps", "-p", str(os.getppid()), "-o", "lstart="]
+    assert args == ["ps", "-p", str(int(os.environ["HOPP_HOOK_PID"])), "-o", "lstart="]
     assert kwargs["timeout"] == 0.5 and kwargs["check"] and kwargs["capture_output"] and kwargs["text"]
     assert kwargs["env"]["TZ"] == "UTC" and kwargs["env"]["LC_ALL"] == "C"
     with open(os.environ["HOOK_PS_CALL"], "w") as out:
@@ -94,7 +95,12 @@ func mustWriteHookFixture(t *testing.T, path, body string) {
 // they started), so a stuck run is reported by the test and leaves no
 // orphan behind.
 func activityHookCmd(ctx context.Context) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "sh", "-c", activityHookScript, "hook", "ready")
+	return activityHookCmdWith(ctx, "sh")
+}
+
+// activityHookCmdWith is activityHookCmd under the given shell.
+func activityHookCmdWith(ctx context.Context, shell string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, shell, "-c", activityHookScript, "hook", "ready")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -151,5 +157,60 @@ func TestActivityHookArmsAlarmFirst(t *testing.T) {
 	}
 	if strings.Count(activityHookScript, "signal.alarm(") != 1 {
 		t.Error("the alarm must be armed exactly once")
+	}
+}
+
+// The hook names its own shell as the producer: the process that stays
+// alive until curl returns and whose parent is Claude. A command
+// substitution's subshell (bash 3.2 as macOS /bin/sh forks one) has already
+// exited by the time the daemon checks it. The fake curl, a child of the
+// hook's shell, records its parent's pid and start; the payload must carry
+// exactly those, under bash-as-sh and dash alike.
+func TestHookProducerIsTheHookShell(t *testing.T) {
+	shells := []string{"/bin/sh"}
+	if _, err := os.Stat("/bin/dash"); err == nil {
+		shells = append(shells, "/bin/dash")
+	}
+	for _, shell := range shells {
+		t.Run(filepath.Base(shell), func(t *testing.T) {
+			dir := t.TempDir()
+			capture := filepath.Join(dir, "capture.json")
+			parent := filepath.Join(dir, "parent")
+			curl := "#!/bin/sh\nprintf '%s %s' \"$PPID\" \"$(TZ=UTC LC_ALL=C ps -p $PPID -o lstart=)\" > \"$HOOK_PARENT\"\nprev=''\nfor arg in \"$@\"; do\n if [ \"$prev\" = '-d' ]; then printf '%s' \"$arg\" > \"$HOOK_CAPTURE\"; fi\n prev=\"$arg\"\ndone\n"
+			mustWriteHookFixture(t, filepath.Join(dir, "curl"), curl)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			cmd := activityHookCmdWith(ctx, shell)
+			cmd.Env = []string{"PATH=" + dir + ":" + os.Getenv("PATH"), "HOPP_SOCKET=/tmp/fixture.sock", "HOPP_SESSION_ID=s", "HOPP_CLAUDE_LAUNCH=g", "HOOK_CAPTURE=" + capture, "HOOK_PARENT=" + parent}
+			cmd.Stdin = strings.NewReader(`{"session_id":"target","hook_event_name":"Stop"}`)
+			if out, err := cmd.CombinedOutput(); err != nil || ctx.Err() != nil {
+				t.Fatalf("hook: %v %s", err, out)
+			}
+			raw, err := os.ReadFile(capture)
+			if err != nil {
+				t.Fatalf("no payload: %v", err)
+			}
+			var req struct {
+				Claude claudeinstance.HookEvent `json:"claude"`
+			}
+			if err := json.Unmarshal(raw, &req); err != nil {
+				t.Fatal(err)
+			}
+			if req.Claude.ProducerPID != cmd.Process.Pid {
+				t.Fatalf("producer_pid = %d, want the hook shell %d", req.Claude.ProducerPID, cmd.Process.Pid)
+			}
+			rec, _ := os.ReadFile(parent)
+			pid, lstart, _ := strings.Cut(strings.TrimSpace(string(rec)), " ")
+			if pid != strconv.Itoa(cmd.Process.Pid) {
+				t.Fatalf("curl's parent %s is not the hook shell %d", pid, cmd.Process.Pid)
+			}
+			start, err := time.Parse("Mon Jan _2 15:04:05 2006", strings.Join(strings.Fields(lstart), " "))
+			if err != nil {
+				t.Fatalf("lstart %q: %v", lstart, err)
+			}
+			if !req.Claude.ProducerStart.Equal(start.UTC()) {
+				t.Fatalf("producer_start = %s, want the shell's start %s", req.Claude.ProducerStart, start.UTC())
+			}
+		})
 	}
 }

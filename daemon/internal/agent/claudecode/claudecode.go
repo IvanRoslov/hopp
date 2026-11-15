@@ -83,12 +83,18 @@ const activityHookRelPath = ".hopp/activity-hook.sh"
 // invoking hook: missing env vars or an unreachable daemon are silently
 // ignored (`|| true`, output discarded). Curl includes timeouts to prevent
 // the daemon hook from hanging.
+//
+// The producer it reports is the hook's own shell ($$, passed in as
+// HOPP_HOOK_PID): that process lives until curl returns and its parent is
+// Claude. os.getppid() inside the command substitution would name a subshell
+// that bash (macOS /bin/sh) forks and that has exited before the daemon
+// checks it.
 const activityHookScript = `#!/bin/sh
 # Only metadata leaves this hook. Never log stdin, prompts or tool input.
 if [ -z "$HOPP_SOCKET" ] || [ -z "$HOPP_SESSION_ID" ] || [ -z "$HOPP_CLAUDE_LAUNCH" ]; then
   exit 0
 fi
-payload=$(python3 -c '
+payload=$(HOPP_HOOK_PID=$$ python3 -c '
 import signal; signal.alarm(1)
 import datetime, json, os, subprocess, sys, time
 try:
@@ -106,7 +112,9 @@ try:
         allowed[key] = value
     if not allowed["session_id"] or not allowed["hook_event_name"]:
         sys.exit(1)
-    pid = os.getppid()
+    pid = int(os.environ["HOPP_HOOK_PID"])
+    if pid <= 1:
+        sys.exit(1)
     env = dict(os.environ, TZ="UTC", LC_ALL="C")
     result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart="], capture_output=True, text=True, timeout=0.5, env=env, check=True)
     start = datetime.datetime.strptime(result.stdout.strip(), "%a %b %d %H:%M:%S %Y").replace(tzinfo=datetime.timezone.utc)
