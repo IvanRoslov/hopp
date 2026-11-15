@@ -25,6 +25,7 @@ import (
 	"github.com/IvanRoslov/hopp/internal/session"
 	"github.com/IvanRoslov/hopp/internal/socketmsg"
 	"github.com/IvanRoslov/hopp/internal/store"
+	"github.com/IvanRoslov/hopp/internal/usage"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -120,6 +121,8 @@ func Run(cfg *config.Config) error {
 	go q.Run(ctx)
 
 	go hb.Run(ctx)
+	uc := usage.New(st, b, usage.Options{})
+	go uc.Run(ctx)
 
 	shutdownCalled := make(chan struct{})
 	var shutdownOnce func()
@@ -140,6 +143,7 @@ func Run(cfg *config.Config) error {
 		Manager:   mgr,
 		Monitor:   mon,
 		Queue:     q,
+		Usage:     uc,
 		Shutdown:  shutdownOnce,
 		StartedAt: time.Now(),
 	}

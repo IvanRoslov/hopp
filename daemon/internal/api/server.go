@@ -34,6 +34,9 @@ type Deps struct {
 	Monitor *monitor.Monitor
 	// Queue delivers messages; its Wake is called when a message is added.
 	Queue *queue.Queue
+	// Usage collects token usage; nil when the daemon runs without a
+	// collector (POST /v1/usage/collect then answers 503).
+	Usage UsageCollector
 }
 
 // NewHandler builds the routed http.Handler for hopp's API.
@@ -52,6 +55,7 @@ func NewHandler(d Deps) http.Handler {
 	registerMessageRoutes(mux, d)
 	registerChatRoutes(mux, d)
 	registerQuizRoutes(mux, d)
+	registerUsageRoutes(mux, d)
 	registerInternalActivityRoutes(mux, d)
 	registerInternalQuizRoutes(mux, d)
 

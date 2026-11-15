@@ -862,3 +862,58 @@ func TestRmEndedOlderThan(t *testing.T) {
 		}
 	}
 }
+
+func usageTestRow(session, parent, model string, in, out int) map[string]any {
+	return map[string]any{"session": session, "parent": parent, "labels": map[string]string{}, "agent": "claude-code", "state": "running",
+		"status": "ok", "final": false, "model": model, "input": in, "cache_write": 0, "cache_read": 0, "output": out, "reasoning": 0, "messages": 1}
+}
+
+func TestUsageTable(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/usage", 200, map[string]any{"rows": []any{usageTestRow("s1", "", "m1", 10, 2), usageTestRow("s1", "", "m2", 5, 1)}})
+	f.on("POST /v1/usage/collect", 200, map[string]any{"collected": 1, "queued": 0})
+	out, errOut, code := runCLI(t, f, "usage", "--session", "s1", "--label", "team=a", "--collect")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	reqs := f.all()
+	if len(reqs) != 2 || reqs[0].Path != "/v1/usage/collect" || reqs[0].Body["session"] != "s1" {
+		t.Fatalf("requests %+v", reqs)
+	}
+	if q := reqs[1].Query; !strings.Contains(q, "session=s1") || !strings.Contains(q, "label=team%3Da") {
+		t.Errorf("query %q", q)
+	}
+	for _, want := range []string{"SESSION", "s1", "m1", "m2", "TOTAL", "15"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output %q lacks %q", out, want)
+		}
+	}
+}
+
+// TestUsageTreeTotals: --tree sums a session and all its descendants, and
+// nothing else.
+func TestUsageTreeTotals(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/usage", 200, map[string]any{"rows": []any{
+		usageTestRow("root", "", "m1", 100, 10),
+		usageTestRow("child", "root", "m1", 20, 2),
+		usageTestRow("grand", "child", "m2", 3, 1),
+		usageTestRow("other", "", "m1", 1000, 1000),
+	}})
+	out, errOut, code := runCLI(t, f, "usage", "--tree", "root")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if strings.Contains(out, "other") {
+		t.Errorf("a session outside the tree is listed: %q", out)
+	}
+	var total string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "TOTAL") {
+			total = strings.Join(strings.Fields(line), " ")
+		}
+	}
+	if total != "TOTAL 123 0 0 13 0 3" {
+		t.Errorf("total line %q, want input 123 output 13 messages 3", total)
+	}
+}

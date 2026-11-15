@@ -8,7 +8,8 @@ import (
 // RemoveSessions deletes the given sessions and everything that belongs to
 // them, in one transaction: their claude_launches and permission_prompts
 // rows, the messages addressed TO them (with those messages' Claude delivery
-// rows and consumed proof records, by ON DELETE CASCADE), and their events.
+// rows and consumed proof records, by ON DELETE CASCADE), their events, and
+// their token usage (session_usage, session_stats).
 // Messages they SENT to sessions that remain are kept; their from_session
 // keeps the old id as text. The caller checks that removal is allowed
 // (session.Manager.Remove): a set whose sessions are referenced as parents
@@ -42,6 +43,8 @@ func (s *Store) RemoveSessions(ids []string) error {
 		`DELETE FROM permission_prompts WHERE session_id IN (` + marks + `)`,
 		`DELETE FROM claude_launches WHERE session_id IN (` + marks + `)`,
 		`DELETE FROM events WHERE session_id IN (` + marks + `)`,
+		`DELETE FROM session_usage WHERE session_id IN (` + marks + `)`,
+		`DELETE FROM session_stats WHERE session_id IN (` + marks + `)`,
 		`DELETE FROM sessions WHERE id IN (` + marks + `)`,
 	} {
 		if _, err := tx.Exec(q, args...); err != nil {

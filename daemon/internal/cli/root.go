@@ -59,6 +59,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newChatCmd())
 	root.AddCommand(newAnswerCmd())
 	root.AddCommand(newEventsCmd())
+	root.AddCommand(newUsageCmd())
 	root.AddCommand(newLogsCmd())
 	root.AddCommand(newDoctorCmd())
 	return root

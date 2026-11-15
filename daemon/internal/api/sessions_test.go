@@ -26,7 +26,11 @@ type apiEnv struct {
 	cfg *config.Config
 }
 
-func newAPIEnv(t *testing.T) apiEnv {
+func newAPIEnv(t *testing.T) apiEnv { return newAPIEnvWithUsage(t, nil) }
+
+// newAPIEnvWithUsage is newAPIEnv with a usage collector in the deps (nil:
+// none, as a daemon without one).
+func newAPIEnvWithUsage(t *testing.T, usage UsageCollector) apiEnv {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOPP_HOME", home)
@@ -46,7 +50,7 @@ func newAPIEnv(t *testing.T) apiEnv {
 	b := bus.New(st)
 	m := session.NewManager(st, b, rt, cfg)
 	m.SetOwnerProbe(rt.OwnerProbe)
-	srv := httptest.NewServer(NewHandler(Deps{Store: st, Bus: b, Cfg: cfg, Manager: m, Shutdown: func() {}, StartedAt: time.Now()}))
+	srv := httptest.NewServer(NewHandler(Deps{Store: st, Bus: b, Cfg: cfg, Manager: m, Shutdown: func() {}, StartedAt: time.Now(), Usage: usage}))
 	t.Cleanup(srv.Close)
 	return apiEnv{srv: srv, st: st, rt: rt, cfg: cfg}
 }
