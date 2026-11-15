@@ -1,5 +1,5 @@
 ---
-last-verified: 2026-11-14
+last-verified: 2026-11-15
 canonical: true
 ---
 
@@ -19,17 +19,19 @@ canonical: true
 ## 1. Build & run locally
 
 ```bash
-<TODO: the real commands — install, run, health check.>
+make build          # builds bin/hopp
+make start          # builds, starts the daemon, prints its status
+make restart        # builds, then stops and starts the daemon
+make stop           # stops the daemon and waits until it has exited
+bin/hopp doctor     # tmux, the state directory, the daemon, the five harnesses
+bin/hopp logs -n 50 # the daemon log, read from disk without starting the daemon
 ```
 
-<TODO: what the local stack stands in for (databases, queues, third-party services), and
-the one gotcha that bites newcomers.>
+The daemon keeps everything in `~/.hopp`; set `HOPP_HOME` to a temporary folder to run a throwaway daemon. Every `hopp` command that talks to the daemon starts it when it is not running, except `logs`, `doctor`, `daemon status` and `daemon stop`, so stop it before you rebuild, or `make restart` does it in the right order.
 
 ## 2. Deploy & configure
 
-<TODO: how a change reaches staging and production. Name the mechanism (CI job, console,
-CLI), the environments, and how environment variables are set — including when a change
-takes effect. A missing variable failing silently is the classic time sink.>
+There is no deployment: hopp runs from `bin/hopp` on the author's machine, and a change takes effect after `make restart`. The daemon reads `DEEPSEEK_API_KEY` from `~/.hopp/deepseek-api-key` at start when its environment lacks it.
 
 ## 3. Domain-specific tooling
 
@@ -44,8 +46,7 @@ building — the queries, CLIs, and dashboards you actually use to see what happ
 
 ## 5. Verify the running system
 
-<TODO: how to check a deployed change is really live — logs, metrics, a smoke request,
-a browser check. Verify effects, not step statuses.>
+Run `bin/hopp daemon status` (pid and version), then `bin/hopp doctor`. To see a session really run, launch one in a scratch folder with `bin/hopp run <dir> --agent <harness>`, check `bin/hopp ls` and the pane with `tmux capture-pane -p -t '=<id>:'`, then stop it with `bin/hopp kill <id>`. `bin/hopp events --session <id>` shows what happened to it.
 
 ## Related
 

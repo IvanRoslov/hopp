@@ -1,5 +1,5 @@
 ---
-last-verified: 2026-11-14
+last-verified: 2026-11-15
 ---
 
 # Test the fact tree
@@ -45,7 +45,13 @@ Lessons in [[docs/lessons/README]] record what agents got wrong in practice. Eac
 
 ## Golden set
 
-<TODO: 3–5 questions whose answers matter most, each with the expected answer checked against the code and the commit it was checked at. Run all of them after any change to the root, and each one after a change to an area it touches. Add them as the tree grows; an empty golden set means only lesson-derived questions run.>
+Checked against the code at commit `8fe30c5` (2026-11-15). Run all of them after any change to the root, and each one after a change to an area it touches.
+
+1. **Can hopp destroy a tmux session that has the same name as one of its sessions but was started by someone else?** No. Before every destroy hopp checks that the tmux session's environment carries `HOPP_SESSION_ID` equal to the session id; otherwise it leaves the tmux session running and marks its own session `errored` with reason `tmux_not_owned`. Code: `internal/session` (`destroyOwned` in `kill.go`).
+2. **What happens to running sessions when the hopp daemon is stopped and started again?** They keep running; stopping the daemon never stops a session. On start the daemon reconciles: a session whose tmux is gone becomes `errored` (`tmux_missing`), one whose folder is gone becomes `errored` (`dir_missing`) and its tmux is left alone. Code: `internal/session` (`reconcile.go`).
+3. **Can one agent send a message to another through hopp today?** No: there is no send command and no delivery queue on `main`; the delivery transports are ported but not wired. Code: `internal/socketmsg`, `internal/nativeinput`, `internal/claudeinstance`.
+4. **What is the tmux session of a hopp session named, and why?** Exactly the session id, because the ported Claude Code delivery code finds an agent's pane by its session id. Code: `internal/session`.
+5. **Where does hopp keep its state, and does it share anything with rocket at run time?** In `~/.hopp` (database, socket, pid file, logs). It shares only the lock files on `~/.claude.json` and Codex's `config.toml`, taken under rocket's names so the two programs never write those files at once. Code: `internal/config`, `internal/agent/claudecode`, `internal/agent/codex`.
 
 ## Verify
 
