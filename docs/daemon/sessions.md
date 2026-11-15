@@ -18,4 +18,4 @@ A session is one tmux session running one agent in one folder. This leaf says ho
 8. A launch may pass extra environment, but the variables the daemon sets for the agent (its id, its parent's id, the socket and the state directory) always win over it.
 9. A launch writes into the folder only what the harness needs to start: a launch script for every harness; for Claude Code and DeepSeek the hook scripts under `.hopp/`, `.claude/settings.local.json` and the system prompt file; for Codex, Kimi Code and Pi the system prompt in `AGENTS.md` between `hopp` markers, which leaves a block rocket wrote there alone. Running a hopp session and a rocket session in the same folder at once is not supported.
 
-Code: [session](internal/session), [runtime](internal/runtime), [agent](internal/agent)
+Code: [session](daemon/internal/session), [runtime](daemon/internal/runtime), [agent](daemon/internal/agent)

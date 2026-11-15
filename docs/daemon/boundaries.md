@@ -17,6 +17,6 @@ The daemon and its CLI are one program; this leaf says what it owns, what it ref
 7. The one relation the daemon keeps is `parent`: which session launched which, to any depth. It lets a session list its children, stops the children before the parent, and gives each agent its own id and its parent's id in the environment; a `hopp run` from inside a session makes that session the parent.
 8. A model profile names a harness, a model and an effort; a launch names a profile or a harness, and without either it gets the one default profile, else the configured default harness. The first start seeds three starter profiles.
 9. Every lifecycle change of a session, and every step of a message, is appended to an event log in the database; `hopp events` reads it and `hopp events --follow` streams it live.
-10. The daemon is ported from rocket, not written from scratch: message delivery and the reading of agent screens carry a long history of debugging against real agent CLIs. `internal/PORTED.md` records every change made to the ported code.
+10. The daemon is ported from rocket, not written from scratch: message delivery and the reading of agent screens carry a long history of debugging against real agent CLIs. `daemon/internal/PORTED.md` records every change made to the ported code.
 
-Code: [daemon](internal/daemon), [config](internal/config), [api](internal/api), [cli](internal/cli), [store](internal/store), [agent](internal/agent)
+Code: [daemon](daemon/internal/daemon), [config](daemon/internal/config), [api](daemon/internal/api), [cli](daemon/internal/cli), [store](daemon/internal/store), [agent](daemon/internal/agent)

@@ -18,4 +18,4 @@ The daemon watches what each agent is doing, tells a parent when a child needs h
 8. A child that has ended (`done`, `killed` or `errored`) is never named in that summary, so a parent is not told when the reconcile at daemon start marks a child `errored`.
 9. Every change is appended to the event log with the session's labels in its data. `hopp events --follow` streams it live from `/v1/events/stream` and can be narrowed by `--session` and `--label`; it exits cleanly on Ctrl-C and when the daemon stops.
 
-Code: [monitor](internal/monitor), [heartbeat](internal/heartbeat), [activity](internal/activity), [bus](internal/bus), [api](internal/api), [cli](internal/cli)
+Code: [monitor](daemon/internal/monitor), [heartbeat](daemon/internal/heartbeat), [activity](daemon/internal/activity), [bus](daemon/internal/bus), [api](daemon/internal/api), [cli](daemon/internal/cli)

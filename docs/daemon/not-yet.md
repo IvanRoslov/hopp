@@ -12,4 +12,4 @@ Messaging, activity and the event stream are built; these parts of the design ar
 2. The API listens only on the daemon's Unix socket, with no TCP listener and no authentication, so only processes of the same user on the same machine can reach it.
 3. The layer above the daemon (roles, tasks, worktrees, who manages whom) is not part of hopp yet. The daemon already gives it what it needs to build on: labels, the `parent` relation, the event log and the live event stream.
 
-Code: [api](internal/api), [cli](internal/cli), [monitor](internal/monitor)
+Code: [api](daemon/internal/api), [cli](daemon/internal/cli), [monitor](daemon/internal/monitor)

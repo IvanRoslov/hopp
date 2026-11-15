@@ -1,6 +1,6 @@
 ---
 component: daemon
-repo: this repo, `cmd` and `internal`
+repo: this repo, `daemon/` (`daemon/cmd` and `daemon/internal`)
 last-verified: 2026-11-15
 kind: node
 up: [[INDEX]]

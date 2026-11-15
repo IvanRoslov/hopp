@@ -20,4 +20,4 @@ A message goes from a session, a human or the daemon to one live session. This l
 10. While a message waits on the Claude Code route, the reason is written on the message (`hopp messages` shows `queued (<reason>)`, `hopp send --wait` prints it) and logged once per change.
 11. After `/clear` in an idle Claude Code session its conversation id changes and its new journal does not exist yet, so a message waits with reason `claude_resolve:binding_changed` until the session's next turn.
 
-Code: [queue](internal/queue), [claudeinstance](internal/claudeinstance), [socketmsg](internal/socketmsg), [nativeinput](internal/nativeinput), [api](internal/api), [cli](internal/cli)
+Code: [queue](daemon/internal/queue), [claudeinstance](daemon/internal/claudeinstance), [socketmsg](daemon/internal/socketmsg), [nativeinput](daemon/internal/nativeinput), [runtime](daemon/internal/runtime), [api](daemon/internal/api), [cli](daemon/internal/cli)
