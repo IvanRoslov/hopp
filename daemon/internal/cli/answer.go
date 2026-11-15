@@ -70,6 +70,9 @@ func newAnswerCmd() *cobra.Command {
 				}
 				w := cmd.OutOrStdout()
 				if sess.Question == nil || len(sess.Question.Questions) == 0 {
+					if len(args) == 2 {
+						return fmt.Errorf("%s has no pending question; nothing was answered", id)
+					}
 					fmt.Fprintf(w, "%s has no pending question\n", id)
 					return nil
 				}

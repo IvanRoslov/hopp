@@ -1153,3 +1153,22 @@ func TestAsksAndWaitingPrint(t *testing.T) {
 		t.Fatalf("waiting: exit %d %s %q", code, errOut, out)
 	}
 }
+
+// TestAnswerWithoutQuestionFails: a choice given to a session with no
+// pending question answers nothing, so the command fails (exit 1) and posts
+// nothing.
+func TestAnswerWithoutQuestionFails(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/sessions/s2", 200, created)
+	_, errOut, code := runCLI(t, f, "answer", "s2", "1")
+	if code != 1 || !strings.Contains(errOut, "no pending question") {
+		t.Fatalf("exit %d stderr %q, want 1 saying there is no pending question", code, errOut)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, r := range f.requests {
+		if r.Method == "POST" {
+			t.Fatalf("posted %+v", r)
+		}
+	}
+}
