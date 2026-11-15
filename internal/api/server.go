@@ -11,6 +11,7 @@ import (
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/config"
 	"github.com/IvanRoslov/hopp/internal/monitor"
+	"github.com/IvanRoslov/hopp/internal/queue"
 	"github.com/IvanRoslov/hopp/internal/session"
 	"github.com/IvanRoslov/hopp/internal/store"
 )
@@ -31,6 +32,8 @@ type Deps struct {
 	Catalogs *CatalogCache
 	// Monitor receives the activity the agents' hooks report.
 	Monitor *monitor.Monitor
+	// Queue delivers messages; its Wake is called when a message is added.
+	Queue *queue.Queue
 }
 
 // NewHandler builds the routed http.Handler for hopp's API.

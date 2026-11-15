@@ -18,8 +18,11 @@ import (
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/config"
 	"github.com/IvanRoslov/hopp/internal/monitor"
+	"github.com/IvanRoslov/hopp/internal/nativeinput"
+	"github.com/IvanRoslov/hopp/internal/queue"
 	"github.com/IvanRoslov/hopp/internal/runtime"
 	"github.com/IvanRoslov/hopp/internal/session"
+	"github.com/IvanRoslov/hopp/internal/socketmsg"
 	"github.com/IvanRoslov/hopp/internal/store"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -64,6 +67,32 @@ func Run(cfg *config.Config) error {
 	mgr := session.NewManager(st, b, rt, cfg)
 
 	mon := monitor.New(st, b, rt, cfg, agent.Get)
+	q := queue.New(st, b, rt, cfg, mon.Activity)
+	q.SetNativeSender(nativeinput.SenderFunc(nativeinput.Send))
+	mgr.SetWake(q.Wake)
+	// The monitor alerts a parent when a session is stuck on an agent start
+	// screen; wake its delivery worker right away.
+	mon.SetWake(q.Wake)
+	// The first message of an agent that takes it by input goes through the
+	// queue, like any other message.
+	mgr.SetFirstMessageQueue(func(sessionID, body string) error {
+		_, err := st.AddMessage(store.Message{ToSession: sessionID, Body: body})
+		return err
+	})
+	// Claude Code recipients get their messages over the cross-session UDS
+	// inbox whenever one is reachable; every other agent keeps using tmux, and
+	// so does this path whenever the socket is missing, refuses the write, or
+	// the recipient holds the message for the user's approval.
+	//
+	// receipts is hopp's own listening socket: it is the only way to learn
+	// about a hold, and it is created lazily inside the recipient's socket
+	// directory, because that is where the CLI is willing to send receipts.
+	receipts := socketmsg.NewReceipts("hoppd")
+	defer receipts.Close()
+	socketSender := queue.NewClaudeSocketSender(socketmsg.SessionsDir())
+	socketSender.SetStore(st)
+	socketSender.SetReceipts(receipts)
+	q.SetSocketSender(socketSender)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -73,10 +102,20 @@ func Run(cfg *config.Config) error {
 		slog.Error("reconcile failed (non-fatal)", "error", err)
 	}
 
-	// Sweep activity synchronously once, after reconcile. Run below still
-	// does its own initial sweep; that duplicate is harmless.
+	// Sweep activity synchronously once, after reconcile and BEFORE
+	// q.Recover: without this, Recover's startup Wakes can race stale store
+	// activity left over from before a restart (e.g. a session still marked
+	// "active" from the moment of a crash), making delivery wait a full poll
+	// cycle before re-checking. Run below still does its own initial sweep;
+	// that duplicate is harmless.
 	mon.SweepOnce(ctx)
 	go mon.Run(ctx)
+
+	// Recover synchronously (ResetDelivering + initial Wakes) BEFORE serving
+	// the API: otherwise an early POST /v1/messages could Wake a recipient
+	// whose delivery worker races the recovery pass. See Queue.Recover.
+	q.Recover(ctx)
+	go q.Run(ctx)
 
 	shutdownCalled := make(chan struct{})
 	var shutdownOnce func()
@@ -96,6 +135,7 @@ func Run(cfg *config.Config) error {
 		Cfg:       cfg,
 		Manager:   mgr,
 		Monitor:   mon,
+		Queue:     q,
 		Shutdown:  shutdownOnce,
 		StartedAt: time.Now(),
 	}
