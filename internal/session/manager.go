@@ -123,7 +123,7 @@ func (m *Manager) SetClaudeProbe(p claudeinstance.Probe) { m.claudeProbe = p }
 // more relevant error to return.
 func (m *Manager) markErrored(id string, cause error) {
 	_ = m.st.UpdateSessionState(id, "errored")
-	_ = m.st.ClearPendingQuiz(id)
+	m.clearPendingForTerminal(id)
 	m.bus.Publish("session.state_changed", id, map[string]any{
 		"from": "spawning", "to": "errored", "reason": cause.Error(),
 	})

@@ -55,7 +55,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 				errs = append(errs, err)
 				continue
 			}
-			_ = m.st.ClearPendingQuiz(sess.ID)
+			m.clearPendingForTerminal(sess.ID)
 			m.bus.Publish("session.state_changed", sess.ID, map[string]any{
 				"from": sess.State, "to": "errored", "reason": "tmux_missing",
 			})
@@ -75,7 +75,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 				errs = append(errs, err)
 				continue
 			}
-			_ = m.st.ClearPendingQuiz(sess.ID)
+			m.clearPendingForTerminal(sess.ID)
 			m.bus.Publish("session.state_changed", sess.ID, map[string]any{
 				"from": sess.State, "to": "errored", "reason": "dir_missing",
 			})
