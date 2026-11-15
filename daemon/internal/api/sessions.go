@@ -149,6 +149,18 @@ func registerSessionRoutes(mux *http.ServeMux, d Deps) {
 		writeJSON(w, http.StatusOK, view)
 	})
 
+	// DELETE /v1/sessions/{id}?recursive=1 removes an ended session's record
+	// (and, with recursive, its ended descendants); see session.Manager.Remove.
+	mux.HandleFunc("DELETE /v1/sessions/{id}", func(w http.ResponseWriter, r *http.Request) {
+		recursive := r.URL.Query().Get("recursive")
+		removed, err := d.Manager.Remove(r.Context(), r.PathValue("id"), recursive == "1" || recursive == "true")
+		if err != nil {
+			writeManagerErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"removed": removed})
+	})
+
 	mux.HandleFunc("POST /v1/sessions/{id}/kill", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Final string `json:"final"`

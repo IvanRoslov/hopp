@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -792,5 +793,72 @@ func TestLsMarksPendingQuestion(t *testing.T) {
 	}
 	if !strings.Contains(out, " blocked? ") || strings.Contains(out, "ready?") {
 		t.Errorf("output %q, want the ? mark on the asking session only", out)
+	}
+}
+
+func TestRm(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("DELETE /v1/sessions/p", 200, map[string]any{"removed": []string{"p", "c"}})
+	out, errOut, code := runCLI(t, f, "rm", "p", "--recursive")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if last := f.last(t); last.Method != "DELETE" || last.Query != "recursive=1" {
+		t.Errorf("request %+v", last)
+	}
+	if out != "removed p\nremoved c\n" {
+		t.Errorf("output %q", out)
+	}
+	if _, _, code := runCLI(t, f, "rm"); code != 3 {
+		t.Errorf("no id: exit %d, want 3", code)
+	}
+}
+
+// TestRmEndedOlderThan: --ended removes the top-most ended sessions whose
+// whole subtree has ended before the cutoff, recursively; a session with a
+// live descendant, or one that ended after the cutoff, stays.
+func TestRmEndedOlderThan(t *testing.T) {
+	f := newFakeAPI(t)
+	old := time.Now().Add(-48 * time.Hour).Unix()
+	recent := time.Now().Add(-time.Hour).Unix()
+	row := func(id, parent, state string, updated int64) map[string]any {
+		return map[string]any{"id": id, "parent": parent, "dir": "/x", "labels": map[string]string{}, "agent": "fake", "profile": "",
+			"model": "", "effort": "", "state": state, "activity": "", "created_at": 1, "updated_at": updated}
+	}
+	f.on("GET /v1/sessions", 200, map[string]any{"sessions": []any{
+		row("a", "", "killed", old), row("a1", "a", "done", old), // whole subtree ended long ago: removed as one
+		row("b", "", "killed", old), row("b1", "b", "running", old), // live child: b stays
+		row("b2", "b", "killed", old),  // an ended child of b is removed on its own
+		row("r", "", "killed", recent), // ended after the cutoff: stays
+		row("live", "", "running", old),
+	}})
+	var deleted []string
+	for _, id := range []string{"a", "b2"} {
+		id := id
+		f.handle("DELETE /v1/sessions/"+id, func(w http.ResponseWriter, r *http.Request) {
+			deleted = append(deleted, id+"?"+r.URL.RawQuery)
+			w.Header().Set("Content-Type", "application/json")
+			removed := []string{id}
+			if id == "a" {
+				removed = []string{"a", "a1"}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"removed": removed})
+		})
+	}
+	out, errOut, code := runCLI(t, f, "rm", "--ended", "--older-than", "24h")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if q := f.all()[0].Query; !strings.Contains(q, "all=1") {
+		t.Errorf("list query %q", q)
+	}
+	sort.Strings(deleted)
+	if strings.Join(deleted, ",") != "a?recursive=1,b2?recursive=1" {
+		t.Errorf("deleted %v", deleted)
+	}
+	for _, want := range []string{"removed a\n", "removed a1\n", "removed b2\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output %q lacks %q", out, want)
+		}
 	}
 }

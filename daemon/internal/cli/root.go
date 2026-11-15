@@ -50,6 +50,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newLsCmd())
 	root.AddCommand(newKillCmd())
+	root.AddCommand(newRmCmd())
 	root.AddCommand(newRestoreCmd())
 	root.AddCommand(newAttachCmd())
 	root.AddCommand(newModelsCmd())

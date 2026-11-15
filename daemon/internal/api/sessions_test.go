@@ -365,3 +365,32 @@ func TestSessionJSONHasNoScenarioKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteSession(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "p"})
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "c", "parent": "p"})
+	var errBody map[string]any
+	if code := e.call(t, "DELETE", "/v1/sessions/p", nil, &errBody); code != 409 || errCode(errBody) != "session_live" {
+		t.Fatalf("live: %d %v", code, errBody)
+	}
+	if code := e.call(t, "POST", "/v1/sessions/p/kill", map[string]any{}, nil); code != 200 {
+		t.Fatalf("kill: %d", code)
+	}
+	errBody = nil
+	if code := e.call(t, "DELETE", "/v1/sessions/p", nil, &errBody); code != 409 || errCode(errBody) != "session_has_children" {
+		t.Fatalf("children: %d %v", code, errBody)
+	}
+	var ok struct {
+		Removed []string `json:"removed"`
+	}
+	if code := e.call(t, "DELETE", "/v1/sessions/p?recursive=1", nil, &ok); code != 200 || len(ok.Removed) != 2 {
+		t.Fatalf("recursive: %d %+v", code, ok)
+	}
+	if code := e.call(t, "GET", "/v1/sessions/p", nil, nil); code != 404 {
+		t.Fatalf("after removal GET = %d, want 404", code)
+	}
+	if code := e.call(t, "DELETE", "/v1/sessions/nosuch", nil, nil); code != 404 {
+		t.Fatalf("unknown = %d, want 404", code)
+	}
+}
