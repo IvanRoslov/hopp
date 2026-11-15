@@ -15,15 +15,15 @@ func TestReconcileKeepsLiveSessions(t *testing.T) {
 	if got := sessionState(t, e.st, "a"); got != "running" {
 		t.Errorf("state = %q, want running", got)
 	}
-	if len(e.rt.destroyed)+len(e.rt.created) != 0 {
-		t.Errorf("runtime touched: destroyed %v, created %d", e.rt.destroyed, len(e.rt.created))
+	if len(e.rt.Destroyed)+len(e.rt.Created) != 0 {
+		t.Errorf("runtime touched: destroyed %v, created %d", e.rt.Destroyed, len(e.rt.Created))
 	}
 }
 
 func TestReconcileMarksMissingTmux(t *testing.T) {
 	e := testManager(t)
 	addLiveSession(t, e, "a", "", t.TempDir())
-	delete(e.rt.aliveMap, "a")
+	e.rt.Die("a")
 	if err := e.m.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -53,14 +53,14 @@ func TestReconcileMarksMissingDirWithoutDestroy(t *testing.T) {
 	if data["reason"] != "dir_missing" {
 		t.Errorf("state_changed = %v", data)
 	}
-	if len(e.rt.destroyed) != 0 {
-		t.Errorf("Destroy calls = %v", e.rt.destroyed)
+	if len(e.rt.Destroyed) != 0 {
+		t.Errorf("Destroy calls = %v", e.rt.Destroyed)
 	}
 }
 
 func TestReconcileIgnoresForeignTmux(t *testing.T) {
 	e := testManager(t)
-	e.rt.listNames = []string{"rocket-thing", "my-work"}
+	e.rt.ListNames = []string{"rocket-thing", "my-work"}
 	if err := e.m.Reconcile(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -68,8 +68,8 @@ func TestReconcileIgnoresForeignTmux(t *testing.T) {
 	if err != nil || len(events) != 0 {
 		t.Errorf("events = %+v, %v; want none", events, err)
 	}
-	if len(e.rt.destroyed) != 0 {
-		t.Errorf("Destroy calls = %v", e.rt.destroyed)
+	if len(e.rt.Destroyed) != 0 {
+		t.Errorf("Destroy calls = %v", e.rt.Destroyed)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestChildrenOutputAttach(t *testing.T) {
 	if out, err := e.m.Output(context.Background(), "a", 10); err != nil || out != "fake output" {
 		t.Errorf("Output = %q, %v", out, err)
 	}
-	if argv, err := e.m.AttachCommand("a"); err != nil || len(argv) == 0 || argv[len(argv)-1] != "a" {
+	if argv, err := e.m.AttachCommand("a"); err != nil || len(argv) == 0 || argv[len(argv)-1] != "=a" {
 		t.Errorf("AttachCommand = %v, %v", argv, err)
 	}
 	if _, err := e.m.Output(context.Background(), "ghost", 10); validationCode(err) != "session_not_found" {

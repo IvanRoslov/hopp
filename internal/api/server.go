@@ -32,6 +32,7 @@ func NewHandler(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	registerHealthRoutes(mux, d)
+	registerSessionRoutes(mux, d)
 
 	// Any path not matched by a more specific route above is a 404,
 	// rendered in the standard error JSON shape. This is a prefix pattern,

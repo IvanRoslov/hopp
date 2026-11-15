@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/IvanRoslov/hopp/internal/session/sessiontest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -35,17 +36,17 @@ func TestSpawnRunsAgentInDir(t *testing.T) {
 	if err != nil || got.State != "running" {
 		t.Fatalf("stored = %+v, %v", got, err)
 	}
-	if len(e.rt.created) != 1 || e.rt.created[0].Name != sess.ID || e.rt.created[0].Dir != dir {
-		t.Fatalf("Create calls = %+v", e.rt.created)
+	if len(e.rt.Created) != 1 || e.rt.Created[0].Name != sess.ID || e.rt.Created[0].Dir != dir {
+		t.Fatalf("Create calls = %+v", e.rt.Created)
 	}
-	if !strings.Contains(e.rt.created[0].Command, "'fake-agent'") {
-		t.Errorf("command = %q", e.rt.created[0].Command)
+	if !strings.Contains(e.rt.Created[0].Command, "'fake-agent'") {
+		t.Errorf("command = %q", e.rt.Created[0].Command)
 	}
 	if types := eventTypes(t, e.st, sess.ID); !reflect.DeepEqual(types, []string{"session.spawned", "session.state_changed"}) {
 		t.Errorf("events = %v", types)
 	}
-	if len(testFakeAgent.setupCalls) != 1 || testFakeAgent.setupCalls[0].WorktreePath != dir {
-		t.Errorf("SetupWorkspace calls = %+v", testFakeAgent.setupCalls)
+	if len(sessiontest.FakeAgent.SetupCalls) != 1 || sessiontest.FakeAgent.SetupCalls[0].WorktreePath != dir {
+		t.Errorf("SetupWorkspace calls = %+v", sessiontest.FakeAgent.SetupCalls)
 	}
 }
 
@@ -81,7 +82,7 @@ func TestDefaultIDBase(t *testing.T) {
 
 func TestSpawnIDTakenByForeignTmux(t *testing.T) {
 	e := testManager(t)
-	e.rt.listNames = []string{"my-project"}
+	e.rt.ListNames = []string{"my-project"}
 	dir := mkdir(t, "my-project")
 	sess, err := e.m.Spawn(context.Background(), SpawnReq{Dir: dir, Profile: fakeProfile()})
 	if err != nil {
@@ -94,8 +95,8 @@ func TestSpawnIDTakenByForeignTmux(t *testing.T) {
 	if validationCode(err) != "session_exists" {
 		t.Errorf("explicit taken id: err = %v, want session_exists", err)
 	}
-	if len(e.rt.destroyed) != 0 {
-		t.Errorf("Destroy calls = %v, want none", e.rt.destroyed)
+	if len(e.rt.Destroyed) != 0 {
+		t.Errorf("Destroy calls = %v, want none", e.rt.Destroyed)
 	}
 }
 
@@ -146,7 +147,7 @@ func TestSpawnRejectsUnknownParentAndAgent(t *testing.T) {
 	if validationCode(err) != "agent_unknown" {
 		t.Errorf("unknown agent: err = %v", err)
 	}
-	testFakeAgent.availableErr = errors.New("not installed")
+	sessiontest.FakeAgent.AvailableErr = errors.New("not installed")
 	_, err = e.m.Spawn(context.Background(), SpawnReq{Dir: dir, Profile: fakeProfile()})
 	if validationCode(err) != "agent_unavailable" {
 		t.Errorf("unavailable agent: err = %v", err)
@@ -167,8 +168,8 @@ func TestSpawnWithParent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if child.ParentID != "parent" || e.rt.created[1].Env["HOPP_PARENT_ID"] != "parent" {
-		t.Errorf("child = %+v, env = %v", child, e.rt.created[1].Env)
+	if child.ParentID != "parent" || e.rt.Created[1].Env["HOPP_PARENT_ID"] != "parent" {
+		t.Errorf("child = %+v, env = %v", child, e.rt.Created[1].Env)
 	}
 }
 
@@ -180,7 +181,7 @@ func TestSpawnEnvDaemonWins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := e.rt.created[0].Env
+	env := e.rt.Created[0].Env
 	if env["HOPP_SESSION_ID"] != sess.ID || env["HOPP_HOME"] != e.cfg.Home || env["HOPP_SOCKET"] != e.cfg.SocketPath() || env["FOO"] != "bar" {
 		t.Errorf("env = %v", env)
 	}
@@ -204,7 +205,7 @@ func TestSpawnStoresWhatRestoreNeeds(t *testing.T) {
 		got.Prompt != "hello" || got.Agent != "fake" || got.WorktreePath != dir {
 		t.Errorf("stored = %+v", got)
 	}
-	spec := testFakeAgent.launchCalls[0]
+	spec := sessiontest.FakeAgent.LaunchCalls[0]
 	if spec.SystemPrompt != "be brief" || spec.FirstMessage != "hello" || spec.Model != "m1" || spec.Effort != "high" || spec.PermissionMode != "plan" {
 		t.Errorf("launch spec = %+v", spec)
 	}
@@ -233,16 +234,16 @@ func TestSpawnFirstMessageByInputNeedsQueue(t *testing.T) {
 	if gotID != sess.ID || gotBody != "hi" || woke != sess.ID {
 		t.Errorf("queue got (%q, %q), woke %q; session %q", gotID, gotBody, woke, sess.ID)
 	}
-	argv := testFakeInputAgent.launchCalls[0]
-	if argv.FirstMessage != "" || strings.Contains(e.rt.created[0].Command, "'hi'") {
-		t.Errorf("first message reached the launch: spec %+v, command %q", argv, e.rt.created[0].Command)
+	argv := sessiontest.FakeInputAgent.LaunchCalls[0]
+	if argv.FirstMessage != "" || strings.Contains(e.rt.Created[0].Command, "'hi'") {
+		t.Errorf("first message reached the launch: spec %+v, command %q", argv, e.rt.Created[0].Command)
 	}
 }
 
 func TestSpawnFailureMarksErrored(t *testing.T) {
 	e := testManager(t)
 	dir := mkdir(t, "work")
-	e.rt.createErr = errors.New("tmux broke")
+	e.rt.CreateErr = errors.New("tmux broke")
 	_, err := e.m.Spawn(context.Background(), SpawnReq{ID: "s1", Dir: dir, Profile: fakeProfile()})
 	if err == nil {
 		t.Fatal("Spawn succeeded")

@@ -19,8 +19,8 @@ func TestKillStopsDescendantsDeepestFirst(t *testing.T) {
 	if err := e.m.Kill(context.Background(), "a", "killed"); err != nil {
 		t.Fatalf("Kill: %v", err)
 	}
-	if !reflect.DeepEqual(e.rt.destroyed, []string{"c", "b", "a"}) {
-		t.Errorf("Destroy order = %v, want [c b a]", e.rt.destroyed)
+	if !reflect.DeepEqual(e.rt.Destroyed, []string{"c", "b", "a"}) {
+		t.Errorf("Destroy order = %v, want [c b a]", e.rt.Destroyed)
 	}
 	for _, id := range []string{"a", "b", "c", "d"} {
 		if got := sessionState(t, e.st, id); got != "killed" {
@@ -56,8 +56,8 @@ func TestKillRejectsUnknownFinalState(t *testing.T) {
 	if err := e.m.Kill(context.Background(), "a", "errored"); validationCode(err) != "invalid_state" {
 		t.Errorf("err = %v, want invalid_state", err)
 	}
-	if len(e.rt.destroyed) != 0 {
-		t.Errorf("Destroy calls = %v", e.rt.destroyed)
+	if len(e.rt.Destroyed) != 0 {
+		t.Errorf("Destroy calls = %v", e.rt.Destroyed)
 	}
 }
 
@@ -73,8 +73,8 @@ func TestKillTerminalIsNoop(t *testing.T) {
 	if got := sessionState(t, e.st, "a"); got != "errored" {
 		t.Errorf("state = %q, want errored left alone", got)
 	}
-	if len(e.rt.destroyed) != 0 {
-		t.Errorf("Destroy calls = %v", e.rt.destroyed)
+	if len(e.rt.Destroyed) != 0 {
+		t.Errorf("Destroy calls = %v", e.rt.Destroyed)
 	}
 }
 
@@ -89,13 +89,13 @@ func TestKillRefusesForeignTmux(t *testing.T) {
 	e := testManager(t)
 	addLiveSession(t, e, "a", "", t.TempDir())
 	// The hopp tmux session died and another program took the name.
-	e.rt.envs["a"] = map[string]string{"ROCKET_SESSION_ID": "a"}
+	e.rt.Envs["a"] = map[string]string{"ROCKET_SESSION_ID": "a"}
 	err := e.m.Kill(context.Background(), "a", "killed")
 	if validationCode(err) != "tmux_not_owned" {
 		t.Fatalf("err = %v, want tmux_not_owned", err)
 	}
-	if len(e.rt.destroyed) != 0 {
-		t.Errorf("Destroy calls = %v, want none", e.rt.destroyed)
+	if len(e.rt.Destroyed) != 0 {
+		t.Errorf("Destroy calls = %v, want none", e.rt.Destroyed)
 	}
 	if got := sessionState(t, e.st, "a"); got != "errored" {
 		t.Errorf("state = %q, want errored", got)
@@ -109,7 +109,7 @@ func TestKillRefusesForeignTmux(t *testing.T) {
 func TestKillWithTmuxAlreadyGone(t *testing.T) {
 	e := testManager(t)
 	addLiveSession(t, e, "a", "", t.TempDir())
-	delete(e.rt.aliveMap, "a")
+	e.rt.Die("a")
 	if err := e.m.Kill(context.Background(), "a", "killed"); err != nil {
 		t.Fatalf("Kill: %v", err)
 	}
