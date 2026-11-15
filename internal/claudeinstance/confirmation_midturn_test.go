@@ -134,7 +134,7 @@ func TestMidturnConsumptionProof(t *testing.T) {
 			if err != nil || found != (name == "valid" || name == "encoded reply") {
 				t.Fatalf("found=%v proof=%+v err=%v", found, p, err)
 			}
-			if found && p != (Proof{RecordID: "consumed", Offset: start, End: end}) {
+			if found && p != (Proof{RecordID: "consumed", Offset: start, End: end, Device: s.Boundary.Device, Inode: s.Boundary.Inode}) {
 				t.Fatalf("wrong physical proof: %+v", p)
 			}
 		})

@@ -124,7 +124,7 @@ func (s *ClaudeSocketSender) Prepare(ctx context.Context, sess store.Session, fr
 	if result.State != claudeinstance.Verified {
 		return claudeinstance.Snapshot{}, ErrNoSocket
 	}
-	boundary, e := claudeinstance.PinJournal(result.Identity)
+	boundary, e := claudeinstance.PinJournalForSend(result.Identity)
 	if e != nil {
 		return claudeinstance.Snapshot{}, e
 	}

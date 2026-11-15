@@ -87,6 +87,16 @@ func (s *Store) ConfirmClaudeMessageContext(ctx context.Context, id int64, proof
 	if claudeAgeExpired(v.Deadline, now) || claudeAgeExpired(v.Deadline, time.Now()) || !unresolvedClaude(v.Phase) || v.Phase == "unconfirmed" || proof.RecordID == "" || proof.Offset < v.Boundary.Offset || proof.End <= proof.Offset {
 		return false, nil
 	}
+	// The proof must name the file it was found in. A pinned row owns only its
+	// pinned file; an absent row (journal created after the send) owns the
+	// file its proof was scanned from, which the locked re-scan below must
+	// still find at the path.
+	if v.Boundary.Absent() && proof.Inode == 0 {
+		return false, nil
+	}
+	if !v.Boundary.Absent() && proof.Inode != 0 && (proof.Device != v.Boundary.Device || proof.Inode != v.Boundary.Inode) {
+		return false, nil
+	}
 	history, e := claudeHistoryContext(ctx, tx)
 	if e != nil {
 		return false, e
@@ -101,13 +111,16 @@ func (s *Store) ConfirmClaudeMessageContext(ctx context.Context, id int64, proof
 	if e != nil {
 		return false, e
 	}
-	if !found || actual != proof || claudeAgeExpired(v.Deadline, time.Now()) {
+	if !found || actual.RecordID != proof.RecordID || actual.Offset != proof.Offset || actual.End != proof.End || claudeAgeExpired(v.Deadline, time.Now()) {
 		return false, nil
+	}
+	if proof.Inode != 0 && (actual.Device != proof.Device || actual.Inode != proof.Inode) {
+		return false, nil // the file was replaced between the two scans
 	}
 	if e = ctx.Err(); e != nil {
 		return false, e
 	}
-	res, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO claude_consumed_records(target_key,device,inode,record_id,message_id) VALUES(?,?,?,?,?)`, v.Target.ClaudeSessionID, v.Boundary.Device, v.Boundary.Inode, proof.RecordID, id)
+	res, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO claude_consumed_records(target_key,device,inode,record_id,message_id) VALUES(?,?,?,?,?)`, v.Target.ClaudeSessionID, actual.Device, actual.Inode, proof.RecordID, id)
 	if e != nil {
 		return false, e
 	}

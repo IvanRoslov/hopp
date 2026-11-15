@@ -475,7 +475,7 @@ func TestClaudeContextSharedBudgetCancelsDuringAtomicReread(t *testing.T) {
 	ctx, cancel := claudeCountingContext(350)
 	defer cancel()
 	initial, found, e := claudeinstance.FindProof(ctx, v)
-	if !found || e != nil || initial != p {
+	if !found || e != nil || initial.RecordID != p.RecordID || initial.Offset != p.Offset || initial.End != p.End || initial.Device != v.Boundary.Device || initial.Inode != v.Boundary.Inode {
 		t.Fatalf("first scan %+v %v %v", initial, found, e)
 	}
 	before := ctx.calls.Load()

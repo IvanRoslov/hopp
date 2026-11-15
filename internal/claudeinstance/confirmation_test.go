@@ -55,6 +55,9 @@ func TestExactJournalProof(t *testing.T) {
 	if e != nil || !ok || proof.RecordID != "incoming" || proof.Offset < boundary.Offset {
 		t.Fatalf("exact proof: %+v %v %v", proof, ok, e)
 	}
+	if proof.Device != boundary.Device || proof.Inode != boundary.Inode {
+		t.Fatalf("pinned proof must carry the pinned file: %+v vs %+v", proof, boundary)
+	}
 	appendRecord(t, path, "user", "user", "target", "second", envelope)
 	if _, ok, _ := FindProof(context.Background(), s); ok {
 		t.Fatal("multiple matching records must remain ambiguous")

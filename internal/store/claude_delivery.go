@@ -55,7 +55,7 @@ func validClaudeSnapshot(v claudeinstance.Snapshot) bool {
 	t := v.Target
 	b := v.Boundary
 	_, validDeadline := claudeDeadlineNS(v.Deadline)
-	return validClaudeEnvelope(v) && v.MessageID > 0 && v.Transport == claudeTransport && v.WireID != "" && v.Envelope != "" && t.HoppSessionID != "" && t.LaunchGeneration != "" && t.ClaudeSessionID != "" && t.PID > 0 && !t.ProcessStart.IsZero() && t.PaneIdentity != "" && t.PeerProtocol == 1 && t.Kind == "interactive" && t.SocketPath != "" && t.JournalPath != "" && b.Path == t.JournalPath && b.Inode > 0 && b.Offset >= 0 && !v.PreparedAt.IsZero() && validDeadline && (v.Deadline.IsZero() || v.Deadline.After(v.PreparedAt))
+	return validClaudeEnvelope(v) && v.MessageID > 0 && v.Transport == claudeTransport && v.WireID != "" && v.Envelope != "" && t.HoppSessionID != "" && t.LaunchGeneration != "" && t.ClaudeSessionID != "" && t.PID > 0 && !t.ProcessStart.IsZero() && t.PaneIdentity != "" && t.PeerProtocol == 1 && t.Kind == "interactive" && t.SocketPath != "" && t.JournalPath != "" && b.Path == t.JournalPath && b.Offset >= 0 && (b.Inode > 0 || (b.Device == 0 && b.Offset == 0)) && !v.PreparedAt.IsZero() && validDeadline && (v.Deadline.IsZero() || v.Deadline.After(v.PreparedAt))
 }
 func scanClaude(row interface{ Scan(...any) error }) (claudeRow, error) {
 	var v claudeRow
