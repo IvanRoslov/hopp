@@ -18,6 +18,9 @@ type sessionRow struct {
 	Model    string `json:"model"`
 	State    string `json:"state"`
 	Activity string `json:"activity"`
+	// Question is only checked for presence: a session waiting on one is
+	// marked with "?" in the ACTIVITY column.
+	Question json.RawMessage `json:"question,omitempty"`
 }
 
 func newLsCmd() *cobra.Command {
@@ -80,7 +83,7 @@ func newLsCmd() *cobra.Command {
 			fmt.Fprintln(tw, "ID\tPARENT\tAGENT\tMODEL\tSTATE\tACTIVITY\tDIR")
 			for _, s := range resp.Sessions {
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					s.ID, dash(s.Parent), dash(s.Agent), dash(s.Model), s.State, dash(s.Activity), s.Dir)
+					s.ID, dash(s.Parent), dash(s.Agent), dash(s.Model), s.State, activityCell(s), s.Dir)
 			}
 			return tw.Flush()
 		},
@@ -91,4 +94,13 @@ func newLsCmd() *cobra.Command {
 	f.StringArrayVar(&labels, "label", nil, "only sessions with label key=value (repeatable)")
 	f.BoolVar(&mine, "mine", false, "only children of $HOPP_SESSION_ID")
 	return cmd
+}
+
+// activityCell is the ACTIVITY column: the activity, with "?" appended when
+// the session waits on a question (`hopp answer <id>` shows it).
+func activityCell(s sessionRow) string {
+	if len(s.Question) > 0 && string(s.Question) != "null" {
+		return s.Activity + "?"
+	}
+	return dash(s.Activity)
 }

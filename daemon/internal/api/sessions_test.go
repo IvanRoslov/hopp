@@ -346,4 +346,22 @@ func TestSessionJSONHasNoScenarioKeys(t *testing.T) {
 			t.Errorf("session JSON lacks %q", k)
 		}
 	}
+	// Every key the session JSON may carry, so a new one is added here on
+	// purpose: "children" (a session with children) and "question" (the
+	// question a session waits on) are omitted when empty.
+	allowed := map[string]bool{"id": true, "parent": true, "dir": true, "labels": true, "agent": true, "profile": true, "model": true,
+		"effort": true, "state": true, "activity": true, "created_at": true, "updated_at": true, "children": true, "question": true}
+	if err := e.st.SetPendingQuiz("s1", `{"questions":[{"question":"Q?","header":"H","multiSelect":false,"options":[{"label":"A"}]}],"asked_at":1}`); err != nil {
+		t.Fatal(err)
+	}
+	raw = nil
+	e.call(t, "GET", "/v1/sessions/s1", nil, &raw)
+	if _, ok := raw["question"]; !ok {
+		t.Error("session JSON lacks \"question\" while a question is pending")
+	}
+	for k := range raw {
+		if !allowed[k] {
+			t.Errorf("session JSON has unexpected key %q", k)
+		}
+	}
 }

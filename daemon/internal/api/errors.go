@@ -65,7 +65,7 @@ func writeManagerErr(w http.ResponseWriter, err error) {
 		switch verr.Code {
 		case "session_not_found", "parent_not_found", "profile_not_found":
 			status = http.StatusNotFound
-		case "session_exists":
+		case "session_exists", "no_pending_quiz", "quiz_answer_in_flight", "prompt_changed":
 			status = http.StatusConflict
 		}
 		writeErr(w, status, verr.Code, verr.Message)

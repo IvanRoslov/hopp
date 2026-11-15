@@ -58,7 +58,7 @@ func TestCompleteClearsPendingQuiz(t *testing.T) {
 
 // seedPermissionQuiz puts sess1 on the dialog of fixture: journal row and
 // pending permission quiz. Returns the test env and the journal row id.
-func seedPermissionQuiz(t *testing.T, fixture string) (testEnv, int64) {
+func seedPermissionQuizEnv(t *testing.T, fixture string) (testEnv, int64) {
 	t.Helper()
 	e := testManager(t)
 	addLiveSession(t, e, "sess1", "", t.TempDir())
@@ -91,7 +91,7 @@ func openRowResolved(t *testing.T, st *store.Store, id int64) store.PermissionPr
 // A session that ends with a dialog still journalled closes the row, so it
 // is not left open forever.
 func TestKillClosesOpenPermissionRow(t *testing.T) {
-	e, _ := seedPermissionQuiz(t, "permission-bash-rm.pane")
+	e, _ := seedPermissionQuizEnv(t, "permission-bash-rm.pane")
 	id, _, _ := e.st.OpenPermissionPrompt("sess1", "x?", "", "[]", 1) // the seeded row is closed by this open; use the new one
 	if err := e.m.Kill(context.Background(), "sess1", "killed"); err != nil {
 		t.Fatalf("Kill: %v", err)
@@ -102,7 +102,7 @@ func TestKillClosesOpenPermissionRow(t *testing.T) {
 }
 
 func TestReconcileTmuxMissingClosesOpenPermissionRow(t *testing.T) {
-	e, id := seedPermissionQuiz(t, "permission-bash-rm.pane")
+	e, id := seedPermissionQuizEnv(t, "permission-bash-rm.pane")
 	e.rt.Die("sess1")
 	if err := e.m.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile: %v", err)

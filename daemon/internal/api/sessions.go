@@ -27,6 +27,10 @@ type sessionView struct {
 	CreatedAt int64             `json:"created_at"`
 	UpdatedAt int64             `json:"updated_at"`
 	Children  []string          `json:"children,omitempty"`
+	// Question is the question the session waits on (rocket's pending_quiz:
+	// an AskUserQuestion quiz, a permission dialog or a start screen), in the
+	// public snake_case shape; absent when there is none.
+	Question *quizResponse `json:"question,omitempty"`
 }
 
 func toSessionView(s store.Session) sessionView {
@@ -38,6 +42,7 @@ func toSessionView(s store.Session) sessionView {
 		ID: s.ID, Parent: s.ParentID, Dir: s.WorktreePath, Labels: labels,
 		Agent: s.Agent, Profile: s.Profile, Model: s.Model, Effort: s.Effort,
 		State: s.State, Activity: s.Activity, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+		Question: parseQuizResponse(s.PendingQuiz),
 	}
 }
 

@@ -668,3 +668,129 @@ func TestChatFollowExitsWhenDaemonGoes(t *testing.T) {
 		t.Errorf("cursors = %q, want \"\", c1, c2", cursors)
 	}
 }
+
+func questionSession(questions ...map[string]any) map[string]any {
+	s := map[string]any{}
+	for k, v := range created {
+		s[k] = v
+	}
+	qs := make([]any, len(questions))
+	for i, q := range questions {
+		qs[i] = q
+	}
+	s["question"] = map[string]any{"questions": qs, "asked_at": 1}
+	return s
+}
+
+var colorQuestion = map[string]any{"question": "Which color?", "header": "Color", "multi_select": false,
+	"options": []any{map[string]any{"label": "Red", "description": "warm"}, map[string]any{"label": "Green"}}}
+
+func TestAnswerByNumberAndLabel(t *testing.T) {
+	for _, tc := range []struct {
+		choice string
+		want   float64
+	}{{"2", 1}, {"Red", 0}} {
+		f := newFakeAPI(t)
+		f.on("GET /v1/sessions/s1", 200, questionSession(colorQuestion))
+		f.on("POST /v1/sessions/s1/quiz/answer", 202, map[string]any{"status": "answering"})
+		out, errOut, code := runCLI(t, f, "answer", "s1", tc.choice)
+		if code != 0 {
+			t.Fatalf("%s: exit %d: %s", tc.choice, code, errOut)
+		}
+		b := f.last(t)
+		if b.Path != "/v1/sessions/s1/quiz/answer" {
+			t.Fatalf("%s: last request %+v", tc.choice, b)
+		}
+		answers, _ := b.Body["answers"].([]any)
+		a, _ := answers[0].(map[string]any)
+		idx, _ := a["option_indices"].([]any)
+		if len(answers) != 1 || a["question_index"] != float64(0) || len(idx) != 1 || idx[0] != tc.want {
+			t.Errorf("%s: body %v", tc.choice, b.Body)
+		}
+		if !strings.Contains(out, "answering") {
+			t.Errorf("%s: output %q", tc.choice, out)
+		}
+	}
+}
+
+func TestAnswerUnknownChoiceIsUsageError(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/sessions/s1", 200, questionSession(colorQuestion))
+	if _, errOut, code := runCLI(t, f, "answer", "s1", "Purple"); code != 3 || !strings.Contains(errOut, "Red") {
+		t.Fatalf("exit %d stderr %q, want 3 naming the options", code, errOut)
+	}
+	if _, _, code := runCLI(t, f, "answer", "s1", "3"); code != 3 {
+		t.Fatalf("out-of-range number exit %d, want 3", code)
+	}
+}
+
+func TestAnswerShowsPendingQuestion(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/sessions/s1", 200, questionSession(colorQuestion))
+	out, errOut, code := runCLI(t, f, "answer", "s1")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, want := range []string{"Color: Which color?", "1. Red — warm", "2. Green"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output %q lacks %q", out, want)
+		}
+	}
+	f2 := newFakeAPI(t)
+	f2.on("GET /v1/sessions/s2", 200, created)
+	out, _, code = runCLI(t, f2, "answer", "s2")
+	if code != 0 || !strings.Contains(out, "no pending question") {
+		t.Errorf("no question: exit %d output %q", code, out)
+	}
+}
+
+func TestAnswerMultiQuestionNeedsFile(t *testing.T) {
+	f := newFakeAPI(t)
+	second := map[string]any{"question": "Size?", "header": "Size", "multi_select": false, "options": []any{map[string]any{"label": "S"}}}
+	f.on("GET /v1/sessions/s1", 200, questionSession(colorQuestion, second))
+	out, errOut, code := runCLI(t, f, "answer", "s1", "1")
+	if code != 3 || !strings.Contains(out, "Size?") || !strings.Contains(errOut, "--file") {
+		t.Fatalf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	path := filepath.Join(t.TempDir(), "a.json")
+	os.WriteFile(path, []byte(`{"answers":[{"question_index":0,"option_indices":[1]},{"question_index":1,"text":"XL"}]}`), 0o644)
+	f.on("POST /v1/sessions/s1/quiz/answer", 202, map[string]any{"status": "answering"})
+	if _, errOut, code := runCLI(t, f, "answer", "s1", "--file", path); code != 0 {
+		t.Fatalf("--file exit %d: %s", code, errOut)
+	}
+	if answers, _ := f.last(t).Body["answers"].([]any); len(answers) != 2 {
+		t.Errorf("--file body %v", f.last(t).Body)
+	}
+}
+
+// TestAnswerStaleQuestionIsConflict: the question went away between showing
+// it and answering (answered in the terminal): the daemon's 409 is reported
+// and the exit code is 1.
+func TestAnswerStaleQuestionIsConflict(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/sessions/s1", 200, questionSession(colorQuestion))
+	f.on("POST /v1/sessions/s1/quiz/answer", 409, map[string]any{"error": map[string]any{"code": "no_pending_quiz", "message": "session has no pending quiz"}})
+	_, errOut, code := runCLI(t, f, "answer", "s1", "1")
+	if code != 1 || !strings.Contains(errOut, "no pending quiz") {
+		t.Fatalf("exit %d stderr %q", code, errOut)
+	}
+}
+
+func TestLsMarksPendingQuestion(t *testing.T) {
+	f := newFakeAPI(t)
+	asking := questionSession(colorQuestion)
+	asking["activity"] = "blocked"
+	plain := map[string]any{}
+	for k, v := range created {
+		plain[k] = v
+	}
+	plain["id"], plain["activity"] = "s2", "ready"
+	f.on("GET /v1/sessions", 200, map[string]any{"sessions": []any{asking, plain}})
+	out, errOut, code := runCLI(t, f, "ls")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, " blocked? ") || strings.Contains(out, "ready?") {
+		t.Errorf("output %q, want the ? mark on the asking session only", out)
+	}
+}

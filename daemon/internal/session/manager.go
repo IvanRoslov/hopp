@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/IvanRoslov/hopp/internal/bus"
 	"github.com/IvanRoslov/hopp/internal/claudeinstance"
@@ -65,6 +66,16 @@ type Manager struct {
 	// shell; defaults to runtime.PaneOnlyShell, shared with the monitor.
 	paneOnlyShell func(ctx context.Context, tmuxName string) (bool, error)
 
+	// quizSleepFn is called between each keystroke AnswerQuiz sends (see
+	// quiz.go's sendQuizKeys); defaults to time.Sleep, overridable via
+	// SetQuizTiming so tests don't pay quizKeySettle in wall-clock time.
+	quizSleepFn func(time.Duration)
+	// quizUnconfirmedTimeout bounds how long waitQuizResolved waits for a
+	// session.quiz_resolved event before publishing
+	// session.quiz_answer_unconfirmed; defaults to 60s, overridable via
+	// SetQuizTiming.
+	quizUnconfirmedTimeout time.Duration
+
 	// mu serializes Spawn, Kill, Restore, and Reconcile end-to-end. Without
 	// it, a Kill racing a concurrent Spawn between the session's
 	// AddSession (state "spawning") and its final UpdateSession (state
@@ -72,15 +83,25 @@ type Manager struct {
 	// Spawn's final write clobbers it back to "running" — a zombie session
 	// the store believes is running but nothing is actually managing.
 	mu sync.Mutex
+
+	// quizInFlight tracks session IDs with an in-progress quiz-answer
+	// injection (see AnswerQuiz's tryStartQuizInFlight/clearQuizInFlight in
+	// quiz.go), guarded by mu. A second POST /v1/sessions/{id}/quiz/answer
+	// for a session already present in this set is rejected with
+	// "quiz_answer_in_flight" rather than interleaving a second keystroke
+	// sequence into the same tmux pane.
+	quizInFlight map[string]bool
 }
 
 // NewManager builds a Manager wired to the given dependencies.
 func NewManager(st *store.Store, b *bus.Bus, rt runtime.Runtime, cfg *config.Config) *Manager {
 	return &Manager{
 		st: st, bus: b, rt: rt, cfg: cfg,
-		claudeProbe:   claudeinstance.SystemProbe{},
-		ownerProbe:    tmuxOwner,
-		paneOnlyShell: runtime.PaneOnlyShell,
+		claudeProbe:            claudeinstance.SystemProbe{},
+		ownerProbe:             tmuxOwner,
+		paneOnlyShell:          runtime.PaneOnlyShell,
+		quizSleepFn:            time.Sleep,
+		quizUnconfirmedTimeout: 60 * time.Second,
 	}
 }
 
