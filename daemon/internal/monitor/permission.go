@@ -12,8 +12,10 @@ import (
 	"github.com/IvanRoslov/hopp/internal/store"
 )
 
-// claudeCodeAgent is the only agent whose permission dialogs are read off
-// the pane; Codex runs with approvals disabled.
+// claudeCodeAgent names the Claude Code adapter. Permission dialogs are read
+// off the pane for it and for every other harness that runs the Claude Code
+// binary (agent.SupportsClaudeSocket, e.g. DeepSeek); Codex, Kimi Code and Pi
+// run with approvals disabled.
 const claudeCodeAgent = "claude-code"
 
 // permissionMissThreshold is how many consecutive sweeps must see the pane
@@ -60,7 +62,7 @@ type permissionCandidate struct {
 // Identity is Title + Context (runtime.PermissionPrompt.SameDialog), read
 // at runtime.PermissionCaptureLines — the depth the answer path re-reads at.
 func (m *Monitor) pollPermission(ctx context.Context, sess store.Session) {
-	if sess.Agent != claudeCodeAgent {
+	if sess.Agent != claudeCodeAgent && !m.isClaude(sess) {
 		m.forgetPermissionMisses(sess.ID)
 		m.forgetPermissionCandidate(sess.ID)
 		return
