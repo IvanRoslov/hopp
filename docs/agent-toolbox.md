@@ -25,7 +25,10 @@ make restart        # builds, then stops and starts the daemon
 make stop           # stops the daemon and waits until it has exited
 bin/hopp doctor     # tmux, the state directory, the daemon, the five harnesses
 bin/hopp logs -n 50 # the daemon log, read from disk without starting the daemon
+make install        # links /opt/homebrew/bin/hopp to bin/hopp (a symlink, never a copy)
 ```
+
+Agents inside sessions call `hopp` by name (`hopp ask`, `hopp inbox next` from the mailbox notice), so it must be on their PATH; `make install` puts it there, and every later `make build` updates it through the link. Until then give agents the absolute path to `bin/hopp`.
 
 The daemon keeps everything in `~/.hopp`; set `HOPP_HOME` to a temporary folder to run a throwaway daemon. Every `hopp` command that talks to the daemon starts it when it is not running, except `logs`, `doctor`, `daemon status` and `daemon stop`, so stop it before you rebuild, or `make restart` does it in the right order.
 
@@ -46,6 +49,24 @@ The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without wr
 ## 5. Verify the running system
 
 Run `bin/hopp daemon status` (pid and version), then `bin/hopp doctor`. To see a session really run, launch one in a scratch folder with `bin/hopp run <dir> --agent <harness>`, check `bin/hopp ls` and the pane with `tmux capture-pane -p -t '=<id>:'`, then stop it with `bin/hopp kill <id>`. `bin/hopp events --session <id>` shows what happened to it. To see a message travel, run `bin/hopp send --wait <id> '<text>'` (it prints `queued`, `accepted`, any wait reason, and `delivered` or `failed`), `bin/hopp messages <id>` for the history with each message's status and reason, and `bin/hopp events --follow --session <id>` to watch activity and delivery live.
+
+The human's commands:
+
+```bash
+bin/hopp chat <id> [--follow]          # the session's conversation from the agent's journal
+bin/hopp waiting                       # everything that waits for the human: open asks and screen questions
+bin/hopp answer <id> [<choice>]        # show or answer the question a session's screen waits on
+bin/hopp asks [--all] [--label k=v]    # decision requests; answer one with:
+bin/hopp reply <ask-id> [<choice>] [-m <text>]
+bin/hopp usage [--tree <id>] [--collect] [--label k=v]   # tokens per session and model, with a total
+bin/hopp rm <id> [--recursive]         # remove an ended session's record; the id is free again
+bin/hopp rm --ended                    # remove every ended session's record
+bin/hopp mailbox add|rm <id>           # a mailbox holds mail while no session of that id runs
+bin/hopp mailbox ls                    # mailboxes with unread and total counts
+bin/hopp inbox [--mailbox <id>]        # a mailbox's unread messages; inbox next takes the oldest
+```
+
+Inside a session an agent asks with `hopp ask "<text>" [--option <choice>]… [--wait]` and withdraws with `hopp ask withdraw <ask-id>`.
 
 ## Related
 

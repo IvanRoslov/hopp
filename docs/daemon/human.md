@@ -1,0 +1,31 @@
+---
+kind: leaf
+up: [[docs/daemon/README]]
+verified: 2026-11-15 — against the code on main (1ddc9bd) and the live checks of 2026-11-15 against ~/.hopp
+---
+
+# What the human sees and decides
+
+The human reads what an agent said, answers the question an agent's screen waits on, and decides what agents ask. This leaf says what each of those shows and how an answer gets back.
+
+### The chat feed
+
+1. `hopp chat <id>` shows a session's conversation read from the agent's own journal (user and assistant turns, tool calls as one-line digests), plus the Claude Code permission dialogs hopp saw resolved; `--follow` keeps reading it. A session with no journal yet shows an empty feed, not an error.
+2. The feed shows only what the agent writes into its journal, so a start screen, the pane's other text and a draft in the composer never appear in it. With Codex 0.166 the feed is empty: its journal stores turns in a record type the ported reader does not read.
+3. For Claude Code and DeepSeek the feed reads the newest journal in the folder's Claude Code project directory, not the journal hopp bound at launch, so another Claude Code conversation written later in the same folder shows instead.
+
+### Answering an agent's screen
+
+4. hopp can answer four kinds of question an agent's screen waits on: a Claude Code permission dialog, a Claude Code question to the user (`AskUserQuestion`), and the start screens of Codex and Kimi Code. `hopp answer <id>` shows the question, `hopp answer <id> <choice>` answers it, and the session JSON carries it as `question`.
+5. Right before pressing a key for a dialog or a start screen, hopp reads the pane again; when it no longer shows the same question (a human answered in the terminal, or it closed), nothing is sent and the answer is refused with `prompt_changed`. An answer while another one is still being typed is refused with `quiz_answer_in_flight`, and one to a session with no question with `no_pending_quiz`.
+
+### Decision requests
+
+6. A session asks the human with `hopp ask "<text>"`: one stored request with optional choices (`--option`), free labels and attachments, which stays `open` until it is answered or withdrawn. The daemon stores and filters the labels but never acts on them.
+7. The human answers with `hopp reply <ask-id> [<choice>] [-m <text>]`, the choice by its number or its exact text. An ask is answered at most once: of two answers only the first is taken, and a later one is refused with `ask_closed`.
+8. The answer returns to the asker twice: `hopp ask --wait` prints it, and the asking session gets one `[hopp] Answer to ask #<id>: …` system message, or its mailbox holds it while the session is not running. An asker that has ended with no mailbox gets nothing; the answer stays on the ask.
+9. When the asking session ends, its open asks become `withdrawn` with reason `session_ended`, so nobody answers a question that can no longer be received. The asker may also withdraw an ask itself.
+10. `hopp waiting` is the one list of everything that waits for the human: the open asks and the questions sessions' screens wait on, each with the command that answers it.
+11. There is no mailbox for the human. A message is for a session or a session's mailbox; an agent that needs the human uses `hopp ask`.
+
+Code: [api](daemon/internal/api), [cli](daemon/internal/cli), [session](daemon/internal/session), [store](daemon/internal/store), [agent](daemon/internal/agent)

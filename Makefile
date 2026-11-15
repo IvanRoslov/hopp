@@ -1,4 +1,4 @@
-.PHONY: lint-docs test-lint build test start stop restart status
+.PHONY: lint-docs test-lint build test install start stop restart status
 
 lint-docs:
 	python3 scripts/lint_docs.py .
@@ -21,6 +21,16 @@ build:
 
 test:
 	cd daemon && go test ./...
+
+# The global `hopp` command: a symlink to bin/hopp, so every `make build`
+# updates it. It must be a symlink, not a copy. Replacing an installed binary
+# with `cp` writes into the same inode: a process already running from it no
+# longer matches its code signature, and the kernel kills it with SIGKILL
+# (exit 137); a new launch dies the same silent way. If a copy is ever needed,
+# `cp` to a temporary file next to it and `mv` it over (an atomic rename
+# changes the inode), or run `codesign --force --sign -` after the cp.
+install: build
+	ln -sf $(CURDIR)/bin/hopp /opt/homebrew/bin/hopp
 
 start: build
 	bin/hopp daemon start
