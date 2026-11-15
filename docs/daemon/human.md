@@ -11,7 +11,7 @@ The human reads what an agent said, answers the question an agent's screen waits
 ### The chat feed
 
 1. `hopp chat <id>` shows a session's conversation read from the agent's own journal (user and assistant turns, tool calls as one-line digests), plus the Claude Code permission dialogs hopp saw resolved; `--follow` keeps reading it. A session with no journal yet shows an empty feed, not an error.
-2. The feed shows only what the agent writes into its journal, so a start screen, the pane's other text and a draft in the composer never appear in it. With Codex 0.166 the feed is empty: its journal stores turns in a record type the ported reader does not read.
+2. The feed shows only what the agent writes into its journal, so a start screen, the pane's other text and a draft in the composer never appear in it. For Codex both journal shapes are read: the older one, and the one Codex 0.160 and later write; a turn written in both shows once.
 3. For Claude Code and DeepSeek the feed reads the newest journal in the folder's Claude Code project directory, not the journal hopp bound at launch, so another Claude Code conversation written later in the same folder shows instead.
 
 ### Answering an agent's screen

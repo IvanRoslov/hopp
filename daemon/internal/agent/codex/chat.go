@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/IvanRoslov/hopp/internal/agent"
@@ -43,9 +44,42 @@ type chatRecord struct {
 // (task_started, task_complete, token_count, patch_apply_end, ...) are
 // skipped by parseChatLine's default case.
 type eventMsgPayload struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
+	Type    string         `json:"type"`
+	Message string         `json:"message"`
+	Item    *completedItem `json:"item"`
 }
+
+// completedItem is the item of an event_msg/item_completed record, the
+// shape Codex 0.160 and later write instead of user_message/agent_message
+// (checked against 0.166.0 rollouts). A UserMessage carries only the text
+// the user typed (no AGENTS.md or <environment_context> blobs, which come as
+// response_item/message records), an AgentMessage the model's text; both
+// keep it in content[].text.
+type completedItem struct {
+	Type    string `json:"type"`
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+}
+
+// text joins the item's text parts.
+func (it *completedItem) text() string {
+	var parts []string
+	for _, c := range it.Content {
+		if c.Text != "" {
+			parts = append(parts, c.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// Message record shapes, see parseChatRecord.
+const (
+	shapeOther  = iota // not a user/assistant message (tools, or nothing)
+	shapeLegacy        // event_msg/user_message or agent_message
+	shapeItem          // event_msg/item_completed UserMessage or AgentMessage
+)
 
 // responseItemPayload is the payload shape of the response_item kinds that
 // carry tool-call content: function_call (payload.name is the function,
@@ -130,15 +164,27 @@ func truncateDigest(s string) string {
 // response_item/reasoning are therefore skipped entirely; response_item is
 // used only for tool-call kinds (function_call, custom_tool_call,
 // web_search_call), which have no event_msg counterpart at all.
+//
+// Codex 0.160 and later write no user_message/agent_message; their turns
+// are event_msg/item_completed UserMessage/AgentMessage records, mapped the
+// same way. A rollout that carries the legacy records is read from those
+// alone (see readChatEntriesFrom), so a turn written in both shapes shows
+// once.
 func parseChatLine(line string) (agent.ChatEntry, bool) {
+	e, _, ok := parseChatRecord(line)
+	return e, ok
+}
+
+// parseChatRecord is parseChatLine plus the message shape of the record.
+func parseChatRecord(line string) (agent.ChatEntry, int, bool) {
 	line = strings.TrimSpace(line)
 	if line == "" {
-		return agent.ChatEntry{}, false
+		return agent.ChatEntry{}, shapeOther, false
 	}
 
 	var rec chatRecord
 	if err := json.Unmarshal([]byte(line), &rec); err != nil {
-		return agent.ChatEntry{}, false
+		return agent.ChatEntry{}, shapeOther, false
 	}
 	ts := parseChatTimestamp(rec.Timestamp)
 
@@ -146,36 +192,47 @@ func parseChatLine(line string) (agent.ChatEntry, bool) {
 	case "event_msg":
 		var p eventMsgPayload
 		if err := json.Unmarshal(rec.Payload, &p); err != nil {
-			return agent.ChatEntry{}, false
+			return agent.ChatEntry{}, shapeOther, false
 		}
 		switch p.Type {
 		case "user_message":
-			return agent.ChatEntry{Role: "user", Text: p.Message, TS: ts}, true
+			return agent.ChatEntry{Role: "user", Text: p.Message, TS: ts}, shapeLegacy, true
 		case "agent_message":
-			return agent.ChatEntry{Role: "assistant", Text: p.Message, TS: ts}, true
+			return agent.ChatEntry{Role: "assistant", Text: p.Message, TS: ts}, shapeLegacy, true
+		case "item_completed":
+			if p.Item == nil {
+				return agent.ChatEntry{}, shapeOther, false
+			}
+			switch p.Item.Type {
+			case "UserMessage":
+				return agent.ChatEntry{Role: "user", Text: p.Item.text(), TS: ts}, shapeItem, true
+			case "AgentMessage":
+				return agent.ChatEntry{Role: "assistant", Text: p.Item.text(), TS: ts}, shapeItem, true
+			}
+			return agent.ChatEntry{}, shapeOther, false
 		default:
-			return agent.ChatEntry{}, false
+			return agent.ChatEntry{}, shapeOther, false
 		}
 	case "response_item":
 		var p responseItemPayload
 		if err := json.Unmarshal(rec.Payload, &p); err != nil {
-			return agent.ChatEntry{}, false
+			return agent.ChatEntry{}, shapeOther, false
 		}
 		switch p.Type {
 		case "function_call":
 			digest := truncateDigest(compactJSON([]byte(p.Arguments)))
-			return agent.ChatEntry{Role: "tool", ToolName: p.Name, Text: digest, TS: ts}, true
+			return agent.ChatEntry{Role: "tool", ToolName: p.Name, Text: digest, TS: ts}, shapeOther, true
 		case "custom_tool_call":
 			digest := truncateDigest(singleLine(p.Input))
-			return agent.ChatEntry{Role: "tool", ToolName: p.Name, Text: digest, TS: ts}, true
+			return agent.ChatEntry{Role: "tool", ToolName: p.Name, Text: digest, TS: ts}, shapeOther, true
 		case "web_search_call":
 			digest := truncateDigest(compactJSON(p.Action))
-			return agent.ChatEntry{Role: "tool", ToolName: "web_search", Text: digest, TS: ts}, true
+			return agent.ChatEntry{Role: "tool", ToolName: "web_search", Text: digest, TS: ts}, shapeOther, true
 		default:
-			return agent.ChatEntry{}, false
+			return agent.ChatEntry{}, shapeOther, false
 		}
 	default:
-		return agent.ChatEntry{}, false
+		return agent.ChatEntry{}, shapeOther, false
 	}
 }
 
@@ -203,8 +260,17 @@ func readChatEntriesFrom(path string, offset int64) ([]agent.ChatEntry, int64, e
 		return nil, offset, err
 	}
 
+	legacy, err := rolloutHasLegacyMessages(f, path, offset)
+	if err != nil {
+		return nil, offset, err
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return nil, offset, err
+	}
+
 	reader := bufio.NewReaderSize(f, 64*1024)
 	var entries []agent.ChatEntry
+	var shapes []int
 	pos := offset
 	for {
 		line, err := reader.ReadString('\n')
@@ -217,11 +283,78 @@ func readChatEntriesFrom(path string, offset int64) ([]agent.ChatEntry, int64, e
 			return entries, pos, err
 		}
 		pos += int64(len(line))
-		if e, ok := parseChatLine(line); ok {
+		if e, shape, ok := parseChatRecord(line); ok {
 			entries = append(entries, e)
+			shapes = append(shapes, shape)
+			if shape == shapeLegacy {
+				legacy = true
+			}
 		}
 	}
+	noteLegacyScan(path, pos, legacy)
+	if legacy {
+		kept := entries[:0]
+		for i, e := range entries {
+			if shapes[i] != shapeItem {
+				kept = append(kept, e)
+			}
+		}
+		entries = kept
+	}
 	return entries, pos, nil
+}
+
+// legacyScan remembers, per rollout path, how far the file has been scanned
+// for legacy message records and whether one was found, so an incremental
+// read decides the shape without re-reading the whole file each time.
+var legacyScan = struct {
+	sync.Mutex
+	m map[string]legacyScanState
+}{m: map[string]legacyScanState{}}
+
+type legacyScanState struct {
+	scanned int64
+	legacy  bool
+}
+
+// rolloutHasLegacyMessages reports whether bytes [0, offset) of the rollout
+// hold an event_msg/user_message or agent_message record, scanning only the
+// part not scanned before. A file shorter than the remembered scan (replaced
+// or truncated) is scanned again from 0.
+func rolloutHasLegacyMessages(f *os.File, path string, offset int64) (bool, error) {
+	legacyScan.Lock()
+	st, ok := legacyScan.m[path]
+	legacyScan.Unlock()
+	if info, err := f.Stat(); err == nil && ok && info.Size() < st.scanned {
+		st, ok = legacyScanState{}, false
+	}
+	if st.legacy || st.scanned >= offset {
+		return st.legacy, nil
+	}
+	if _, err := f.Seek(st.scanned, io.SeekStart); err != nil {
+		return false, err
+	}
+	reader := bufio.NewReaderSize(io.LimitReader(f, offset-st.scanned), 64*1024)
+	pos := st.scanned
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		pos += int64(len(line))
+		if _, shape, ok := parseChatRecord(line); ok && shape == shapeLegacy {
+			st.legacy = true
+			break
+		}
+	}
+	noteLegacyScan(path, pos, st.legacy)
+	return st.legacy, nil
+}
+
+func noteLegacyScan(path string, pos int64, legacy bool) {
+	legacyScan.Lock()
+	defer legacyScan.Unlock()
+	legacyScan.m[path] = legacyScanState{scanned: pos, legacy: legacy}
 }
 
 // pathWithinDir reports whether path is contained within dir, after
