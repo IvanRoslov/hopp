@@ -60,7 +60,12 @@ func findSession(home, worktree, sessionID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, path := range paths {
+	// Newest first: Pi names a journal "<timestamp>_<id>.jsonl", and an id
+	// can be used again after its session was removed, so the folder may
+	// hold an older journal of the same id. paths is sorted, so the last
+	// match is the newest.
+	for i := len(paths) - 1; i >= 0; i-- {
+		path := paths[i]
 		_, id, ok := strings.Cut(filepath.Base(path), "_")
 		if ok && strings.TrimSuffix(id, ".jsonl") == sessionID {
 			return path, nil
