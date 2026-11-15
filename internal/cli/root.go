@@ -47,6 +47,11 @@ func NewRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolVar(&flags.JSON, "json", false, "print the API's JSON")
 	root.PersistentFlags().StringVar(&flags.Socket, "socket", "", "path to the daemon socket")
 	root.AddCommand(newDaemonCmd())
+	root.AddCommand(newRunCmd())
+	root.AddCommand(newLsCmd())
+	root.AddCommand(newKillCmd())
+	root.AddCommand(newRestoreCmd())
+	root.AddCommand(newAttachCmd())
 	return root
 }
 
