@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (d1c2a2f and the commit after it) and the live checks of 2026-11-15 against ~/.hopp
+verified: 2026-11-15 — against the code on main (83cbd8e) and the live checks of 2026-11-15 against ~/.hopp
 ---
 
 # What the human sees and decides
