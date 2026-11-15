@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -96,5 +97,70 @@ func TestSocketOverride(t *testing.T) {
 	cfg.SocketOverride = "/tmp/other.sock"
 	if got := cfg.SocketPath(); got != "/tmp/other.sock" {
 		t.Errorf("SocketPath = %q, want the override", got)
+	}
+}
+
+// TestDeliveryDefaults carries the delivery and activity cases of rocket's
+// TestLoadDefaults.
+func TestDeliveryDefaults(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HeartbeatInterval != 5*time.Minute {
+		t.Errorf("expected HeartbeatInterval 5m, got %v", cfg.HeartbeatInterval)
+	}
+	if cfg.ActivityPollInterval != 5*time.Second {
+		t.Errorf("expected ActivityPollInterval 5s, got %v", cfg.ActivityPollInterval)
+	}
+	if cfg.ReadyToIdle != 5*time.Minute {
+		t.Errorf("expected ReadyToIdle 5m, got %v", cfg.ReadyToIdle)
+	}
+	if cfg.QueueTimeout != 30*time.Minute {
+		t.Errorf("expected QueueTimeout 30m, got %v", cfg.QueueTimeout)
+	}
+	if cfg.LargeMessageThreshold != 2048 {
+		t.Errorf("expected LargeMessageThreshold 2048, got %d", cfg.LargeMessageThreshold)
+	}
+	if !cfg.SocketDelivery {
+		t.Error("expected SocketDelivery to default to true")
+	}
+	if cfg.InputStallThreshold != 10*time.Minute {
+		t.Errorf("expected InputStallThreshold 10m, got %v", cfg.InputStallThreshold)
+	}
+	if cfg.ComposerBusyDeadline != DefaultComposerBusyDeadline {
+		t.Errorf("expected ComposerBusyDeadline %v, got %v", DefaultComposerBusyDeadline, cfg.ComposerBusyDeadline)
+	}
+	if cfg.ChildStallThreshold != 15*time.Minute {
+		t.Errorf("expected ChildStallThreshold 15m, got %v", cfg.ChildStallThreshold)
+	}
+}
+
+// TestDeliveryKeysFromYAML carries the delivery and activity cases of
+// rocket's TestLoadWithConfig.
+func TestDeliveryKeysFromYAML(t *testing.T) {
+	home := t.TempDir()
+	content := `heartbeat_interval: 10m
+activity_poll_interval: 10s
+ready_to_idle: 10m
+queue_timeout: 1h
+large_message_threshold: 4096
+socket_delivery: false
+input_stall_threshold: 3m
+composer_busy_deadline: 2m
+child_stall_threshold: 20m
+`
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HeartbeatInterval != 10*time.Minute || cfg.ActivityPollInterval != 10*time.Second ||
+		cfg.ReadyToIdle != 10*time.Minute || cfg.QueueTimeout != time.Hour || cfg.LargeMessageThreshold != 4096 ||
+		cfg.SocketDelivery || cfg.InputStallThreshold != 3*time.Minute || cfg.ComposerBusyDeadline != 2*time.Minute ||
+		cfg.ChildStallThreshold != 20*time.Minute {
+		t.Errorf("config = %+v", cfg)
 	}
 }

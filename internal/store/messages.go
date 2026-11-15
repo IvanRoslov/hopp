@@ -1,0 +1,473 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// Message represents an entry in the inter-session message delivery queue.
+type Message struct {
+	ID          int64
+	FromSession string // empty = human/system
+	ToSession   string
+	Body        string
+	Status      string // queued|delivering|accepted|delivered|failed
+	Attempts    int
+	CreatedAt   int64
+	DeliveredAt int64  // 0 = not delivered
+	Reason      string // empty = none; set on status "failed" (e.g. "timeout", "delivery_failed", "recipient_gone", "not_confirmed")
+	// InjectAt is the unix-millisecond moment right before a send whose agent
+	// confirms delivery from its journal (status "accepted"); 0 otherwise.
+	InjectAt          int64
+	DeliveryTransport string
+	DeliveryProofAt   int64
+	DeliveryProofText string
+}
+
+// AddMessage inserts a new message with status "queued" (unless already set)
+// and CreatedAt defaulted to now (unless already set). Returns the assigned id.
+// An intact or damaged side row is positive ownership even if a legacy
+// mutation erased the redundant main marker. Never expose it as visual work.
+const effectiveClaudeTransport = `CASE WHEN delivery_transport<>'claude-socket-v1' AND EXISTS(SELECT 1 FROM claude_deliveries WHERE message_id=messages.id) THEN CASE WHEN delivery_transport='' THEN 'claude-socket-v1' ELSE 'claude-snapshot-conflict' END ELSE delivery_transport END`
+
+// AddMessage inserts a new message with status "queued" (unless already set)
+// and CreatedAt defaulted to now (unless already set).
+func (s *Store) AddMessage(m Message) (int64, error) {
+	if m.CreatedAt == 0 {
+		m.CreatedAt = time.Now().Unix()
+	}
+	if m.Status == "" {
+		m.Status = "queued"
+	}
+
+	res, err := s.db.Exec(
+		`INSERT INTO messages (from_session, to_session, body, status, attempts, created_at, delivered_at, delivery_transport)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		nullIfEmpty(m.FromSession), m.ToSession, m.Body, m.Status, m.Attempts, m.CreatedAt, nullIfZero(m.DeliveredAt), m.DeliveryTransport,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert message: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// GetMessage returns the message with the given id, or ErrNotFound.
+func (s *Store) GetMessage(id int64) (Message, error) {
+	row := s.db.QueryRow(
+		`SELECT id, from_session, to_session, body, status, attempts, created_at, delivered_at, reason, inject_at, `+effectiveClaudeTransport+`, delivery_proof_at, delivery_proof_text
+		 FROM messages WHERE id = ?`, id,
+	)
+	return scanMessage(row)
+}
+
+// ListMessages returns the last limit messages where to_session = sessionID
+// or from_session = sessionID, in ascending id order. A limit <= 0 means no
+// limit.
+func (s *Store) ListMessages(sessionID string, limit int) ([]Message, error) {
+	query := `SELECT id, from_session, to_session, body, status, attempts, created_at, delivered_at, reason, inject_at, ` + effectiveClaudeTransport + `, delivery_proof_at, delivery_proof_text
+	          FROM messages WHERE to_session = ? OR from_session = ? ORDER BY id DESC`
+	args := []any{sessionID, sessionID}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query messages: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Message
+	for rows.Next() {
+		m, err := scanMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Reverse to ascending order.
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
+// NextQueuedMessage returns the queued message with the smallest id for
+// recipient to. The second return value is false if there is no queued
+// message for to.
+func (s *Store) NextQueuedMessage(to string) (Message, bool, error) {
+	row := s.db.QueryRow(
+		`SELECT id, from_session, to_session, body, status, attempts, created_at, delivered_at, reason, inject_at, `+effectiveClaudeTransport+`, delivery_proof_at, delivery_proof_text
+		 FROM messages WHERE to_session = ? AND status = 'queued' ORDER BY id LIMIT 1`, to,
+	)
+	m, err := scanMessage(row)
+	if errors.Is(err, ErrNotFound) {
+		return Message{}, false, nil
+	}
+	if err != nil {
+		return Message{}, false, err
+	}
+	return m, true, nil
+}
+
+// ClaimMessage atomically transitions message id from status "queued" to
+// "delivering" via a compare-and-swap UPDATE. It returns true if this call
+// won the claim (RowsAffected == 1); false means the message was no longer
+// "queued" (e.g. it was already claimed, or expired/failed concurrently by
+// housekeeping) and the caller must not proceed with delivery.
+//
+// This exists to close a race between a live delivery worker and
+// expireTimedOut: without a CAS, a worker that read a message as "queued"
+// could still inject and mark it "delivered" after housekeeping had already
+// marked the same message "failed" for timing out, silently reviving a
+// message that should have stayed failed.
+func (s *Store) ClaimMessage(id int64) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE messages SET status = 'delivering' WHERE id = ? AND status = 'queued'`, id,
+	)
+	if err != nil {
+		return false, fmt.Errorf("claim message: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("claim message rows affected: %w", err)
+	}
+	return n == 1, nil
+}
+
+func (s *Store) ClaimNativeMessage(id int64, transport string, injectAt int64) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE messages SET status = 'delivering', delivery_transport = ?, inject_at = ? WHERE id = ? AND status = 'queued'`,
+		transport, injectAt, id,
+	)
+	if err != nil {
+		return false, fmt.Errorf("claim native message: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("claim native message rows affected: %w", err)
+	}
+	return n == 1, nil
+}
+
+func (s *Store) SetMessageNativeDelivery(id int64, transport string, injectAt int64) error {
+	res, err := s.db.Exec(
+		`UPDATE messages SET delivery_transport = ?, inject_at = ? WHERE id = ? AND status = 'delivering'`,
+		transport, injectAt, id,
+	)
+	if err != nil {
+		return fmt.Errorf("set native delivery: %w", err)
+	}
+	return checkRowsAffected(res)
+}
+
+// UpdateMessageStatus updates a message's status, attempts, delivered_at
+// (0 stored as NULL), and reason (empty string stored as NULL). Returns
+// ErrNotFound if the message doesn't exist.
+func (s *Store) UpdateMessageStatus(id int64, status string, attempts int, deliveredAt int64, reason string) error {
+	res, err := s.db.Exec(
+		`UPDATE messages SET status = ?, attempts = ?, delivered_at = ?, reason = ? WHERE id = ?`,
+		status, attempts, nullIfZero(deliveredAt), nullIfEmpty(reason), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update message status: %w", err)
+	}
+	return checkRowsAffected(res)
+}
+
+// SetMessageInjectAt records the unix-millisecond moment right before the
+// text of message id is pasted (see Message.InjectAt).
+func (s *Store) SetMessageInjectAt(id int64, injectAt int64) error {
+	if _, err := s.db.Exec(`UPDATE messages SET inject_at = ? WHERE id = ?`, injectAt, id); err != nil {
+		return fmt.Errorf("set message inject_at: %w", err)
+	}
+	return nil
+}
+
+// ListAcceptedMessages returns accepted messages and durably claimed Claude
+// delivering rows, ordered by recipient then id. Outcome persistence may fail
+// after a claim or cross its age deadline; the running confirmer must still
+// settle that ownership without ResetDelivering or another sender invocation.
+// Native and legacy delivering rows retain their existing sender-owned path.
+func (s *Store) ListAcceptedMessages() ([]Message, error) {
+	rows, err := s.db.Query(
+		`SELECT id, from_session, to_session, body, status, attempts, created_at, delivered_at, reason, inject_at, ` + effectiveClaudeTransport + `, delivery_proof_at, delivery_proof_text
+		 FROM messages WHERE status = 'accepted' OR (status = 'delivering' AND (delivery_transport='claude-socket-v1' OR EXISTS(SELECT 1 FROM claude_deliveries WHERE message_id=messages.id))) ORDER BY to_session, id`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query accepted messages: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Message
+	for rows.Next() {
+		m, err := scanMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// proofUnusedGuard makes settling a message consume its journal proof
+// atomically: the UPDATE fails if another message of the SAME recipient
+// already carries the same (proofAt, proofText) pair. SQLite serializes
+// writers, so two confirmation paths racing on one equal-text journal record
+// cannot both settle a message with it. The recipient scope matters: separate
+// journals may legitimately hold the same normalized text at the same
+// timestamp, and each record proves only its own recipient's message.
+const proofUnusedGuard = ` AND NOT EXISTS (
+	SELECT 1 FROM messages p
+	WHERE p.id <> ? AND p.to_session = messages.to_session
+	  AND p.delivery_proof_at = ? AND p.delivery_proof_text = ?
+)`
+
+// ConfirmAccepted atomically moves message id from "accepted" to
+// "delivered" with delivered_at = deliveredAt, consuming the journal proof
+// identified by (proofAt, proofText). It reports false when the message was no
+// longer accepted (already requeued, failed or confirmed by a concurrent
+// pass) or when another message already owns that proof, so a stale decision
+// never overwrites a newer status and one record never proves two equal-text
+// messages.
+func (s *Store) ConfirmAccepted(id, deliveredAt, proofAt int64, proofText string) (bool, error) {
+	return s.casMessage(id,
+		`UPDATE messages SET status = 'delivered', delivered_at = ?, delivery_proof_at = ?, delivery_proof_text = ? WHERE id = ? AND status = 'accepted'`+proofUnusedGuard,
+		deliveredAt, proofAt, proofText, id, id, proofAt, proofText)
+}
+
+// ConfirmDelivering is ConfirmAccepted for a message still in status
+// "delivering" — the final journal scan of a native delivery whose sends were
+// refused. It shares the atomic proof-consumption guard.
+func (s *Store) ConfirmDelivering(id, deliveredAt, proofAt int64, proofText string) (bool, error) {
+	return s.casMessage(id,
+		`UPDATE messages SET status = 'delivered', delivered_at = ?, delivery_proof_at = ?, delivery_proof_text = ? WHERE id = ? AND status = 'delivering'`+proofUnusedGuard,
+		deliveredAt, proofAt, proofText, id, id, proofAt, proofText)
+}
+
+// FailDelivering atomically moves message id from "delivering" to "failed"
+// with the given reason. False means it was no longer delivering (settled by
+// another path), so the caller must not announce a failure it did not cause.
+func (s *Store) FailDelivering(id int64, reason string) (bool, error) {
+	return s.casMessage(id,
+		`UPDATE messages SET status = 'failed', reason = ? WHERE id = ? AND status = 'delivering'`,
+		nullIfEmpty(reason), id)
+}
+
+// RequeueAccepted atomically moves message id from "accepted" back to
+// "queued" and clears inject_at so the next paste takes a fresh one.
+// Attempts are left alone: they count pastes, and the worker increments
+// them when it pastes again. False means the message was no longer accepted.
+func (s *Store) RequeueAccepted(id int64) (bool, error) {
+	return s.casMessage(id,
+		`UPDATE messages SET status = 'queued', inject_at = 0 WHERE id = ? AND status = 'accepted'`,
+		id)
+}
+
+// FailAccepted atomically moves message id from "accepted" to "failed" with
+// the given reason. False means the message was no longer accepted.
+func (s *Store) FailAccepted(id int64, reason string) (bool, error) {
+	return s.casMessage(id,
+		`UPDATE messages SET status = 'failed', reason = ? WHERE id = ? AND status = 'accepted'`,
+		nullIfEmpty(reason), id)
+}
+
+func (s *Store) casMessage(id int64, query string, args ...any) (bool, error) {
+	res, err := s.db.Exec(query, args...)
+	if err != nil {
+		return false, fmt.Errorf("update message %d: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("update message %d rows affected: %w", id, err)
+	}
+	return n == 1, nil
+}
+
+// ExpireQueuedBefore sets status = 'failed' on all queued messages with
+// created_at < ts, and returns the affected messages (post-update, i.e. with
+// status "failed").
+//
+// The select-and-update is wrapped in a single transaction (using
+// UPDATE ... RETURNING) so that a message which transitions from "queued" to
+// "delivering" concurrently (between a separate SELECT and UPDATE) can never
+// be spuriously expired: the WHERE clause is evaluated atomically against the
+// same row state that gets updated.
+func (s *Store) ExpireQueuedBefore(ts int64) ([]Message, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin expire tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op if committed
+
+	rows, err := tx.Query(
+		`UPDATE messages SET status = 'failed', reason = 'timeout'
+		 WHERE status = 'queued' AND created_at < ?
+ AND delivery_transport<>'claude-socket-v1'
+ AND NOT EXISTS(SELECT 1 FROM claude_deliveries WHERE message_id=messages.id)
+		 RETURNING id, from_session, to_session, body, status, attempts, created_at, delivered_at, reason, inject_at, `+effectiveClaudeTransport+`, delivery_proof_at, delivery_proof_text`, ts,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("expire messages: %w", err)
+	}
+
+	var out []Message
+	for rows.Next() {
+		m, err := scanMessage(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit expire tx: %w", err)
+	}
+
+	return out, nil
+}
+
+// ResetDelivering recovers messages orphaned in status "delivering" by a
+// daemon crash. Legacy rows become queued for another attempt; native rows
+// become accepted so their journal, not a blind re-send, settles delivery.
+func (s *Store) ResetDelivering() (int, error) {
+	res, err := s.db.Exec(`UPDATE messages SET status = CASE WHEN delivery_transport IN ('pi-uds-v1','claude-socket-v1') OR EXISTS(SELECT 1 FROM claude_deliveries WHERE message_id=messages.id) THEN 'accepted' ELSE 'queued' END, delivery_transport=CASE WHEN delivery_transport='' AND EXISTS(SELECT 1 FROM claude_deliveries WHERE message_id=messages.id) THEN 'claude-socket-v1' ELSE delivery_transport END WHERE status = 'delivering'`)
+	if err != nil {
+		return 0, fmt.Errorf("reset delivering messages: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reset delivering messages rows affected: %w", err)
+	}
+	return int(n), nil
+}
+
+// ListQueuedRecipients returns the distinct to_session values of messages
+// currently in status "queued".
+func (s *Store) ListQueuedRecipients() ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT to_session FROM messages WHERE status = 'queued'`)
+	if err != nil {
+		return nil, fmt.Errorf("query queued recipients: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var to string
+		if err := rows.Scan(&to); err != nil {
+			return nil, fmt.Errorf("scan recipient: %w", err)
+		}
+		out = append(out, to)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CountMessagesByStatus returns the number of messages in each status
+// (queued, delivering, delivered, failed), keyed by status. Statuses with
+// no messages are omitted from the map (i.e. absent means zero).
+func (s *Store) CountMessagesByStatus() (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT status, COUNT(*) FROM messages GROUP BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("count messages by status: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scan message status count: %w", err)
+		}
+		out[status] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PurgeOld deletes messages and events with created_at/ts < before, except
+// state the native delivery guarantee still needs:
+//
+//   - a native accepted/delivering row is unresolved — with QueueTimeout
+//     disabled it waits for the recipient's exit/restore, not for retention;
+//   - a consumed journal proof (delivery_proof_at/text) is what stops a later
+//     equal-text confirmation from reusing the same record after Recover. Any
+//     proof on the recipient is kept while a native confirmation is pending
+//     there: the normalized text is not queryable here, so keeping all of that
+//     recipient's proofs is the conservative superset.
+//
+// Resolved native rows and every legacy row keep the previous retention.
+func (s *Store) PurgeOld(before int64) error {
+	const purgeMessages = `
+		DELETE FROM messages
+		WHERE created_at < ?
+ AND id NOT IN (SELECT id FROM hopp_claude_retention)
+		  AND NOT (delivery_transport = 'pi-uds-v1' AND status IN ('accepted','delivering'))
+		  AND NOT (delivery_proof_at > 0 AND EXISTS (
+		      SELECT 1 FROM messages p
+		      WHERE p.to_session = messages.to_session
+		        AND p.delivery_transport = 'pi-uds-v1'
+		        AND p.status IN ('accepted','delivering')
+		  ))`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Acquire the main writer before reading correlation history.
+	if _, err = tx.Exec(`DELETE FROM events WHERE ts < ?`, before); err != nil {
+		return fmt.Errorf("purge events: %w", err)
+	}
+	if err = protectClaudeHistory(tx); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(purgeMessages, before); err != nil {
+		return fmt.Errorf("purge messages: %w", err)
+	}
+	if _, err = tx.Exec(`DROP TABLE hopp_claude_retention`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func scanMessage(row interface{ Scan(...any) error }) (Message, error) {
+	var m Message
+	var fromSession sql.NullString
+	var deliveredAt sql.NullInt64
+	var reason sql.NullString
+
+	err := row.Scan(
+		&m.ID, &fromSession, &m.ToSession, &m.Body, &m.Status, &m.Attempts, &m.CreatedAt, &deliveredAt, &reason, &m.InjectAt, &m.DeliveryTransport,
+		&m.DeliveryProofAt, &m.DeliveryProofText,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Message{}, ErrNotFound
+	}
+	if err != nil {
+		return Message{}, fmt.Errorf("scan message: %w", err)
+	}
+
+	m.FromSession = fromSession.String
+	m.DeliveredAt = deliveredAt.Int64
+	m.Reason = reason.String
+
+	return m, nil
+}

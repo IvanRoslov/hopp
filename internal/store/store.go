@@ -191,3 +191,10 @@ func nullIfEmpty(v string) any {
 	}
 	return v
 }
+
+func nullIfZero(v int64) any {
+	if v == 0 {
+		return nil
+	}
+	return v
+}
