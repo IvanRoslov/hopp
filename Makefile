@@ -1,4 +1,4 @@
-.PHONY: lint-docs test-lint build test
+.PHONY: lint-docs test-lint build test start stop restart status
 
 lint-docs:
 	python3 scripts/lint_docs.py .
@@ -16,3 +16,20 @@ build:
 
 test:
 	go test ./...
+
+start: build
+	bin/hopp daemon start
+	bin/hopp daemon status
+
+stop:
+	bin/hopp daemon stop 2>/dev/null || { [ -x bin/hopp ] || go build -o bin/hopp ./cmd/hopp; bin/hopp daemon stop; }
+
+# Build first, then stop and start: stopping before the build would leave a
+# window in which any CLI call autostarts the OLD binary.
+restart: build
+	bin/hopp daemon stop
+	bin/hopp daemon start
+	bin/hopp daemon status
+
+status:
+	bin/hopp daemon status
