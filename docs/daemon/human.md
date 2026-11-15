@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (1ddc9bd) and the live checks of 2026-11-15 against ~/.hopp
+verified: 2026-11-15 — against the code on main (15b3fde) and the live checks of 2026-11-15 against ~/.hopp
 ---
 
 # What the human sees and decides
@@ -16,7 +16,7 @@ The human reads what an agent said, answers the question an agent's screen waits
 
 ### Answering an agent's screen
 
-4. hopp can answer four kinds of question an agent's screen waits on: a Claude Code permission dialog, a Claude Code question to the user (`AskUserQuestion`), and the start screens of Codex and Kimi Code. `hopp answer <id>` shows the question, `hopp answer <id> <choice>` answers it, and the session JSON carries it as `question`.
+4. hopp can answer four kinds of question an agent's screen waits on: a Claude Code permission dialog, a Claude Code question to the user (`AskUserQuestion`), and the start screens of Codex and Kimi Code. `hopp answer <id>` shows the question, `hopp answer <id> <choice>` answers it, and the session JSON carries it as `question`. hopp looks for a permission dialog only once the session reports that it waits on the human (`waiting_input`, from Claude Code's Notification hook); in the live check of 2026-11-15 on Claude Code 2.1.325 that report never came, so a dialog in a `manual` session stayed unseen by hopp and only the terminal could answer it.
 5. Right before pressing a key for a dialog or a start screen, hopp reads the pane again; when it no longer shows the same question (a human answered in the terminal, or it closed), nothing is sent and the answer is refused with `prompt_changed`. An answer while another one is still being typed is refused with `quiz_answer_in_flight`, and one to a session with no question with `no_pending_quiz`.
 
 ### Decision requests

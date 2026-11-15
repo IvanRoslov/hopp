@@ -55,6 +55,7 @@ The human's commands:
 ```bash
 bin/hopp chat <id> [--follow]          # the session's conversation from the agent's journal
 bin/hopp waiting                       # everything that waits for the human: open asks and screen questions
+bin/hopp run <dir> --profile <p> --permission-mode manual   # Claude Code without skipped permission prompts
 bin/hopp answer <id> [<choice>]        # show or answer the question a session's screen waits on
 bin/hopp asks [--all] [--label k=v]    # decision requests; answer one with:
 bin/hopp reply <ask-id> [<choice>] [-m <text>]
