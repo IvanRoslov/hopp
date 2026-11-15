@@ -26,7 +26,9 @@ func TestHookExtractsOnlyBoundedMetadata(t *testing.T) {
 			curl := "#!/bin/sh\nprev=''\nfor arg in \"$@\"; do\n if [ \"$prev\" = '-d' ]; then printf '%s' \"$arg\" > \"$HOOK_CAPTURE\"; fi\n prev=\"$arg\"\ndone\n"
 			mustWriteHookFixture(t, filepath.Join(dir, "curl"), curl)
 			mustWriteHookFixture(t, filepath.Join(dir, "ps"), "#!/bin/sh\nprintf '%s\\n' 'Sun Nov 1 00:00:00 2026'\n")
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			// 15s, not rocket's 3s: under a full parallel `go test ./...` the
+			// python start-up alone exceeded 3s and the test killed the hook.
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			// Metadata extraction is deterministic here: subprocess startup can
 			// legitimately exceed the production best-effort0.5s ps budget
