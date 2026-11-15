@@ -471,3 +471,20 @@ func scanMessage(row interface{ Scan(...any) error }) (Message, error) {
 
 	return m, nil
 }
+
+// SetQueuedReason records why a still-queued message is waiting (for
+// example a Claude-route condition), so `hopp messages` can explain it. It
+// touches only a queued row; delivery, expiry and retention never read the
+// reason of a queued row, and a later delivery or failure overwrites it.
+func (s *Store) SetQueuedReason(id int64, reason string) error {
+	_, err := s.db.Exec(`UPDATE messages SET reason = ? WHERE id = ? AND status = 'queued'`, nullIfEmpty(reason), id)
+	return err
+}
+
+// ClearClaimedReason removes a wait reason left on a message that has since
+// been claimed (delivering or accepted). A failed or delivered message keeps
+// the reason its settlement wrote.
+func (s *Store) ClearClaimedReason(id int64) error {
+	_, err := s.db.Exec(`UPDATE messages SET reason = NULL WHERE id = ? AND status IN ('delivering', 'accepted')`, id)
+	return err
+}

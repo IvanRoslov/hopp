@@ -404,3 +404,40 @@ func TestOrdinaryWaitOutputContract(t *testing.T) {
 		}
 	}
 }
+
+// TestWaitForMessagePrintsWaitReasonOnce: while the message is queued with a
+// wait reason, --wait names it once per change.
+func TestWaitForMessagePrintsWaitReasonOnce(t *testing.T) {
+	restore := setPollIntervalForTest(t, 5*time.Millisecond)
+	defer restore()
+	steps := []msgResp{
+		{ID: 3, Status: "queued"},
+		{ID: 3, Status: "queued", Reason: "claude_prepare:no_socket"},
+		{ID: 3, Status: "queued", Reason: "claude_prepare:no_socket"},
+		{ID: 3, Status: "queued", Reason: "claude_binding_changed"},
+		{ID: 3, Status: "delivering"},
+		{ID: 3, Status: "delivered"},
+	}
+	var seq int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/messages/3", func(w http.ResponseWriter, r *http.Request) {
+		i := int(atomic.AddInt32(&seq, 1) - 1)
+		if i >= len(steps) {
+			i = len(steps) - 1
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(steps[i])
+	})
+	c := newUnixSocketTestServer(t, mux)
+	cmd := &cobra.Command{}
+	var out, errBuf bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	if err := waitForMessage(cmd, c, 3); err != nil {
+		t.Fatalf("waitForMessage: %v", err)
+	}
+	want := "message 3 waiting: claude_prepare:no_socket\nmessage 3 waiting: claude_binding_changed\nmessage 3 delivered\n"
+	if out.String() != want {
+		t.Fatalf("stdout = %q, want %q", out.String(), want)
+	}
+}

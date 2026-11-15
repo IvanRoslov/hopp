@@ -428,6 +428,9 @@ func (q *Queue) deliver(ctx context.Context, msg store.Message) {
 	// busySince is when the recipient's composer was first seen holding a
 	// user draft during THIS delivery; zero while it is free.
 	var busySince time.Time
+	// claudeWait is the last wait reason recorded for msg on the Claude route;
+	// a queued row's reason is the one an earlier pass recorded.
+	claudeWait := msg.Reason
 
 	for {
 		sess, err := q.getSession(msg.ToSession)
@@ -481,7 +484,9 @@ func (q *Queue) deliver(ctx context.Context, msg store.Message) {
 			return
 		}
 		if route == routeLegacy && q.claudeSelected(sess) {
-			if q.deliverClaude(ctx, msg, sess) {
+			done, wait := q.deliverClaude(ctx, msg, sess)
+			q.noteClaudeWait(msg, &claudeWait, wait)
+			if done {
 				return
 			}
 			if !q.waitForReady(ctx, msg.ToSession) {
@@ -1132,5 +1137,28 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 		return false
 	case <-t.C:
 		return true
+	}
+}
+
+// noteClaudeWait records why msg is waiting on the Claude route, only when the
+// reason changes: one log line and the queued row's reason, so the wait is
+// explainable from `hopp messages` and `hopp logs`. An empty wait after a
+// recorded one means the message was claimed or settled; a claimed message
+// loses the stale reason, a settled one keeps what its settlement wrote. The
+// reason is display only and never steers delivery.
+func (q *Queue) noteClaudeWait(msg store.Message, last *string, wait string) {
+	if wait == *last {
+		return
+	}
+	*last = wait
+	if wait == "" {
+		if err := q.st.ClearClaimedReason(msg.ID); err != nil {
+			slog.Warn("queue: clear Claude wait reason", "id", msg.ID, "error", err)
+		}
+		return
+	}
+	slog.Info("queue: Claude delivery waiting", "id", msg.ID, "to", msg.ToSession, "reason", wait)
+	if err := q.st.SetQueuedReason(msg.ID, wait); err != nil {
+		slog.Warn("queue: record Claude wait reason", "id", msg.ID, "error", err)
 	}
 }

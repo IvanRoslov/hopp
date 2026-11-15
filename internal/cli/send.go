@@ -148,6 +148,7 @@ func waitForMessage(cmd *cobra.Command, c *client.Client, msgID int64) error {
 	defer ticker.Stop()
 
 	announcedAccepted := false
+	waitReason := ""
 	for {
 		select {
 		case <-ticker.C:
@@ -185,7 +186,16 @@ func waitForMessage(cmd *cobra.Command, c *client.Client, msgID int64) error {
 				announcedAccepted = true
 				continue
 			case "queued", "delivering":
-				// Still in flight, continue polling.
+				// Still in flight, continue polling. A queued message on the
+				// Claude route may carry why it waits; name it once per change.
+				if msg.Status == "queued" && msg.Reason != waitReason && !flags.JSON {
+					if msg.Reason != "" {
+						cmd.Printf("%s waiting: %s\n", label, msg.Reason)
+					}
+				}
+				if msg.Status == "queued" {
+					waitReason = msg.Reason
+				}
 				continue
 			default:
 				// Unknown/future status: keep polling rather than erroring.

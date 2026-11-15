@@ -7,6 +7,7 @@ import (
 	"github.com/IvanRoslov/hopp/internal/claudeinstance"
 	"github.com/IvanRoslov/hopp/internal/store"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -17,57 +18,62 @@ func (q *Queue) claudeDeadline(msg store.Message) time.Time {
 	return time.Unix(msg.CreatedAt, 0).Add(q.cfg.QueueTimeout)
 }
 
-// deliverClaude returns false only while an unsent row should wait. It never
-// dispatches through the legacy sender, regardless of probe or send outcome.
-func (q *Queue) deliverClaude(ctx context.Context, msg store.Message, sess store.Session) bool {
+// deliverClaude reports done=false only while an unsent row should wait, and
+// then wait names why (see claudeWait*). It never dispatches through the
+// legacy sender, regardless of probe or send outcome.
+func (q *Queue) deliverClaude(ctx context.Context, msg store.Message, sess store.Session) (done bool, wait string) {
 	if claudeAgeExpired(q.claudeDeadline(msg), q.now()) {
 		q.fail(msg, "timeout")
-		return true
+		return true, ""
 	}
 	if msg.Attempts > 0 {
 		q.fail(msg, "delivery_unconfirmed")
-		return true
+		return true, ""
 	}
 	cutoff, cutoffErr := q.st.ClaudeLegacyCutoff()
 	if cutoffErr != nil {
 		slog.Warn("queue: Claude legacy cutoff unavailable", "id", msg.ID, "error", cutoffErr)
-		return false
+		return false, "claude_cutoff_unavailable"
 	}
 	if msg.ID <= cutoff {
 		q.fail(msg, "legacy_unproven")
-		return true
+		return true, ""
 	}
 	if q.socket == nil {
-		return false
+		return false, "claude_socket_unavailable"
 	}
 	r := q.socket.Resolve(ctx, sess)
 	if r.State == claudeinstance.Dead {
 		q.fail(msg, "recipient_unavailable")
-		return true
+		return true, ""
 	}
 	if r.State != claudeinstance.Verified {
-		return false
+		return false, "claude_resolve:" + r.Reason
 	}
 	// Eligibility belongs to the resolved durable binding, never a pre-follow cache.
 	l, pinned, event, e := q.st.GetClaudeBinding(ctx, sess.ID)
 	current, sessionErr := q.st.GetSession(sess.ID)
 	check, again, observed, checkErr := q.st.GetClaudeBinding(ctx, sess.ID)
 	if e != nil || sessionErr != nil || checkErr != nil || pinned == nil || again == nil || l.BindingRevision != check.BindingRevision || event != observed || !claudeinstance.SameIdentity(*pinned, *again) || !claudeinstance.SameIdentity(*again, r.Identity) {
-		return false
+		return false, "claude_binding_changed"
 	}
 	if current.Activity == string(activity.Blocked) {
 		q.fail(msg, "recipient_unavailable")
-		return true
+		return true, ""
 	}
 	if !claudeEligible(current.Activity) {
-		return false
+		state := current.Activity
+		if state == "" {
+			state = "unknown"
+		}
+		return false, "claude_not_eligible:" + state
 	}
 	snapshot, e := q.socket.Prepare(ctx, sess, socketFromName(msg), q.prepareText(msg, sess))
 	if e != nil {
-		return false
+		return false, "claude_prepare:" + claudePrepareClass(e)
 	}
 	if snapshot.BindingRevision != l.BindingRevision || !claudeinstance.SameIdentity(snapshot.Target, r.Identity) {
-		return false
+		return false, "claude_snapshot_changed"
 	}
 	snapshot.MessageID = msg.ID
 	snapshot.PreparedAt = q.now().UTC()
@@ -75,15 +81,15 @@ func (q *Queue) deliverClaude(ctx context.Context, msg store.Message, sess store
 	snapshot.Phase = "possible_write"
 	if claudeAgeExpired(snapshot.Deadline, snapshot.PreparedAt) {
 		q.fail(msg, "timeout")
-		return true
+		return true, ""
 	}
 	ok, e := q.st.ClaimClaudeMessage(snapshot)
 	if e != nil || !ok {
 		slog.Warn("queue: Claude prewrite claim rejected", "id", msg.ID, "error", e)
 		if e != nil {
-			return false
+			return false, "claude_claim_refused"
 		}
-		return true
+		return true, ""
 	}
 	outcome, sendErr := q.socket.Send(ctx, snapshot)
 	if sendErr != nil {
@@ -98,7 +104,21 @@ func (q *Queue) deliverClaude(ctx context.Context, msg store.Message, sess store
 		slog.Warn("queue: Claude outcome persistence uncertain; retaining claim", "id", msg.ID, "error", e)
 	}
 	q.kickConfirmer()
-	return true
+	return true, ""
+}
+
+// claudePrepareClass names a Prepare failure for a wait reason: a fixed
+// class, never the error text, goes into the message row.
+func claudePrepareClass(e error) string {
+	switch {
+	case errors.Is(e, ErrNoSocket):
+		return "no_socket"
+	case strings.Contains(e.Error(), "incomplete tail"):
+		return "journal_incomplete_tail"
+	case strings.Contains(e.Error(), "not a regular file"), strings.Contains(e.Error(), "changed during open"):
+		return "journal_unusable"
+	}
+	return "error"
 }
 func claudeAgeExpired(deadline, now time.Time) bool {
 	return !deadline.IsZero() && !now.Before(deadline)
