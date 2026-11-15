@@ -89,8 +89,8 @@ if [ -z "$HOPP_SOCKET" ] || [ -z "$HOPP_SESSION_ID" ] || [ -z "$HOPP_CLAUDE_LAUN
   exit 0
 fi
 payload=$(python3 -c '
-import datetime, json, os, signal, subprocess, sys, time
-signal.alarm(1)
+import signal; signal.alarm(1)
+import datetime, json, os, subprocess, sys, time
 try:
     raw = sys.stdin.buffer.read(16385)
     if not raw or len(raw) > 16384:

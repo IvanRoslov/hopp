@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -45,10 +46,13 @@ def run(args, **kwargs):
 `
 			mustWriteHookFixture(t, filepath.Join(dir, "subprocess.py"), probe)
 			psCall := filepath.Join(dir, "ps-call")
-			cmd := exec.CommandContext(ctx, "sh", "-c", activityHookScript, "hook", "ready")
+			cmd := activityHookCmd(ctx)
 			cmd.Env = []string{"PATH=" + dir + ":" + os.Getenv("PATH"), "HOPP_SOCKET=/tmp/fixture.sock", "HOPP_SESSION_ID=s", "HOPP_CLAUDE_LAUNCH=g", "HOOK_CAPTURE=" + capture, "PYTHONPATH=" + dir, "HOOK_PS_CALL=" + psCall}
 			cmd.Stdin = strings.NewReader(tc.input)
 			out, runErr := cmd.CombinedOutput()
+			if ctx.Err() != nil {
+				t.Fatalf("hook still running after the 15s test deadline; its process group was killed: %v %s", runErr, out)
+			}
 			if e := runErr; e != nil {
 				t.Fatalf("hook must be best effort: %v %s", e, out)
 			}
@@ -85,6 +89,20 @@ func mustWriteHookFixture(t *testing.T, path, body string) {
 	}
 }
 
+// activityHookCmd runs the activity hook in its own process group. When ctx
+// ends, the whole group is killed (the shell, the inline python and anything
+// they started), so a stuck run is reported by the test and leaves no
+// orphan behind.
+func activityHookCmd(ctx context.Context) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "sh", "-c", activityHookScript, "hook", "ready")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = time.Second
+	return cmd
+}
+
 func TestHookDropsFailedProcessMetadataWithinBounds(t *testing.T) {
 	for _, which := range []string{"nonzero", "malformed start", "timeout"} {
 		t.Run(which, func(t *testing.T) {
@@ -101,12 +119,15 @@ func TestHookDropsFailedProcessMetadataWithinBounds(t *testing.T) {
 			mustWriteHookFixture(t, filepath.Join(dir, "curl"), "#!/bin/sh\nprintf unexpected > \"$HOOK_CAPTURE\"\n")
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, "sh", "-c", activityHookScript, "hook", "ready")
+			cmd := activityHookCmd(ctx)
 			cmd.Env = []string{"PATH=" + dir + ":" + os.Getenv("PATH"), "HOPP_SOCKET=/tmp/fixture.sock", "HOPP_SESSION_ID=s", "HOPP_CLAUDE_LAUNCH=g", "HOOK_CAPTURE=" + capture}
 			cmd.Stdin = strings.NewReader(`{"session_id":"target","hook_event_name":"Stop","prompt":"SECRET_PROMPT"}`)
 			start := time.Now()
 			out, e := cmd.CombinedOutput()
 			elapsed := time.Since(start)
+			if ctx.Err() != nil {
+				t.Fatalf("hook still running after the 3s test deadline; its process group was killed: %v %s", e, out)
+			}
 			if e != nil || len(out) != 0 || elapsed >= 2*time.Second {
 				t.Fatalf("best-effort bound: error=%v elapsed=%s output=%s", e, elapsed, out)
 			}
@@ -114,5 +135,21 @@ func TestHookDropsFailedProcessMetadataWithinBounds(t *testing.T) {
 				t.Fatalf("failed metadata emitted activity: %v", e)
 			}
 		})
+	}
+}
+
+// The hook's 1-second alarm is armed before any other import, so a slow
+// interpreter start-up spends the hook's own budget rather than the agent's.
+func TestActivityHookArmsAlarmFirst(t *testing.T) {
+	i := strings.Index(activityHookScript, "python3 -c '\n")
+	if i < 0 {
+		t.Fatal("no inline python in the activity hook")
+	}
+	body := activityHookScript[i+len("python3 -c '\n"):]
+	if !strings.HasPrefix(body, "import signal; signal.alarm(1)\n") {
+		t.Fatalf("inline python starts with %q, want the alarm first", body[:60])
+	}
+	if strings.Count(activityHookScript, "signal.alarm(") != 1 {
+		t.Error("the alarm must be armed exactly once")
 	}
 }
