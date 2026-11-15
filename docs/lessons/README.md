@@ -1,5 +1,5 @@
 ---
-last-verified: 2026-11-14
+last-verified: 2026-11-15
 ---
 
 # Lessons
@@ -40,3 +40,5 @@ New lessons are added here as they are written.
 | Lesson | Date | Components |
 |--------|------|------------|
 | [[docs/lessons/_template]] (lesson template) | — | — |
+| [[docs/lessons/live-check-the-path-the-old-system-never-took]] | 2026-11-15 | [[docs/daemon/README]] |
+| [[docs/lessons/read-ported-behaviour-from-the-code-before-expecting-it]] | 2026-11-15 | [[docs/daemon/README]] |

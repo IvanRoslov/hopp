@@ -35,8 +35,7 @@ There is no deployment: hopp runs from `bin/hopp` on the author's machine, and a
 
 ## 3. Domain-specific tooling
 
-<TODO: the stores and services the business logic runs on, and how to inspect them while
-building — the queries, CLIs, and dashboards you actually use to see what happened.>
+The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without writing while the daemon runs with `sqlite3 -readonly ~/.hopp/hopp.db '<query>'`; when the daemon is stopped, open it as `sqlite3 "file:$HOME/.hopp/hopp.db?immutable=1"`. The tables that explain a delivery are `messages` (status, attempts, reason, `delivery_transport`), `claude_deliveries` (the pinned journal boundary and phase of a Claude Code send) and `claude_consumed_records`. An agent's own journal is the evidence of what it received: Claude Code and DeepSeek under `~/.claude/projects/<folder slug>/<session id>.jsonl`, Codex under `~/.codex/sessions/`, Kimi Code under `~/.kimi-code/sessions/`, Pi under `~/.pi/agent/sessions/`.
 
 ## 4. Tests
 
@@ -46,7 +45,7 @@ building — the queries, CLIs, and dashboards you actually use to see what happ
 
 ## 5. Verify the running system
 
-Run `bin/hopp daemon status` (pid and version), then `bin/hopp doctor`. To see a session really run, launch one in a scratch folder with `bin/hopp run <dir> --agent <harness>`, check `bin/hopp ls` and the pane with `tmux capture-pane -p -t '=<id>:'`, then stop it with `bin/hopp kill <id>`. `bin/hopp events --session <id>` shows what happened to it.
+Run `bin/hopp daemon status` (pid and version), then `bin/hopp doctor`. To see a session really run, launch one in a scratch folder with `bin/hopp run <dir> --agent <harness>`, check `bin/hopp ls` and the pane with `tmux capture-pane -p -t '=<id>:'`, then stop it with `bin/hopp kill <id>`. `bin/hopp events --session <id>` shows what happened to it. To see a message travel, run `bin/hopp send --wait <id> '<text>'` (it prints `queued`, `accepted`, any wait reason, and `delivered` or `failed`), `bin/hopp messages <id>` for the history with each message's status and reason, and `bin/hopp events --follow --session <id>` to watch activity and delivery live.
 
 ## Related
 

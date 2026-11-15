@@ -1,5 +1,5 @@
 ---
-last-verified: 2026-11-14
+last-verified: 2026-11-15
 ---
 
 # Inbox
@@ -12,4 +12,4 @@ Drop notes as `docs/inbox/<short-name>.md`. Don't let them accumulate — an ite
 
 <!-- Add notes here as wikilinks, e.g. a line linking docs/inbox/some-research with a short description. -->
 
-- [[docs/inbox/design-discussion-2026-11-14]] — first design discussion: why a new version, what is decided, what was read in the old rocket, open questions.
+- [[docs/inbox/design-discussion-2026-11-14]] — the one open design item: splitting harness and provider in the profile.

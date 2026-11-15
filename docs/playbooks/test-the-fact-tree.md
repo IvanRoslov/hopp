@@ -45,11 +45,11 @@ Lessons in [[docs/lessons/README]] record what agents got wrong in practice. Eac
 
 ## Golden set
 
-Checked against the code at commit `8fe30c5` (2026-11-15). Run all of them after any change to the root, and each one after a change to an area it touches.
+Checked against the code at commit `a01bc9a` (2026-11-15). Run all of them after any change to the root, and each one after a change to an area it touches.
 
 1. **Can hopp destroy a tmux session that has the same name as one of its sessions but was started by someone else?** No. Before every destroy hopp checks that the tmux session's environment carries `HOPP_SESSION_ID` equal to the session id; otherwise it leaves the tmux session running and marks its own session `errored` with reason `tmux_not_owned`. Code: `internal/session` (`destroyOwned` in `kill.go`).
 2. **What happens to running sessions when the hopp daemon is stopped and started again?** They keep running; stopping the daemon never stops a session. On start the daemon reconciles: a session whose tmux is gone becomes `errored` (`tmux_missing`), one whose folder is gone becomes `errored` (`dir_missing`) and its tmux is left alone. Code: `internal/session` (`reconcile.go`).
-3. **Can one agent send a message to another through hopp today?** No: there is no send command and no delivery queue on `main`; the delivery transports are ported but not wired. Code: `internal/socketmsg`, `internal/nativeinput`, `internal/claudeinstance`.
+3. **Can one agent send a message to another through hopp today?** Yes: `hopp send <id> <text>` (from inside a session the sender is that session) stores the message and returns at once; delivery runs in the background over the recipient harness's transport (Claude Code socket for Claude Code and DeepSeek, Pi's socket channel, typing into the pane for Codex and Kimi Code), and `--wait` follows it to `delivered` or `failed`. Code: `internal/queue`, `internal/api`, `internal/cli`.
 4. **What is the tmux session of a hopp session named, and why?** Exactly the session id, because the ported Claude Code delivery code finds an agent's pane by its session id. Code: `internal/session`.
 5. **Where does hopp keep its state, and does it share anything with rocket at run time?** In `~/.hopp` (database, socket, pid file, logs). It shares only the lock files on `~/.claude.json` and Codex's `config.toml`, taken under rocket's names so the two programs never write those files at once. Code: `internal/config`, `internal/agent/claudecode`, `internal/agent/codex`.
 

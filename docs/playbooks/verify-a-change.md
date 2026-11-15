@@ -1,5 +1,5 @@
 ---
-last-verified: 2026-11-14
+last-verified: 2026-11-15
 ---
 
 # Verify a change
@@ -30,6 +30,9 @@ Why: [staleness that does not announce itself](https://github.com/lepsto/lepsto-
 **When two people disagree, compare sources first.** Name the artefact each of you read before arguing the conclusion.
 Why: [staleness that does not announce itself](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/staleness-that-does-not-announce-itself.md)
 
+**Read a ported behaviour before you expect it.** An expectation about code carried over from another system goes into a plan or a test only after you have read it in that system's code or docs, quoted. An assumed expectation turns an inherited behaviour into a false regression.
+Why: [[docs/lessons/read-ported-behaviour-from-the-code-before-expecting-it]]
+
 **"Pre-existing" means reproduced on the commit before the suspect change.** Reproducing a failure on current `main` only rules out your own branch. Bisect `<suspect>^` against `<suspect>`.
 Why: [a stub that answers everything hides the screen it broke](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/a-stub-that-answers-everything-hides-the-screen-it-broke.md)
 
@@ -48,6 +51,9 @@ Why: [a stub that answers everything hides the screen it broke](https://github.c
 Why: [template-literal absolute paths evade grep](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/fed-003-template-literal-absolute-paths-evade-grep.md)
 
 ## Before you call it done
+
+**Check live the flows the old system never took.** A ported suite proves only the flows the old system used. List the uses your design makes ordinary that the old flow avoided (a launch without a prompt, a restart at an odd moment) and run each one live before you call the port done.
+Why: [[docs/lessons/live-check-the-path-the-old-system-never-took]]
 
 **Every check needs a case on which it must go red.** A check that only ever reports "clean" cannot be told apart from one that measures nothing. Keep the red case next to the check as a test. Never accept a proxy as evidence.
 Why: [checks that are empty by construction](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/checks-that-are-empty-by-construction.md)

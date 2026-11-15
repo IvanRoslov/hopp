@@ -3,7 +3,7 @@
 Read this whole. Each fact links one level down; follow only the branches your task touches. The rules for reading and writing the tree are in `CLAUDE.md`.
 
 1. hopp: A harness for orchestrating AI agents. What it is for, who uses it and how it ships. → [[docs/overview]]
-2. daemon: The daemon manages tmux sessions that run agents; letting the agents message each other is designed but not built yet. The daemon and its CLI are one program named `hopp`, so the old rocket keeps working while hopp is built. → [[docs/daemon/README]]
+2. daemon: The daemon manages tmux sessions that run agents and delivers messages between them, watching what each agent does and telling a parent when a child is stuck. The daemon and its CLI are one program named `hopp`, so the old rocket keeps working while hopp is built. → [[docs/daemon/README]]
 3. The hard rules you must never break are a reference list outside the tree. → [[docs/invariants]]
 4. Which tool to use to build, test and ship. → [[docs/agent-toolbox]]
 5. Step-by-step runbooks for recurring operations, including the standing rules for proving a change and for running parallel workers. → [[docs/playbooks/README]]
