@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/IvanRoslov/hopp/internal/activity"
 	"github.com/IvanRoslov/hopp/internal/agent"
 	"github.com/IvanRoslov/hopp/internal/claudeinstance"
@@ -110,21 +111,33 @@ func (m *Monitor) resolveClaude(ctx context.Context, sess store.Session) claudeR
 	}
 	return res
 }
-func (m *Monitor) PushClaudeUpdate(ctx context.Context, sessionID string, state activity.State, event claudeinstance.HookEvent) {
+
+// PushClaudeUpdate applies a qualified hook update and returns "" when it
+// took it, else why it dropped it: "unknown session", "not a Claude
+// session", "resolve not verified: <reason>", "hook validation failed:
+// <check>", "stale" (not newer than the last accepted hook), "binding
+// refused" (the binding moved on meanwhile) or "store error: <err>".
+func (m *Monitor) PushClaudeUpdate(ctx context.Context, sessionID string, state activity.State, event claudeinstance.HookEvent) string {
 	sess, e := m.st.GetSession(sessionID)
-	if e != nil || !m.isClaude(sess) {
-		return
+	if e != nil {
+		return "unknown session"
+	}
+	if !m.isClaude(sess) {
+		return "not a Claude session"
 	}
 	r := m.resolveClaude(ctx, sess)
 	if r.State != claudeinstance.Verified {
-		return
+		return fmt.Sprintf("resolve not verified: %s", r.Reason)
 	}
-	if claudeinstance.ValidateHook(ctx, r.Identity, event, string(state), 0, time.Now(), m.claudeProbe) != nil {
-		return
+	if err := claudeinstance.ValidateHook(ctx, r.Identity, event, string(state), 0, time.Now(), m.claudeProbe); err != nil {
+		return "hook validation failed: " + err.Error()
+	}
+	if event.At <= r.observation.eventAt {
+		return "stale"
 	}
 	sess, e = m.st.GetSession(sessionID)
 	if e != nil {
-		return
+		return "unknown session"
 	}
 	next := string(state)
 	if state == activity.Exited {
@@ -140,8 +153,11 @@ func (m *Monitor) PushClaudeUpdate(ctx context.Context, sessionID string, state 
 		}
 	} // SessionEnd != OS death.
 	ok, e := m.st.AcceptClaudeHookForBinding(ctx, r.observation.target, r.observation.revision, event.At, next, event.At/int64(time.Second))
-	if e != nil || !ok {
-		return
+	if e != nil {
+		return "store error: " + e.Error()
+	}
+	if !ok {
+		return "binding refused"
 	}
 	m.mu.Lock()
 	delete(m.cache, sessionID)
@@ -150,6 +166,7 @@ func (m *Monitor) PushClaudeUpdate(ctx context.Context, sessionID string, state 
 	if next != "" && next != sess.Activity {
 		m.bus.Publish("session.activity_changed", sessionID, map[string]any{"from": sess.Activity, "to": next, "source": "claude-qualified-hook"})
 	}
+	return ""
 }
 func (m *Monitor) applyClaude(ctx context.Context, sess store.Session, observation claudeObservation, state activity.State, ts time.Time, source string) {
 	if state == activity.Ready && time.Since(ts) > m.cfg.ReadyToIdle {

@@ -64,12 +64,13 @@ type quizToolInput struct {
 func handlePostInternalQuiz(w http.ResponseWriter, r *http.Request, d Deps) {
 	var req postInternalQuizRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		slog.Default().Warn("internal quiz: malformed request body", "error", err)
+		logHook("quiz", "", "", "", "bad body")
 		writeErr(w, http.StatusBadRequest, "bad_payload", "invalid JSON body")
 		return
 	}
 
 	if req.Phase != "pending" && req.Phase != "resolved" {
+		logHook("quiz", req.Session, req.Phase, "", "invalid phase")
 		writeErr(w, http.StatusBadRequest, "invalid_phase", "phase must be \"pending\" or \"resolved\"")
 		return
 	}
@@ -77,9 +78,11 @@ func handlePostInternalQuiz(w http.ResponseWriter, r *http.Request, d Deps) {
 	sess, err := d.Store.GetSession(req.Session)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			logHook("quiz", req.Session, req.Phase, "", "unknown session")
 			writeErr(w, http.StatusNotFound, "session_not_found", "session not found")
 			return
 		}
+		logHook("quiz", req.Session, req.Phase, "", "store error: "+err.Error())
 		writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
@@ -88,14 +91,14 @@ func handlePostInternalQuiz(w http.ResponseWriter, r *http.Request, d Deps) {
 	case "pending":
 		var envelope hookToolInputEnvelope
 		if err := json.Unmarshal(req.Payload, &envelope); err != nil || len(envelope.ToolInput) == 0 {
-			slog.Default().Warn("internal quiz: payload missing tool_input", "session", req.Session)
+			logHook("quiz", req.Session, req.Phase, "", "payload missing tool_input")
 			writeErr(w, http.StatusBadRequest, "bad_payload", "payload missing tool_input")
 			return
 		}
 
 		var toolInput quizToolInput
 		if err := json.Unmarshal(envelope.ToolInput, &toolInput); err != nil || len(toolInput.Questions) == 0 {
-			slog.Default().Warn("internal quiz: tool_input missing questions", "session", req.Session)
+			logHook("quiz", req.Session, req.Phase, "", "tool_input missing questions")
 			writeErr(w, http.StatusBadRequest, "bad_payload", "tool_input missing questions")
 			return
 		}
@@ -109,15 +112,18 @@ func handlePostInternalQuiz(w http.ResponseWriter, r *http.Request, d Deps) {
 		}
 		quizJSON, err := json.Marshal(quiz)
 		if err != nil {
+			logHook("quiz", req.Session, req.Phase, "", "store error: "+err.Error())
 			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
 
 		if err := d.Store.SetPendingQuiz(req.Session, string(quizJSON)); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
+				logHook("quiz", req.Session, req.Phase, "", "unknown session")
 				writeErr(w, http.StatusNotFound, "session_not_found", "session not found")
 				return
 			}
+			logHook("quiz", req.Session, req.Phase, "", "store error: "+err.Error())
 			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
@@ -148,6 +154,7 @@ func handlePostInternalQuiz(w http.ResponseWriter, r *http.Request, d Deps) {
 		// monitor wrote in between is not wiped either.
 		cleared, err := d.Store.CompareAndSwapPendingQuiz(req.Session, sess.PendingQuiz, "")
 		if err != nil {
+			logHook("quiz", req.Session, req.Phase, "", "store error: "+err.Error())
 			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
 		}
@@ -157,5 +164,6 @@ func handlePostInternalQuiz(w http.ResponseWriter, r *http.Request, d Deps) {
 		}
 	}
 
+	logHook("quiz", req.Session, req.Phase, "", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

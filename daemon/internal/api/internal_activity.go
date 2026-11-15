@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -40,31 +41,41 @@ func handlePostInternalActivity(w http.ResponseWriter, r *http.Request, d Deps) 
 	var req postInternalActivityRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, claudeinstance.MaxHookBytes))
 	if err := decoder.Decode(&req); err != nil {
+		logHook("activity", "", "", "", "bad body")
 		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
 	}
 
 	if decoder.Decode(new(any)) != io.EOF {
+		logHook("activity", "", "", "", "bad body")
 		writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
 	}
 
+	event := ""
+	if req.Claude != nil {
+		event = req.Claude.HookEventName
+	}
 	state := activity.State(req.State)
 	if !state.Valid() {
+		logHook("activity", req.Session, event, req.State, "invalid state")
 		writeErr(w, http.StatusBadRequest, "invalid_state", "invalid activity state")
 		return
 	}
 
 	if d.Monitor == nil {
+		logHook("activity", req.Session, event, req.State, "monitor unavailable")
 		writeErr(w, http.StatusServiceUnavailable, "monitor_unavailable", "activity monitor unavailable")
 		return
 	}
 
 	if _, err := d.Store.GetSession(req.Session); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
+			logHook("activity", req.Session, event, req.State, "unknown session")
 			writeErr(w, http.StatusNotFound, "session_not_found", "session not found")
 			return
 		}
+		logHook("activity", req.Session, event, req.State, "store error: "+err.Error())
 		writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
@@ -75,10 +86,29 @@ func handlePostInternalActivity(w http.ResponseWriter, r *http.Request, d Deps) 
 	}
 
 	if req.Claude != nil {
-		d.Monitor.PushClaudeUpdate(r.Context(), req.Session, state, *req.Claude)
+		logHook("activity", req.Session, event, req.State, d.Monitor.PushClaudeUpdate(r.Context(), req.Session, state, *req.Claude))
 	} else {
 		d.Monitor.PushUpdate(req.Session, state, ts)
+		logHook("activity", req.Session, event, req.State, "")
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// logHook writes the one log line of a hook post: "hook accepted" at Debug
+// when reason is empty, else "hook rejected" with the reason at Info, so a
+// dropped Claude hook leaves a trace. It never logs a hook's payload.
+func logHook(route, session, event, state, reason string) {
+	attrs := []any{"route", route, "session", session}
+	if event != "" {
+		attrs = append(attrs, "event", event)
+	}
+	if state != "" {
+		attrs = append(attrs, "state", state)
+	}
+	if reason == "" {
+		slog.Debug("hook accepted", attrs...)
+		return
+	}
+	slog.Info("hook rejected", append(attrs, "reason", reason)...)
 }
