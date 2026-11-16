@@ -86,6 +86,21 @@ bin/hopp tools guide                          # how to add a tool
 bin/hopp tools import <registry.yaml> [--update]   # from rocket's format; the file is only read
 ```
 
+Posts, notes to the human that wait for no answer (from an agent, or the human's own with `--from ""`):
+
+```bash
+bin/hopp post "<text>" [--label k=v] [--attach <path|url|name@version>]   # or -f <file>, or stdin; prints the id
+bin/hopp posts [--label k=v] [--from <id>] [--after <id>] [--limit <n>]
+```
+
+Artifacts, files kept in immutable versions (scope: the root of `$HOPP_SESSION_ID`'s tree, or `--scope`):
+
+```bash
+bin/hopp artifact publish <file> [--name <n>] [--label k=v] [--scope <s>]   # prints name@version
+bin/hopp artifacts [--all-versions] [--label k=v] [--scope <s>]
+bin/hopp artifact get <name>[@<version>] [--scope <s>]                       # prints the stored path
+```
+
 Lessons, from an agent or the human:
 
 ```bash
