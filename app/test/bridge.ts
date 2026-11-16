@@ -5,6 +5,11 @@ import { vi } from 'vitest';
 import type { HoppBridge } from '../src/shared/bridge';
 import type {
   Lesson,
+  Pipeline,
+  PipelineInput,
+  Post,
+  SubmissionAnswer,
+  TaskFeed,
   LongAgent,
   ModelProfile,
   Project,
@@ -29,7 +34,7 @@ export function makeProject(slug: string, over: Partial<Project> = {}): Project 
 export function makeTask(id: string, projectSlug: string, over: Partial<Task> = {}): Task {
   return {
     id, projectSlug, title: id, brief: 'Do ' + id, sessionId: id, dir: '/tmp/work/' + id, branch: null,
-    orchestratorProfile: 'claude-opus', workerProfiles: [], status: 'active', hidden: false, createdAt: 1, finishedAt: 0, ...over,
+    orchestratorProfile: 'claude-opus', workerProfiles: [], pipeline: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0, ...over,
   };
 }
 
@@ -55,12 +60,14 @@ export interface ShellSeed {
   lessons?: Lesson[];
   mail?: Record<string, number>;
   folders?: (string | null)[];
+  feeds?: Record<string, TaskFeed>;
+  artifactTexts?: Record<number, string>;
 }
 
 // fakeShell keeps a ShellState in memory and applies changes the way the main
 // process does, so forms and lists can be tested end to end on the page.
 export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] = () => [], asks: () => Ask[] = () => []) {
-  const st: ShellState = { projects: [], tasks: [], agents: [], ...seed.state };
+  const st: ShellState = { projects: [], tasks: [], agents: [], pipelines: [], ...seed.state };
   const cbs = new Set<(s: ShellState) => void>();
   const snapshot = (): ShellState => structuredClone(st);
   const changed = () => cbs.forEach((cb) => cb(snapshot()));
@@ -80,8 +87,84 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
     return ok(slug);
   };
 
+  const feeds: Record<string, TaskFeed> = structuredClone(seed.feeds ?? {});
+  const feedCbs = new Set<(taskId: string) => void>();
+  const feedChanged = (taskId: string) => feedCbs.forEach((cb) => cb(taskId));
+  const feedOf = (taskId: string) => (feeds[taskId] ??= { posts: [], asks: [], artifacts: [] });
+  let postId = 1000;
+  let stageId = 1;
+
+  const validatePipeline = (input: PipelineInput, current?: string): Result<null> => {
+    if (!input.name.trim()) return fail('name_required', 'Name the pipeline.', 'name');
+    if (st.pipelines.some((p) => p.id !== current && p.name === input.name.trim())) return fail('name_taken', 'A pipeline with this name exists.', 'name');
+    if (input.stages.length === 0) return fail('stages_required', 'Add at least one stage.', 'stages');
+    const empty = input.stages.findIndex((x) => !x.name.trim());
+    if (empty >= 0) return fail('stage_name_required', 'Name every stage.', `stages.${empty}.name`);
+    return ok(null);
+  };
+  const toPipeline = (input: PipelineInput, id: string, createdAt: number): Pipeline => ({
+    id,
+    name: input.name.trim(),
+    stages: input.stages.map((x) => ({ ...x, id: x.id ?? 'st' + stageId++, name: x.name.trim() })),
+    createdAt,
+    updatedAt: clock++,
+  });
+
   const shell = {
     state: vi.fn(async () => snapshot()),
+    createPipeline: vi.fn(async (input: PipelineInput) => {
+      const v = validatePipeline(input);
+      if (!v.ok) return v;
+      const p = toPipeline(input, 'pl' + clock, clock++);
+      st.pipelines.push(p);
+      changed();
+      return ok(p);
+    }),
+    updatePipeline: vi.fn(async (id: string, input: PipelineInput) => {
+      const i = st.pipelines.findIndex((p) => p.id === id);
+      if (i < 0) return fail('pipeline_not_found', 'No such pipeline.');
+      const v = validatePipeline(input, id);
+      if (!v.ok) return v;
+      const p = toPipeline(input, id, st.pipelines[i]!.createdAt);
+      st.pipelines[i] = p;
+      changed();
+      return ok(p);
+    }),
+    removePipeline: vi.fn(async (id: string) => {
+      st.pipelines = st.pipelines.filter((p) => p.id !== id);
+      changed();
+      return ok(null);
+    }),
+    taskFeed: vi.fn(async (taskId: string) => structuredClone(feedOf(taskId))),
+    onFeedChanged: (cb: (taskId: string) => void) => {
+      feedCbs.add(cb);
+      return () => feedCbs.delete(cb);
+    },
+    postToTask: vi.fn(async (taskId: string, text: string, stage?: string) => {
+      if (!text.trim()) return fail('text_required', 'Write something first.', 'text');
+      const post: Post = { id: postId++, from: '', labels: stage ? { 'hopp.task': taskId, 'hopp.stage': stage } : { 'hopp.task': taskId }, body: text, attachments: [], created_at: Math.floor(Date.now() / 1000) };
+      feedOf(taskId).posts.push(post);
+      feedChanged(taskId);
+      return ok(post);
+    }),
+    answerSubmission: vi.fn(async (askId: number, answer: SubmissionAnswer) => {
+      for (const [taskId, f] of Object.entries(feeds)) {
+        const a = f.asks.find((x) => x.id === askId);
+        if (!a) continue;
+        if (a.status !== 'open') return fail('ask_closed', 'This was already answered.');
+        a.status = 'answered';
+        a.choice = answer.choice;
+        if (answer.choice === 'Return') a.answer = answer.text;
+        a.closed_at = Math.floor(Date.now() / 1000);
+        feedChanged(taskId);
+        return ok(structuredClone(a));
+      }
+      return fail('ask_not_found', 'No such submission.');
+    }),
+    artifactUrl: (id: number) => 'hopp-artifact://' + id,
+    artifactText: vi.fn(async (id: number) =>
+      seed.artifactTexts && id in seed.artifactTexts ? ok(seed.artifactTexts[id]!) : fail('not_text', 'This artifact is not text.'),
+    ),
     onChanged: (cb: (s: ShellState) => void) => {
       cbs.add(cb);
       return () => cbs.delete(cb);
@@ -126,7 +209,9 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
         return fail('session_taken', `A session named ${id} exists.`, 'sessionName');
       const task: Task = {
         id, projectSlug: input.projectSlug, title, brief: input.brief, sessionId: id, dir: '/tmp/work/' + id, branch: null,
-        orchestratorProfile: input.orchestratorProfile, workerProfiles: input.workerProfiles, status: 'active', hidden: false,
+        orchestratorProfile: input.orchestratorProfile, workerProfiles: input.workerProfiles,
+        pipeline: input.pipelineId ? structuredClone(st.pipelines.find((p) => p.id === input.pipelineId) ?? null) : null,
+        status: 'active', hidden: false,
         createdAt: clock++, finishedAt: 0,
       };
       st.tasks.push(task);
@@ -192,6 +277,8 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
   return {
     shell,
     st,
+    feeds,
+    feedChanged,
     set(next: Partial<ShellState>) {
       Object.assign(st, next);
       changed();
@@ -250,6 +337,8 @@ export function fakeBridge(
     db,
     shell: fs?.shell,
     shellState: fs?.st,
+    feeds: fs?.feeds,
+    feedChanged: fs?.feedChanged,
     setShell: fs?.set,
     setState(s: StreamState) {
       db.state = s;

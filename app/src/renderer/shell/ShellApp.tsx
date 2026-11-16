@@ -92,7 +92,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
         <aside className="side" data-testid="zone-left">
           <Brand />
         </aside>
-        <main className="work">
+        <main className="work" data-testid="zone-right">
           {load.status === 'error' ? (
             <div className="empty-center" role="alert">
               <div>
@@ -108,21 +108,23 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
     );
   }
 
+  const daemonNotice = stream === 'down' ? <DaemonNotice daemon={bridge.daemon} /> : null;
+
   // No project, no work: only "Create your first project".
   if (state.projects.length === 0) {
     return (
       <div className="app">
         <aside className="side" data-testid="zone-left">
           <Brand />
+          <div className="side-scroll">{daemonNotice}</div>
         </aside>
-        <main className="work">
+        <main className="work" data-testid="zone-right">
           <ProjectForm shell={bridge.shell} first onDone={(p) => setRoute({ k: 'newTask', project: p.slug })} />
         </main>
       </div>
     );
   }
 
-  const daemonNotice = stream === 'down' ? <DaemonNotice daemon={bridge.daemon} /> : null;
   let view: React.ReactNode;
   switch (route.k) {
     case 'task': {
@@ -219,7 +221,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
         sessionsError={sessionsError}
         daemonNotice={daemonNotice}
       />
-      <main className="work">{view}</main>
+      <main className="work" data-testid="zone-right">{view}</main>
     </div>
   );
 }

@@ -65,7 +65,7 @@ describe('ownerOf and waitingRows', () => {
     makeSession('cto'),
     makeSession('stray'),
   ];
-  const state = { projects, tasks, agents };
+  const state = { projects, tasks, agents, pipelines: [] };
 
   it('finds the task through the label or the parent chain, and agents by name', () => {
     expect(ownerOf('fix-api', state, sessions)).toEqual({ kind: 'task', id: 'fix-api' });
@@ -107,12 +107,12 @@ describe('workGroups and recentTasks', () => {
       makeTask('t5', 'a', { hidden: true }),
       makeTask('t6', 'c', { status: 'finished', finishedAt: 20 }),
     ];
-    const g = workGroups({ projects, tasks, agents: [] });
+    const g = workGroups({ projects, tasks, agents: [], pipelines: [] });
     expect(g.map((x) => [x.project.slug, x.tasks.map((t) => t.id)])).toEqual([
       ['a', ['t3', 't2']],
       ['b', ['t1']],
     ]);
-    expect(recentTasks({ projects, tasks, agents: [] }).map((t) => t.id)).toEqual(['t6', 't4']);
+    expect(recentTasks({ projects, tasks, agents: [], pipelines: [] }).map((t) => t.id)).toEqual(['t6', 't4']);
   });
 });
 

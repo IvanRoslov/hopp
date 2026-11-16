@@ -125,7 +125,7 @@ export function WorkView(props: {
   const options = props.tree.map((s) => ({ value: s.id, label: `${s.id} · ${sessionWord(s)}`, dim: !(s.state === 'running' || s.state === 'spawning') }));
 
   return (
-    <div className={'task' + (open ? ' q-open' : '')} data-testid="zone-right">
+    <div className={'task' + (open ? ' q-open' : '')} data-testid="work-view">
       <div className="top task-top">
         <span className="name" title={props.title}>
           {props.title}
