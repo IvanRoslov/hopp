@@ -3,7 +3,7 @@
 // keeps only what the daemon cannot know; a task's state on screen comes from
 // its sessions.
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import type {
   LongAgent,
@@ -85,8 +85,19 @@ async function isDir(p: string): Promise<boolean> {
 
 async function writeAtomic(path: string, text: string): Promise<void> {
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmp, text, { mode: 0o644 });
-  await rename(tmp, path);
+  const f = await open(tmp, 'w', 0o644);
+  try {
+    await f.writeFile(text);
+    await f.sync();
+  } finally {
+    await f.close();
+  }
+  try {
+    await rename(tmp, path);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
 }
 
 // taskTitle: the given title, else the brief's first line cut to 60.

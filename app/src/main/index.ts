@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, session } from 'electron';
 import { ARTIFACT_SCHEME, artifactIdOf, SHELL_FEED_CHANGED } from '../shared/ipc';
@@ -20,6 +21,21 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const hoppHome = resolveHoppHome(process.env);
+
+// One app per hopp home: a second launch focuses the first window instead of
+// running a second process that would overwrite the first one's store. With
+// an explicit HOPP_HOME (tests, a second home) the app keeps its own data
+// there, so it locks per home and never collides with the everyday app.
+if (process.env['HOPP_HOME']) app.setPath('userData', join(hoppHome, 'app-data'));
+const primary = app.requestSingleInstanceLock();
+if (!primary) app.quit();
+app.on('second-instance', () => {
+  const w = BrowserWindow.getAllWindows()[0];
+  if (!w) return;
+  if (w.isMinimized()) w.restore();
+  w.show();
+  w.focus();
+});
 const socketPath = resolveSocketPath(process.env);
 const client = new DaemonClient(socketPath);
 
@@ -63,6 +79,7 @@ const shellService = new ShellService({
 });
 
 app.whenReady().then(() => {
+  if (!primary) return;
   // No remote content: refuse every permission request from the page.
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   registerIpc({
