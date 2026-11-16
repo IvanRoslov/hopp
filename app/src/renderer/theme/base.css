@@ -278,8 +278,8 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .pl-list .c-btn { margin-top: 12px; }
 .pl-list .dirty { color: var(--muted); }
 .pl-edit { flex: 1; min-width: 0; max-width: 760px; }
-.pl-stage { background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-l); padding: 18px 18px 16px; margin-top: 18px; display: grid; gap: 10px; }
-[data-theme='light'] .pl-stage { background: var(--raise); }
+.pl-stage { background: var(--field); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-l); padding: 18px 18px 16px; margin-top: 18px; display: grid; gap: 10px; }
+.pl-stage .field input, .pl-stage .field textarea { background: var(--bg); }
 .pl-stage .head-row { display: flex; gap: 8px; align-items: flex-end; }
 .pl-stage .head-row .field { flex: 1; min-width: 0; }
 .pl-stage .head-row .tools { display: flex; gap: 6px; padding-bottom: 2px; }
