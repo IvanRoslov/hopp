@@ -76,6 +76,9 @@ const (
 
 var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
+// ValidName reports whether name may name a tool (and its folder).
+func ValidName(name string) bool { return namePattern.MatchString(name) }
+
 // Dir is the catalog folder of a hopp home.
 func Dir(home string) string { return filepath.Join(home, "tools") }
 
