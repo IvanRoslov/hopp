@@ -13,11 +13,19 @@ export const SLUG_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 export function slugify(name: string, maxLen = 40): string {
   let out = '';
-  for (const ch of name.toLowerCase().normalize('NFKD')) {
-    if (ch in CYRILLIC) out += CYRILLIC[ch];
-    else if (/[a-z0-9]/.test(ch)) out += ch;
-    else if (/[̀-ͯ]/.test(ch)) continue; // combining marks left by NFKD
-    else out += '-';
+  // Cyrillic is looked up before NFKD: NFKD splits й and ё into a base
+  // letter and a combining mark, which would turn "мой" into "moi".
+  for (const whole of name.toLowerCase()) {
+    if (whole in CYRILLIC) {
+      out += CYRILLIC[whole];
+      continue;
+    }
+    for (const ch of whole.normalize('NFKD')) {
+      if (ch in CYRILLIC) out += CYRILLIC[ch];
+      else if (/[a-z0-9]/.test(ch)) out += ch;
+      else if (/[̀-ͯ]/.test(ch)) continue; // combining marks left by NFKD
+      else out += '-';
+    }
   }
   out = out.replace(/-+/g, '-').replace(/^-+/, '');
   if (/^[0-9]/.test(out)) out = 'p-' + out;
