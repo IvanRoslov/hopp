@@ -9,6 +9,7 @@ export type Route =
   | { k: 'task'; id: string; panel?: Panel; session?: string }
   | { k: 'agent'; name: string; panel?: Panel }
   | { k: 'newAgent' }
+  | { k: 'pipelines'; id?: string }
   | { k: 'settings'; tab: SettingsTab };
 
 export type Go = (r: Route) => void;

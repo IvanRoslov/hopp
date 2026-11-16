@@ -1,7 +1,7 @@
 import type { LongAgent, ShellState, Task } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
 import { agentStatus, recentTasks, taskStatus, workGroups, type Status, type WaitingRow } from '../model/shellModel';
-import { LogoMark, PlusIcon, SlidersIcon, ThemeIcon } from '../ui/icons';
+import { LogoMark, PlusIcon, RightIcon, SlidersIcon, ThemeIcon } from '../ui/icons';
 import type { Go, Route } from './route';
 
 export function Mark(props: { status: Status }) {
@@ -98,6 +98,10 @@ export function Side(props: {
         <button type="button" className={'row' + (route.k === 'newTask' ? ' sel' : '')} onClick={() => go({ k: 'newTask' })}>
           <span className="ic"><PlusIcon /></span>
           <span className="t">New task</span>
+        </button>
+        <button type="button" className={'row' + (route.k === 'pipelines' ? ' sel' : '')} onClick={() => go({ k: 'pipelines' })}>
+          <span className="ic"><RightIcon /></span>
+          <span className="t">Pipelines</span>
         </button>
       </div>
       <div className="side-scroll">

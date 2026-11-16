@@ -261,3 +261,34 @@ button.set-row:hover .nm { text-decoration: underline; text-decoration-color: va
 .status-word { color: var(--muted); font-size: var(--fs-small); }
 .set-row button.txt { text-align: left; border-radius: var(--r-s); }
 .set-row button.txt:focus-visible { outline: 2px solid var(--control-focus); outline-offset: 2px; }
+
+/* Checkbox */
+.cb { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-name); color: var(--muted); line-height: 1.6; border-radius: var(--r-s); }
+button.cb:hover { color: var(--text); }
+button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offset: 3px; }
+.cb-box { width: 14px; height: 14px; flex: none; border: 1px solid var(--control-border); border-radius: 3px; display: grid; place-items: center; background: transparent; color: var(--bg); }
+.cb-box.on { background: var(--text); border-color: var(--text); }
+.cb.readonly .cb-box.on { background: var(--muted); border-color: var(--muted); }
+.cb-row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px; }
+
+/* Pipelines editor */
+.pl-layout { display: flex; gap: 40px; max-width: 1010px; margin: 0 auto; padding-top: 12px; align-items: flex-start; }
+.pl-list { width: 210px; flex: none; position: sticky; top: 0; }
+.pl-list .row { font-size: var(--fs-name); }
+.pl-list .c-btn { margin-top: 12px; }
+.pl-list .dirty { color: var(--muted); }
+.pl-edit { flex: 1; min-width: 0; max-width: 760px; }
+.pl-stage { background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-l); padding: 18px 18px 16px; margin-top: 18px; display: grid; gap: 10px; }
+[data-theme='light'] .pl-stage { background: var(--raise); }
+.pl-stage .head-row { display: flex; gap: 8px; align-items: flex-end; }
+.pl-stage .head-row .field { flex: 1; min-width: 0; }
+.pl-stage .head-row .tools { display: flex; gap: 6px; padding-bottom: 2px; }
+.pl-empty { color: var(--muted); font-size: var(--fs-name); padding: 40px 0; }
+
+/* Pipeline preview in New task */
+.pl-preview { margin-top: 6px; }
+.pl-chain { font-size: var(--fs-small); color: var(--muted); padding: 4px 8px 12px; line-height: 1.6; }
+.pl-preview-stage { padding: 12px 0 12px; border-bottom: 1px solid var(--line); }
+.pl-preview-stage .nm { font-size: var(--fs-name); }
+.pl-preview-stage .ds { font-size: var(--fs-small); color: var(--muted); margin-top: 2px; white-space: pre-wrap; }
+.add-stage { margin-top: 18px; }
