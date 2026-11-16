@@ -75,7 +75,8 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
   let tools: ToolCatalog = seed.tools ?? { tools: [], broken: [] };
   let rules: ToolRules = seed.rules ?? { text: '', modifiedAt: 0 };
   let lessons: Lesson[] = seed.lessons ?? [];
-  let clock = Date.now();
+  // The main process stores times in Unix seconds.
+  let clock = Math.floor(Date.now() / 1000);
 
   const validateProject = (input: ProjectInput, current?: string): Result<string> => {
     if (!input.name.trim()) return fail('name_required', 'Give the project a name.', 'name');

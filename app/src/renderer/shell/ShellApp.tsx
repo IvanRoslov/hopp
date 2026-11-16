@@ -14,6 +14,7 @@ import { ProjectForm } from './ProjectForm';
 import type { Route } from './route';
 import { Settings } from './Settings';
 import { Brand, Side } from './Side';
+import { SideResizer, useSideWidth } from './sideWidth';
 import { TaskView } from './TaskView';
 
 function DaemonNotice(props: { daemon: DaemonBridge }) {
@@ -63,6 +64,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
   const { profiles, error: profilesError } = useProfiles(bridge.shell);
   const [route, setRoute] = useState<Route>({ k: 'newTask' });
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const side = useSideWidth();
 
   useEffect(() => applyTheme(theme), [theme]);
   // Until the human picks a theme, the app follows the system's, live.
@@ -216,7 +218,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
   }
 
   return (
-    <div className="app">
+    <div className="app" style={side.style}>
       <Side
         state={state}
         sessions={sessions}
@@ -229,6 +231,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
         stream={stream}
         sessionsError={sessionsError}
         daemonNotice={daemonNotice}
+        resizer={<SideResizer side={side} />}
       />
       <main className="work" data-testid="zone-right">{view}</main>
     </div>

@@ -284,3 +284,22 @@ describe('menu and theme', () => {
     }
   });
 });
+
+describe('left column width', () => {
+  it('the edge resizes the left column, remembers it, and keeps the terminal', async () => {
+    const f = fakeBridge({ sessions: [makeSession('orc')], shell: { state: { ...base, tasks: [makeTask('t', 'p', { sessionId: 'orc' })] } } });
+    await mount(f);
+    fireEvent.click(screen.getByTestId('task-row'));
+    const mounts = ends.mounts;
+    const sep = screen.getByRole('separator', { name: 'Resize the left column' });
+    fireEvent.keyDown(sep, { key: 'ArrowRight', shiftKey: true });
+    // jsdom has no layout: the width starts from 264.
+    expect(localStorage.getItem('hopp.sideWidth')).toBe('312');
+    expect((sep.closest('.app') as HTMLElement).style.getPropertyValue('--side-w')).toBe('312px');
+    for (let i = 0; i < 10; i++) fireEvent.keyDown(sep, { key: 'ArrowRight', shiftKey: true });
+    expect(localStorage.getItem('hopp.sideWidth')).toBe('420');
+    expect(ends.mounts).toBe(mounts);
+    fireEvent.doubleClick(sep);
+    expect(localStorage.getItem('hopp.sideWidth')).toBeNull();
+  });
+});

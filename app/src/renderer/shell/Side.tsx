@@ -83,6 +83,7 @@ export function Side(props: {
   stream: StreamState;
   sessionsError: string | null;
   daemonNotice: React.ReactNode;
+  resizer?: React.ReactNode;
 }) {
   const { state, sessions, route, go } = props;
   const groups = workGroups(state);
@@ -197,6 +198,7 @@ export function Side(props: {
           </button>
         </div>
       </div>
+      {props.resizer}
     </aside>
   );
 }
