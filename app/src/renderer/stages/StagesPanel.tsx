@@ -92,6 +92,13 @@ export function StagesPanel(props: {
               {isOpen && (
                 <div className="stage-body">
                   {stage.does && <p className="stage-text">{stage.does}</p>}
+                  {loose.length > 0 && (
+                    <div className="sub-arts loose">
+                      {loose.map((a) => (
+                        <ArtifactTile key={a.id} shell={props.shell} artifact={a} onOpen={props.onOpenArtifact} size="feed" />
+                      ))}
+                    </div>
+                  )}
                   {st.substages.map((sub) => {
                     const key = stage.id + '/' + sub.slug;
                     const so = openSub.has(key);
@@ -120,13 +127,6 @@ export function StagesPanel(props: {
                       </div>
                     );
                   })}
-                  {loose.length > 0 && (
-                    <div className="sub-arts">
-                      {loose.map((a) => (
-                        <ArtifactTile key={a.id} shell={props.shell} artifact={a} onOpen={props.onOpenArtifact} size="feed" />
-                      ))}
-                    </div>
-                  )}
                   {st.submission && (
                     <button type="button" className="link-btn stage-link" onClick={() => props.onOpenSubmission(st.submission!.id)}>
                       Submitted · waiting for approval
