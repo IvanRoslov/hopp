@@ -71,6 +71,20 @@ bin/hopp inbox [--mailbox <id>]        # a mailbox's unread messages; inbox next
 
 Inside a session an agent asks with `hopp ask "<text>" [--option <choice>]… [--wait]` and withdraws with `hopp ask withdraw <ask-id>`.
 
+The tool catalog (files under `~/.hopp/tools`; no daemon needed):
+
+```bash
+bin/hopp tools list [--all] [--harness <h>]   # switched-on tools; --all includes switched-off ones
+bin/hopp tools show <name> [--all]            # a tool's card and USAGE.md
+bin/hopp tools rules                          # the human's rules for choosing tools
+bin/hopp tools prompt --harness <h>           # the tools section for a session's start text
+bin/hopp tools enable|disable <name>...
+bin/hopp tools check [<name>]                 # files, command on disk, environment set
+bin/hopp tools path [<name>]                  # where the catalog or a tool lives
+bin/hopp tools guide                          # how to add a tool
+bin/hopp tools import <registry.yaml> [--update]   # from rocket's format; the file is only read
+```
+
 Lessons, from an agent or the human:
 
 ```bash

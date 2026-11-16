@@ -244,3 +244,18 @@ func readFile(t *testing.T, p string) string {
 	}
 	return string(b)
 }
+
+// A broken tool is reported on one line, without decoder internals.
+func TestBrokenErrorIsOneReadableLine(t *testing.T) {
+	home := t.TempDir()
+	writeTool(t, home, "b", "name: b\ndescription: d\ncolour: red\nsize: 2\n", "u")
+	_, broken, _ := Load(home)
+	if len(broken) != 1 {
+		t.Fatalf("broken = %v", broken)
+	}
+	msg := broken[0].Err.Error()
+	if strings.Contains(msg, "\n") || strings.Contains(msg, "toolcatalog") || strings.Contains(msg, "yaml: yaml") ||
+		!strings.Contains(msg, "colour") || !strings.Contains(msg, "size") {
+		t.Errorf("message = %q", msg)
+	}
+}

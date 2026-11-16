@@ -9,9 +9,9 @@ verified: 2026-11-15 — go test ./... on 1ddc9bd, the live delivery checks of a
 
 # daemon
 
-The daemon manages tmux sessions that run agents. On `main` it launches, lists, stops, restores and removes them, delivers messages between them, tracks what each agent is doing, tells a parent when a child needs help, and brings agents' questions to the human.
+The daemon manages tmux sessions that run agents. On `main` it launches, lists, stops, restores and removes them, delivers messages between them, tracks what each agent is doing, tells a parent when a child needs help, and brings agents' questions to the human. The same `hopp` program reads the tool catalog.
 
-1. What the daemon is, what it deliberately does not know (roles, git, scenarios), the one `parent` relation, its own state in `~/.hopp`, and why it is a port of rocket rather than a rewrite. → [[docs/daemon/boundaries]]
+1. What the daemon is, what it deliberately does not know (roles, git, scenarios), the one `parent` relation, its own state in `~/.hopp`, and why it is a port of rocket rather than a rewrite. → [[docs/daemon/boundaries]]; the tool catalog the `hopp` program reads from files without the daemon: which tools exist, how to use them, which are paid or switched off. → [[docs/daemon/tools]]
 2. How a session is launched, named, stopped, restored, reconciled after a daemon restart and removed so its id can be used again, the rule that keeps hopp off tmux sessions that are not its own, and what a launch writes into the folder. → [[docs/daemon/sessions]]; what a child takes from its parent at launch, labels and the folders it may launch in. → [[docs/daemon/children]]
 3. How a message travels from one session to another: the three transports, when it is `accepted` and `delivered`, what holds it back, large messages, mailboxes for a session that is not running, and what the sender learns when it fails. → [[docs/daemon/messaging]]
 4. How the daemon knows what each agent is doing, what a parent is told about a stuck or failed child, and how to follow the event log live. → [[docs/daemon/activity]]

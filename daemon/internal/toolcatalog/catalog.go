@@ -217,15 +217,30 @@ func decodeStrict(data []byte, out any) error {
 	d.KnownFields(true)
 	if err := d.Decode(out); err != nil {
 		if errors.Is(err, io.EOF) {
-			return errors.New("yaml: the file is empty")
+			return errors.New("the file is empty")
 		}
-		return fmt.Errorf("yaml: %w", err)
+		return errors.New(oneLine(err.Error()))
 	}
 	var extra any
 	if err := d.Decode(&extra); !errors.Is(err, io.EOF) {
-		return errors.New("yaml: expected one document")
+		return errors.New("expected one YAML document")
 	}
 	return nil
+}
+
+// oneLine turns a YAML decoder error into one readable line: "line 3:
+// field colour not found; line 4: field size not found".
+func oneLine(msg string) string {
+	msg = strings.ReplaceAll(msg, "unmarshal errors:\n", "")
+	msg = regexp.MustCompile(` in type [A-Za-z0-9_.]+`).ReplaceAllString(msg, "")
+	parts := strings.Split(msg, "\n")
+	space := regexp.MustCompile(`\s+`)
+	for i := range parts {
+		parts[i] = space.ReplaceAllString(strings.TrimSpace(parts[i]), " ")
+	}
+	msg = strings.Join(parts, "; ")
+	msg = strings.TrimPrefix(msg, "yaml: ")
+	return strings.TrimPrefix(msg, "; ")
 }
 
 // AvailableIn reports whether the tool can be used in harness: true when it
