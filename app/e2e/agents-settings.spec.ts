@@ -4,6 +4,15 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeLesson } from '../test/fakeDaemon';
+
+// read: a file's text, or '' while it does not exist yet (for expect.poll).
+const read = (p: string) => {
+  try {
+    return readFileSync(p, 'utf8');
+  } catch {
+    return '';
+  }
+};
 import { World } from './world';
 
 async function firstProject(page: Page) {
@@ -64,13 +73,13 @@ test('settings: a tool switched off, preferences saved, a lesson done', async ()
     const row = page.getByTestId('tool-fetcher');
     await expect(row).toContainText('Fetch a web page as text');
     await row.getByRole('switch').click();
-    await expect.poll(() => readFileSync(join(tool, 'tool.yaml'), 'utf8')).toContain('enabled: false');
+    await expect.poll(() => read(join(tool, 'tool.yaml'))).toContain('enabled: false');
     await row.getByRole('button', { name: /fetcher/ }).click();
     await expect(page.getByText('fetcher URL > page.html')).toBeVisible();
 
     await page.locator('#tool-rules').fill('Video: use local tools.');
     await page.getByRole('button', { name: 'Save preferences' }).click();
-    await expect.poll(() => readFileSync(join(w.home, 'tools', 'rules.md'), 'utf8')).toBe('Video: use local tools.\n');
+    await expect.poll(() => read(join(w.home, 'tools', 'rules.md'))).toBe('Video: use local tools.\n');
     await expect(page.getByText(/^Saved /)).toBeVisible();
 
     await page.getByRole('tab', { name: 'Lessons' }).click().catch(async () => page.getByRole('button', { name: 'Lessons' }).click());
