@@ -241,6 +241,14 @@ describe('task launch', () => {
     expect(again.ok && again.value.id).toBe('fix-the-header-6');
   });
 
+  it('two launches at once get two ids', async () => {
+    const repo = mkRepo('site');
+    await project({ orchestratorRepo: repo });
+    const [a, b] = await Promise.all([svc.createTask(taskInput()), svc.createTask(taskInput())]);
+    expect([a.ok && a.value.id, b.ok && b.value.id]).toEqual(['fix-the-header', 'fix-the-header-2']);
+    expect(branches(repo).sort()).toEqual(['hopp/fix-the-header', 'hopp/fix-the-header-2', 'main']);
+  });
+
   it('uses the session name from More, made unique, and checks it', async () => {
     await project();
     const r = await svc.createTask(taskInput({ sessionName: 'hdr' }));

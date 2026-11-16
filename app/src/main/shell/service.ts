@@ -164,8 +164,14 @@ export class ShellService {
 
   // ---- tasks --------------------------------------------------------------
 
+  // Launches run one at a time, so two launches never pick the same id.
+  private launches: Promise<unknown> = Promise.resolve();
+
   createTask(input: TaskInput): Promise<Result<Task>> {
-    return guard(() => this.launchTask(input));
+    const run = () => guard(() => this.launchTask(input));
+    const p = this.launches.then(run, run);
+    this.launches = p.catch(() => undefined);
+    return p;
   }
 
   private async launchTask(input: TaskInput): Promise<Result<Task>> {
