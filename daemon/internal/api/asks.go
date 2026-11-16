@@ -84,7 +84,16 @@ func registerAskRoutes(mux *http.ServeMux, d Deps) {
 				return
 			}
 		}
-		id, err := d.Store.AddAsk(store.Ask{FromSession: req.From, Labels: req.Labels, Body: req.Body, Options: req.Options, Attachments: req.Attachments})
+		labels, err := writerLabels(d, req.From, req.Labels)
+		if errors.Is(err, errFromUnknown) {
+			writeErr(w, http.StatusBadRequest, "from_unknown", "asking session not found")
+			return
+		}
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+		id, err := d.Store.AddAsk(store.Ask{FromSession: req.From, Labels: labels, Body: req.Body, Options: req.Options, Attachments: req.Attachments})
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return

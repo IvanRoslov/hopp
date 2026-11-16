@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -244,5 +245,55 @@ func TestAnswerWithChoiceAndText(t *testing.T) {
 	list.Asks = nil
 	if e.call(t, "GET", "/v1/asks?label=kind=review", nil, &list); len(list.Asks) != 0 {
 		t.Errorf("open asks by label after the answer: %v", list.Asks)
+	}
+}
+
+// TestAskCreateCopiesSessionLabels: an ask keeps the asking session's labels,
+// overlaid with the request's, exactly as a post does; an ask without a from
+// keeps only the request's labels.
+func TestAskCreateCopiesSessionLabels(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "s1", "labels": map[string]string{"team": "a", "run": "1", "env": "x"}})
+	req := map[string]string{"run": "2", "env": ""}
+	a := createAsk(t, e, map[string]any{"from": "s1", "body": "Q?", "labels": req})
+	p := addPost(t, e, map[string]any{"from": "s1", "body": "P", "labels": req})
+	got := map[string]string{}
+	for k, v := range a["labels"].(map[string]any) {
+		got[k] = v.(string)
+	}
+	if !reflect.DeepEqual(got, p.Labels) || got["team"] != "a" || got["run"] != "2" {
+		t.Errorf("ask labels %v, post labels %v", got, p.Labels)
+	}
+
+	h := createAsk(t, e, map[string]any{"body": "H?", "labels": map[string]string{"run": "9"}})
+	if hl, _ := h["labels"].(map[string]any); len(hl) != 1 || hl["run"] != "9" {
+		t.Errorf("ask without from: labels %v", h["labels"])
+	}
+
+	var out struct {
+		Asks []map[string]any `json:"asks"`
+	}
+	if code := e.call(t, "GET", "/v1/asks?label=team=a", nil, &out); code != 200 || len(out.Asks) != 1 || out.Asks[0]["body"] != "Q?" {
+		t.Fatalf("find by session label: %d %+v", code, out)
+	}
+
+	evs, _ := e.st.ListEvents(0, 0, "s1")
+	found := false
+	for _, ev := range evs {
+		if ev.Type != "ask.created" {
+			continue
+		}
+		found = true
+		if al, _ := ev.Data["ask_labels"].(map[string]any); al["team"] != "a" || al["run"] != "2" {
+			t.Errorf("ask.created ask_labels %v", ev.Data["ask_labels"])
+		}
+	}
+	if !found {
+		t.Error("no ask.created event")
+	}
+
+	var errOut map[string]any
+	if code := e.call(t, "POST", "/v1/asks", map[string]any{"from": "ghost", "body": "x", "labels": map[string]string{"k": "v"}}, &errOut); code != 400 || errCode(errOut) != "from_unknown" {
+		t.Errorf("unknown from: %d %v", code, errOut)
 	}
 }
