@@ -56,7 +56,7 @@ button.row:active { background: var(--tree-pressed); }
 .side-foot .head { padding: 7px 8px 6px; }
 .project-head { font-size: var(--fs-small); line-height: 1.6; color: var(--muted); padding: 12px 8px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .work-group:first-of-type .project-head { padding-top: 0; }
-.side-empty { font-size: var(--fs-small); color: var(--faint); padding: 2px 8px 6px; }
+.side-empty { font-size: var(--fs-small); color: var(--faint); padding: 14px 8px 6px; line-height: 1.5; }
 
 /* A row with a second line (waiting rows, task rows with a state line). */
 .row.two { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; align-content: center; padding: 0 8px; }
