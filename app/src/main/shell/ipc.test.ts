@@ -76,6 +76,22 @@ describe('shell IPC', () => {
     await expect(callShell(svc, '__proto__', [])).rejects.toThrow(/unknown/);
   });
 
+  it('passes every task field through, pipelineId included, and checks it', async () => {
+    const seen: unknown[] = [];
+    const spy = { createTask: async (i: unknown) => (seen.push(i), { ok: true, value: null }) } as unknown as ShellService;
+    const base = { projectSlug: 's', brief: 'b', orchestratorProfile: 'p', workerProfiles: ['p'] };
+    await callShell(spy, 'createTask', [{ ...base, pipelineId: 'development', title: 't', sessionName: 'n', extraSystemPrompt: 'x' }]);
+    await callShell(spy, 'createTask', [{ ...base, pipelineId: null }]);
+    await callShell(spy, 'createTask', [base]);
+    expect(seen).toEqual([
+      { ...base, pipelineId: 'development', title: 't', sessionName: 'n', extraSystemPrompt: 'x' },
+      { ...base, pipelineId: null },
+      base,
+    ]);
+    const bad = (await callShell(spy, 'createTask', [{ ...base, pipelineId: 7 }])) as { ok: boolean; error: { code: string } };
+    expect(bad.error.code).toBe('bad_request');
+  });
+
   it('turns a daemon outage into a result, not a throw', async () => {
     await d.stop();
     const r = (await callShell(svc, 'stopTask', ['x'])) as { ok: boolean };
