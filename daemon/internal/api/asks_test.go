@@ -211,3 +211,38 @@ func TestAskEventsCarryLabels(t *testing.T) {
 		}
 	}
 }
+
+// TestAnswerWithChoiceAndText: a choice may carry text ("Return" plus what
+// to fix); both are stored, both reach the asker, and the closed ask is
+// found again by its labels with status=all.
+func TestAnswerWithChoiceAndText(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "s1"})
+	a := createAsk(t, e, map[string]any{"from": "s1", "body": "Accept?", "options": []string{"Accept", "Return"},
+		"labels": map[string]string{"kind": "review"}})
+	var out map[string]any
+	if code := e.call(t, "POST", askPath(a, "/answer"), map[string]any{"choice": "Return", "answer": "fix the header"}, &out); code != 200 {
+		t.Fatalf("answer: %d %v", code, out)
+	}
+	if out["status"] != "answered" || out["choice"] != "Return" || out["answer"] != "fix the header" {
+		t.Errorf("answered ask = %v", out)
+	}
+	msgs, err := e.st.ListMessages("s1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "Return\nfix the header") {
+		t.Errorf("message to the asker = %+v", msgs)
+	}
+	var list struct {
+		Asks []map[string]any `json:"asks"`
+	}
+	if code := e.call(t, "GET", "/v1/asks?status=all&label=kind=review", nil, &list); code != 200 || len(list.Asks) != 1 ||
+		list.Asks[0]["choice"] != "Return" || list.Asks[0]["answer"] != "fix the header" {
+		t.Errorf("history by label: %d %v", code, list.Asks)
+	}
+	list.Asks = nil
+	if e.call(t, "GET", "/v1/asks?label=kind=review", nil, &list); len(list.Asks) != 0 {
+		t.Errorf("open asks by label after the answer: %v", list.Asks)
+	}
+}
