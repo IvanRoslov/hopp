@@ -55,6 +55,13 @@ describe('shell IPC', () => {
       ['closeLesson', [1.5]],
       ['createAgent', [['a']]],
       ['setToolRules', [undefined]],
+      ['createPipeline', [{ name: 'x', stages: 'no' }]],
+      ['createPipeline', [{ name: 'x', stages: [{ name: 'a', approval: 'yes' }] }]],
+      ['updatePipeline', [1, { name: 'x', stages: [] }]],
+      ['postToTask', ['t', 5]],
+      ['answerSubmission', [1, { choice: 'Maybe' }]],
+      ['answerSubmission', [1, { choice: 'Return' }]],
+      ['artifactText', [-1]],
     ] as [string, unknown[]][]) {
       const r = (await callShell(svc, m, args)) as { ok: boolean; error?: { code: string } };
       expect([m, r.ok, r.error?.code]).toEqual([m, false, 'bad_request']);
@@ -64,6 +71,7 @@ describe('shell IPC', () => {
   it('rejects a malformed call to a plain method, and an unknown method', async () => {
     await expect(callShell(svc, 'listLessons', ['everything'])).rejects.toThrow(/status/);
     await expect(callShell(svc, 'toolUsage', [42])).rejects.toThrow(/text/);
+    await expect(callShell(svc, 'taskFeed', [null])).rejects.toThrow(/text/);
     await expect(callShell(svc, 'constructor', [])).rejects.toThrow(/unknown/);
     await expect(callShell(svc, '__proto__', [])).rejects.toThrow(/unknown/);
   });

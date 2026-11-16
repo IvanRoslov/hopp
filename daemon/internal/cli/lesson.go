@@ -37,7 +37,7 @@ func newLessonCmd() *cobra.Command {
 			"session's id and labels; --label adds or overrides labels.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			body, err := lessonText(cmd, args, file)
+			body, err := noteText(cmd, args, file, "lesson")
 			if err != nil {
 				return err
 			}
@@ -72,9 +72,10 @@ func newLessonCmd() *cobra.Command {
 	return cmd
 }
 
-// lessonText takes the text from exactly one source: the argument, the file,
-// or a stdin that is not a terminal.
-func lessonText(cmd *cobra.Command, args []string, file string) (string, error) {
+// noteText takes the text of a lesson or a post from exactly one source: the
+// argument, the file, or a stdin that is not a terminal. noun names the note
+// in the errors.
+func noteText(cmd *cobra.Command, args []string, file, noun string) (string, error) {
 	var body string
 	switch {
 	case len(args) == 1 && file != "":
@@ -91,7 +92,7 @@ func lessonText(cmd *cobra.Command, args []string, file string) (string, error) 
 		in := cmd.InOrStdin()
 		if f, ok := in.(*os.File); ok {
 			if info, err := f.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
-				return "", &usageError{message: "no lesson text: give it as an argument, with --file, or on stdin"}
+				return "", &usageError{message: "no " + noun + " text: give it as an argument, with --file, or on stdin"}
 			}
 		}
 		b, err := io.ReadAll(in)
@@ -101,7 +102,7 @@ func lessonText(cmd *cobra.Command, args []string, file string) (string, error) 
 		body = string(b)
 	}
 	if strings.TrimSpace(body) == "" {
-		return "", &usageError{message: "the lesson text is empty"}
+		return "", &usageError{message: "the " + noun + " text is empty"}
 	}
 	return body, nil
 }

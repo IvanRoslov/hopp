@@ -3,8 +3,8 @@
 // keeps only what the daemon cannot know; a task's state on screen comes from
 // its sessions.
 import { existsSync } from 'node:fs';
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { isAbsolute, join, relative } from 'node:path';
 import type {
   LongAgent,
   LongAgentInput,
@@ -18,16 +18,19 @@ import type {
   ToolCatalog,
   ToolRules,
   Lesson,
+  Artifact,
   Pipeline,
   PipelineInput,
   Post,
   SubmissionAnswer,
   TaskFeed,
 } from '../../shared/shell';
+import { ACCEPT, LABEL, RETURN } from '../../shared/shell';
 import { SLUG_PATTERN, slugify } from '../../shared/slug';
-import type { Ask, Session, Waiting } from '../../shared/types';
+import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
+import { starterPipelines, validatePipeline } from './pipelines';
 import { fail, MAX_SLUG, validateProject } from './projects';
 import { agentText, allowedRepos, orchestratorText, workerText, type WorkerFile } from './startText';
 import type { ShellStore } from './store';
@@ -43,6 +46,14 @@ export interface ShellDeps {
 }
 
 const LIVE = new Set(['spawning', 'running']);
+const FEED_EVENTS = new Set(['post.added', 'ask.created', 'ask.answered', 'ask.withdrawn', 'artifact.published']);
+const TEXT_MAX = 2 * 1024 * 1024;
+
+// looksText: a text MIME type, or no NUL byte in the first 8 KB.
+function looksText(mime: string, buf: Buffer): boolean {
+  if (/^text\/|json|xml|javascript|svg|yaml|markdown/.test(mime)) return true;
+  return !buf.subarray(0, 8192).includes(0);
+}
 export const MAX_ID = 40;
 export const TITLE_MAX = 60;
 
@@ -198,6 +209,13 @@ export class ShellService {
       workers.push(p);
     }
 
+    let pipeline: Pipeline | null = null;
+    if (input.pipelineId) {
+      pipeline = st.pipelines.find((p) => p.id === input.pipelineId) ?? null;
+      if (!pipeline) return fail('pipeline_not_found', 'Choose a pipeline, or No pipeline', 'pipelineId');
+      pipeline = structuredClone(pipeline);
+    }
+
     const title = taskTitle({ title: input.title, brief });
     let base: string;
     const sessionName = (input.sessionName ?? '').trim();
@@ -257,7 +275,7 @@ export class ShellService {
       }
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
-        toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt,
+        toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
@@ -275,7 +293,7 @@ export class ShellService {
     const task: Task = {
       id, projectSlug: project.slug, title, brief, sessionId: id, dir,
       branch: project.orchestratorRepo ? 'hopp/' + id : null,
-      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline: null,
+      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
     await this.d.store.update((s) => {
@@ -533,34 +551,134 @@ export class ShellService {
     });
   }
 
-  // ---- pipelines, feed, artifacts (Plan 10; being implemented) --------------
+  // ---- pipelines -------------------------------------------------------------
 
-  async createPipeline(_input: PipelineInput): Promise<Result<Pipeline>> {
-    return fail('not_implemented', 'not implemented yet');
+  // seedPipelines adds the starter pipelines once, to a store that has none.
+  async seedPipelines(): Promise<boolean> {
+    return this.d.store.seedOnce('starter-pipelines', (st) => {
+      if (st.pipelines.length === 0) st.pipelines.push(...starterPipelines(this.now()));
+    });
   }
 
-  async updatePipeline(_id: string, _input: PipelineInput): Promise<Result<Pipeline>> {
-    return fail('not_implemented', 'not implemented yet');
+  createPipeline(input: PipelineInput): Promise<Result<Pipeline>> {
+    return guard(() =>
+      this.d.store.update((st) => {
+        const r = validatePipeline(input, st.pipelines, this.now());
+        if (!r.ok) throw new Refused(r);
+        st.pipelines.push(r.value);
+        return r;
+      }).catch(refusedResult<Pipeline>),
+    );
   }
 
-  async removePipeline(_id: string): Promise<Result<null>> {
-    return fail('not_implemented', 'not implemented yet');
+  updatePipeline(id: string, input: PipelineInput): Promise<Result<Pipeline>> {
+    return guard(() =>
+      this.d.store.update((st) => {
+        const i = st.pipelines.findIndex((p) => p.id === id);
+        if (i < 0) throw new Refused(fail('pipeline_not_found', `No pipeline "${id}"`));
+        const r = validatePipeline(input, st.pipelines, this.now(), st.pipelines[i]);
+        if (!r.ok) throw new Refused(r);
+        st.pipelines[i] = r.value;
+        return r;
+      }).catch(refusedResult<Pipeline>),
+    );
   }
 
-  async taskFeed(_taskId: string): Promise<TaskFeed> {
-    return { posts: [], asks: [], artifacts: [] };
+  removePipeline(id: string): Promise<Result<null>> {
+    return guard(() =>
+      this.d.store.update((st) => {
+        if (!st.pipelines.some((p) => p.id === id)) throw new Refused(fail('pipeline_not_found', `No pipeline "${id}"`));
+        st.pipelines = st.pipelines.filter((p) => p.id !== id);
+        return ok(null);
+      }).catch(refusedResult<null>),
+    );
   }
 
-  async postToTask(_taskId: string, _text: string, _stageId?: string): Promise<Result<Post>> {
-    return fail('not_implemented', 'not implemented yet');
+  // ---- the feed --------------------------------------------------------------
+
+  async taskFeed(taskId: string): Promise<TaskFeed> {
+    const t = await this.findTask(taskId);
+    if (!t) throw new Error(`No task "${taskId}"`);
+    const labels = { [LABEL.task]: t.id };
+    const posts: Post[] = [];
+    for (let after = 0; ; ) {
+      const page = await this.d.client.listPosts({ labels, after, limit: 500 });
+      posts.push(...page);
+      if (page.length < 500) break;
+      after = page[page.length - 1]!.id;
+    }
+    const [asks, stored] = await Promise.all([
+      this.d.client.listAsks({ status: 'all', labels }),
+      this.d.client.listArtifacts({ scope: t.sessionId, versions: true }),
+    ]);
+    const artifacts: Artifact[] = stored.map(({ path: _path, ...a }) => a);
+    const byTime = <T extends { id: number; created_at: number }>(a: T, b: T) => a.created_at - b.created_at || a.id - b.id;
+    return { posts: posts.sort(byTime), asks: [...asks].sort(byTime), artifacts: artifacts.sort(byTime) };
   }
 
-  async answerSubmission(_askId: number, _answer: SubmissionAnswer): Promise<Result<Ask>> {
-    return fail('not_implemented', 'not implemented yet');
+  postToTask(taskId: string, text: string, stageId?: string): Promise<Result<Post>> {
+    return guard(async () => {
+      const t = await this.findTask(taskId);
+      if (!t) return fail('task_not_found', `No task "${taskId}"`);
+      const body = text.trim();
+      if (!body) return fail('text_required', 'Write something first', 'text');
+      if (stageId && !t.pipeline?.stages.some((s) => s.id === stageId)) return fail('stage_unknown', `The task has no stage "${stageId}"`);
+      const s = await this.sessionOrNull(t.sessionId);
+      if (!s || !LIVE.has(s.state)) return fail('orchestrator_not_running', 'The orchestrator is not running; resume the task to write to it');
+      await this.d.client.sendMessage({ to: t.sessionId, body });
+      const labels: Record<string, string> = { [LABEL.project]: t.projectSlug, [LABEL.task]: t.id };
+      if (stageId) labels[LABEL.stage] = stageId;
+      return ok(await this.d.client.createPost({ from: '', body, labels }));
+    });
   }
 
-  async artifactText(_id: number): Promise<Result<string>> {
-    return fail('not_implemented', 'not implemented yet');
+  answerSubmission(askId: number, answer: SubmissionAnswer): Promise<Result<Ask>> {
+    return guard(async () => {
+      if (answer.choice === 'Return') {
+        const text = (answer.text ?? '').trim();
+        if (!text) return fail('text_required', 'Say what should be fixed', 'text');
+        return ok(await this.d.client.answerAsk(askId, { choice: RETURN, answer: text }));
+      }
+      return ok(await this.d.client.answerAsk(askId, { choice: ACCEPT }));
+    });
+  }
+
+  // feedTaskOf names the task a daemon event belongs to, from the labels the
+  // event carries (the item's own, then the session's); null when none.
+  feedTaskOf(e: DaemonEvent): string | null {
+    if (!FEED_EVENTS.has(e.type)) return null;
+    const data = e.data ?? {};
+    for (const key of ['post_labels', 'ask_labels', 'artifact_labels', 'labels']) {
+      const l = data[key] as Record<string, unknown> | undefined;
+      const t = l && typeof l[LABEL.task] === 'string' ? (l[LABEL.task] as string) : '';
+      if (t) return t;
+    }
+    return null;
+  }
+
+  // ---- artifacts ---------------------------------------------------------------
+
+  // artifactFile returns the stored file of an artifact version, only when it
+  // lies inside $HOPP_HOME/artifacts.
+  async artifactFile(id: number): Promise<{ path: string; mime: string; size: number }> {
+    const a = await this.d.client.getArtifact(id);
+    const root = await realpath(join(this.d.home, 'artifacts'));
+    const real = await realpath(a.path);
+    const rel = relative(root, real);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('artifact file is outside the artifacts folder');
+    const info = await stat(real);
+    if (!info.isFile()) throw new Error('artifact is not a file');
+    return { path: real, mime: a.mime || 'application/octet-stream', size: info.size };
+  }
+
+  artifactText(id: number): Promise<Result<string>> {
+    return guard(async () => {
+      const f = await this.artifactFile(id);
+      if (f.size > TEXT_MAX) return fail('too_large', 'The file is larger than 2 MB; open it with a viewer instead');
+      const buf = await readFile(f.path);
+      if (!looksText(f.mime, buf)) return fail('not_text', 'The file is not text');
+      return ok(buf.toString('utf8'));
+    });
   }
 }
 
