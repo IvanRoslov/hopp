@@ -17,3 +17,27 @@ export const IPC = {
   terminalData: 'terminal:data',
   terminalExit: 'terminal:exit',
 } as const;
+
+// The shell layer (projects, tasks, long-lived agents): one invoke channel per
+// ShellBridge method, `shell:<method>`, and one event channel for store
+// changes.
+export const SHELL_METHODS = [
+  'state', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
+  'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask',
+  'createAgent', 'startAgent', 'stopAgent', 'removeAgent', 'agentMail', 'waiting',
+  'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules', 'listLessons', 'closeLesson',
+  'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'postToTask', 'answerSubmission', 'artifactText',
+] as const;
+
+export type ShellMethod = (typeof SHELL_METHODS)[number];
+
+export const shellChannel = (m: ShellMethod): string => 'shell:' + m;
+
+export const SHELL_CHANGED = 'shell:changed';
+
+// Sent with a task id when that task's feed changed.
+export const SHELL_FEED_CHANGED = 'shell:feed-changed';
+
+// The scheme the page loads artifact files from: hopp-artifact://<id>.
+export const ARTIFACT_SCHEME = 'hopp-artifact';
+export const artifactUrl = (id: number): string => `${ARTIFACT_SCHEME}://${id}`;

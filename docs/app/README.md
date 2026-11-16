@@ -9,7 +9,7 @@ verified: 2026-11-16 — make app-test on the app-skeleton branch and the live c
 
 # app
 
-The desktop app is a window onto the daemon: it lists the daemon's sessions, opens one in a real terminal, and shows and answers its questions. It is a skeleton with temporary styling; it launches no sessions.
+The desktop app is a window onto the daemon: it lists the daemon's sessions, opens one in a real terminal, and shows and answers its questions. Its main process also keeps projects, tasks and long-lived agents and launches their sessions: [[docs/app/shell]].
 
 ### How it talks to the daemon
 

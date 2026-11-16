@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import type { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Lesson, ModelProfile } from '../src/shared/shell';
 import type { Ask, DaemonEvent, Session } from '../src/shared/types';
 
 export interface RecordedRequest {
@@ -30,6 +31,16 @@ export function makeAsk(id: number, from: string, over: Partial<Ask> = {}): Ask 
   };
 }
 
+export function makeProfile(name: string, over: Partial<ModelProfile> = {}): ModelProfile {
+  return { name, agent: 'claude-code', model: 'm', effort: '', description: '', enabled: true, position: 0, ...over };
+}
+
+export function makeLesson(id: number, over: Partial<Lesson> = {}): Lesson {
+  return { id, from: '', labels: {}, body: 'lesson ' + id, status: 'new', created_at: 1, closed_at: 0, ...over };
+}
+
+const LIVE = new Set(['spawning', 'running']);
+
 export class FakeDaemon {
   readonly home: string;
   readonly socketPath: string;
@@ -41,6 +52,11 @@ export class FakeDaemon {
   // used for any other session.
   attach: Record<string, string[]> = {};
   defaultAttach: string[] = ['/bin/sh', '-c', 'echo hello; cat'];
+  profiles: ModelProfile[] = [];
+  mailboxes: { name: string; unread: number; total: number }[] = [];
+  lessons: Lesson[] = [];
+  // created records every POST /v1/sessions body, in order.
+  created: Record<string, unknown>[] = [];
   // override answers a "METHOD /path" with a fixed status and JSON body.
   override = new Map<string, { status: number; body: unknown }>();
 
@@ -147,6 +163,81 @@ export class FakeDaemon {
     let m: RegExpMatchArray | null;
     if (key === 'GET /v1/health') {
       return json(res, 200, { status: 'ok', pid: 1, version: 'fake', started_at: 1 });
+    }
+    if (key === 'POST /v1/sessions') {
+      const b = JSON.parse(body || '{}') as Record<string, unknown>;
+      this.created.push(b);
+      const id = String(b['id'] ?? '');
+      if (!id) return json(res, 400, { error: { code: 'bad_request', message: 'the fake needs an id' } });
+      if (this.sessions.some((x) => x.id === id)) {
+        return json(res, 409, { error: { code: 'session_exists', message: 'session id is taken: ' + id } });
+      }
+      const profile = String(b['profile'] ?? '');
+      const prof = this.profiles.find((p) => p.name === profile);
+      if (profile && this.profiles.length > 0 && !prof) {
+        return json(res, 400, { error: { code: 'profile_not_found', message: 'profile not found: ' + profile } });
+      }
+      const parent = String(b['parent'] ?? '');
+      const parentLabels = this.sessions.find((x) => x.id === parent)?.labels ?? {};
+      const s = makeSession(id, {
+        parent, dir: String(b['dir'] ?? ''), profile, agent: prof?.agent ?? 'claude-code',
+        labels: { ...parentLabels, ...((b['labels'] as Record<string, string>) ?? {}) },
+        spawn_dirs: (b['spawn_dirs'] as string[]) ?? [], state: 'running', activity: '',
+      });
+      this.sessions.push(s);
+      this.publish('session.spawned', id, {});
+      return json(res, 201, s);
+    }
+    if (req.method === 'POST' && (m = path.match(/^\/v1\/sessions\/([^/]+)\/kill$/))) {
+      const id = decodeURIComponent(m[1]!);
+      const s = this.sessions.find((x) => x.id === id);
+      if (!s) return notFound(res, id);
+      const final = (JSON.parse(body || '{}') as { final?: string }).final ?? 'killed';
+      const stop = (x: Session) => {
+        for (const c of this.sessions.filter((k) => k.parent === x.id)) stop(c);
+        if (LIVE.has(x.state)) {
+          x.state = final;
+          this.publish('session.state_changed', x.id, { to: final });
+        }
+      };
+      stop(s);
+      return json(res, 200, s);
+    }
+    if (req.method === 'POST' && (m = path.match(/^\/v1\/sessions\/([^/]+)\/restore$/))) {
+      const id = decodeURIComponent(m[1]!);
+      const s = this.sessions.find((x) => x.id === id);
+      if (!s) return notFound(res, id);
+      if (s.state !== 'killed' && s.state !== 'errored') {
+        return json(res, 409, { error: { code: 'restore_not_allowed', message: 'session cannot be restored from state: ' + s.state } });
+      }
+      s.state = 'running';
+      this.publish('session.restored', id, {});
+      return json(res, 200, s);
+    }
+    if (key === 'GET /v1/model-profiles') {
+      return json(res, 200, { profiles: this.profiles, default: this.profiles[0]?.name ?? '' });
+    }
+    if (key === 'GET /v1/mailboxes') return json(res, 200, { mailboxes: this.mailboxes });
+    if (key === 'POST /v1/mailboxes') {
+      const name = String((JSON.parse(body || '{}') as { name?: string }).name ?? '');
+      if (this.mailboxes.some((b) => b.name === name)) {
+        return json(res, 409, { error: { code: 'mailbox_exists', message: 'mailbox exists: ' + name } });
+      }
+      this.mailboxes.push({ name, unread: 0, total: 0 });
+      return json(res, 201, { name });
+    }
+    if (key === 'GET /v1/lessons') {
+      const status = url.searchParams.get('status') || 'new';
+      return json(res, 200, { lessons: status === 'all' ? this.lessons : this.lessons.filter((l) => l.status === status) });
+    }
+    if (req.method === 'POST' && (m = path.match(/^\/v1\/lessons\/(\d+)\/close$/))) {
+      const l = this.lessons.find((x) => x.id === Number(m![1]));
+      if (!l) return json(res, 404, { error: { code: 'lesson_not_found', message: 'lesson not found' } });
+      if (l.status === 'new') {
+        l.status = 'closed';
+        l.closed_at = 2;
+      }
+      return json(res, 200, l);
     }
     if (key === 'GET /v1/sessions') {
       const all = url.searchParams.get('all') === '1';
