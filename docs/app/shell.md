@@ -6,11 +6,11 @@ verified: 2026-11-16 — make app-test on the shell-main branch (fake daemon, te
 
 # Projects, tasks and long-lived agents
 
-The daemon knows sessions, folders and labels; the app adds projects, tasks and long-lived agents on top and maps each onto daemon sessions. This leaf says what the app keeps and what a launch does.
+The daemon knows sessions, folders and labels; the app adds projects, tasks and long-lived agents on top and maps each onto daemon sessions. This leaf says what the app keeps and what a launch does; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]].
 
 ### What the app keeps
 
-1. Projects, tasks and long-lived agents live in `$HOPP_HOME/shell/state.json`, versioned and written atomically, and the page is told after every change. A file the app cannot read (corrupt, or written by a newer app) is refused and never overwritten.
+1. Projects, pipelines, tasks and long-lived agents live in `$HOPP_HOME/shell/state.json`, versioned and written atomically, and the page is told after every change. A file the app cannot read (corrupt, or written by a newer app) is refused and never overwritten.
 2. The store keeps only what the daemon cannot know: whether a task runs, waits or has stopped is read from its sessions.
 3. A project has a name, a slug made from the name, a description, an optional repository for the orchestrator, repositories for workers (they need the orchestrator's) and guardrails. Each repository is checked to be a git repository and stored as its top folder, and the slug cannot change once the project has tasks.
 
