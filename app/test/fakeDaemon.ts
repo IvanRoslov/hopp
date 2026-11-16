@@ -60,6 +60,9 @@ export class FakeDaemon {
   lessons: Lesson[] = [];
   // created records every POST /v1/sessions body, in order.
   created: Record<string, unknown>[] = [];
+  // delay holds the answer to a "METHOD /path" this many ms after the
+  // request was handled (the change is made at once, as a slow daemon would).
+  delay = new Map<string, number>();
   // override answers a "METHOD /path" with a fixed status and JSON body.
   override = new Map<string, { status: number; body: unknown }>();
 
@@ -148,6 +151,9 @@ export class FakeDaemon {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       this.requests.push({ method: req.method ?? '', url: req.url ?? '', headers: req.headers, body });
+      const url = new URL(req.url ?? '/', 'http://hopp');
+      const wait = this.delay.get(`${req.method} ${url.pathname}`);
+      if (wait) (res as ServerResponse & { hoppDelay?: number }).hoppDelay = wait;
       try {
         this.route(req, res, body);
       } catch (err) {
@@ -371,8 +377,14 @@ function writeEvent(res: ServerResponse, e: DaemonEvent): void {
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(body) + '\n');
+  const wait = (res as ServerResponse & { hoppDelay?: number }).hoppDelay ?? 0;
+  const send = () => {
+    if (res.destroyed) return;
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(body) + '\n');
+  };
+  if (wait > 0) setTimeout(send, wait);
+  else send();
 }
 
 function notFound(res: ServerResponse, id: string): void {

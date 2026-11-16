@@ -252,6 +252,7 @@ export class ShellService {
     const dir = workDir(id);
     const textsDir = join(this.d.home, 'shell', 'tasks', id);
     const made = { worktree: false, folder: false, texts: false };
+    let spawnSent = false;
     try {
       await mkdir(worktreesDir, { recursive: true });
       if (project.orchestratorRepo) {
@@ -280,14 +281,26 @@ export class ShellService {
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
       const spawnDirs = [...new Set([...allowedRepos(project), worktreesDir, dir])];
+      spawnSent = true;
       await this.d.client.createSession({
         dir, id, profile: orch.name,
         labels: { 'hopp.project': project.slug, 'hopp.task': id, 'hopp.role': 'orchestrator' },
         spawn_dirs: spawnDirs, system_prompt: systemPrompt, message: brief,
       });
     } catch (err) {
-      await this.undoLaunch(project, id, dir, textsDir, made);
-      return errorResult(err);
+      // A spawn that may have happened is never undone under a live session.
+      const outcome = spawnSent ? await this.spawnOutcome(err, id) : 'refused';
+      if (outcome === 'running') {
+        // The daemon launched it but its answer was lost: keep and record.
+      } else if (outcome === 'unknown') {
+        return fail(
+          'launch_uncertain',
+          `The daemon did not confirm the launch of ${id}. Its worktree is kept in ${dir}; check \`hopp ls\`, and remove the folder by hand if no session ${id} runs.`,
+        );
+      } else {
+        await this.undoLaunch(project, id, dir, textsDir, made);
+        return errorResult(err);
+      }
     }
 
     const task: Task = {
@@ -296,10 +309,34 @@ export class ShellService {
       orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
-    await this.d.store.update((s) => {
-      s.tasks.push(task);
-    });
+    const record = () =>
+      this.d.store.update((s) => {
+        if (!s.tasks.some((t) => t.id === task.id)) s.tasks.push(task);
+      });
+    try {
+      await record().catch(() => record());
+    } catch (err) {
+      return fail(
+        'task_not_recorded',
+        `The orchestrator ${id} is running in ${dir}, but the app could not record the task: ${(err as Error).message}. Do not launch it again; stop it with \`hopp kill ${id}\` if it is not wanted.`,
+      );
+    }
     return ok(task);
+  }
+
+  // spawnOutcome decides, after a failed launch request, whether the session
+  // exists: "refused" when the daemon said no or never got the request,
+  // "running" when it exists anyway, "unknown" when the daemon cannot tell.
+  private async spawnOutcome(err: unknown, id: string): Promise<'refused' | 'running' | 'unknown'> {
+    if (err instanceof DaemonError && err.status >= 400 && err.status < 500) return 'refused';
+    if (err instanceof DaemonUnavailable && err.neverSent) return 'refused';
+    try {
+      await this.d.client.getSession(id);
+      return 'running';
+    } catch (e) {
+      if (e instanceof DaemonError && e.status === 404) return 'refused';
+      return 'unknown';
+    }
   }
 
   // undoLaunch removes exactly what a failed launch made, and nothing else.
