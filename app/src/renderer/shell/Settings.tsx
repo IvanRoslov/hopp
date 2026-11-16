@@ -209,6 +209,7 @@ function ToolsTab(props: { shell: ShellBridge }) {
             <span className="def">broken</span>
           </div>
         ))}
+        {!catalog && !error && <p className="loading-note">Reading the tool catalog…</p>}
         {catalog && catalog.tools.length === 0 && catalog.broken.length === 0 && <p className="subtle-note">No tools in the catalog.</p>}
       </div>
     </div>
@@ -243,6 +244,7 @@ function LessonsTab(props: { shell: ShellBridge; state: ShellState }) {
       />
       {error && <p className="subtle-note" role="alert">! {error}</p>}
       <div className="lesson-list">
+        {!lessons && !error && <p className="loading-note">Loading…</p>}
         {lessons?.length === 0 && <p className="subtle-note">{filter === 'new' ? 'No new lessons.' : 'No lessons yet.'}</p>}
         {lessons?.map((l) => (
           <div key={l.id} className="lesson" data-testid={`lesson-${l.id}`}>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { HoppBridge } from '../../shared/bridge';
 import type { Session, StreamState } from '../../shared/types';
 import { sessionWord } from '../model/shellModel';
@@ -115,9 +115,15 @@ export function WorkView(props: {
   const { asks, reload: reloadAsks } = useAsks(bridge.daemon, selectedId, props.stream);
   const count = asks.filter((a) => a.status === 'open').length + (selected?.question ? 1 : 0);
   const open = props.panel !== null;
+  const split = useSplit();
 
   return (
-    <div className={'task' + (open ? ' q-open' : '')} data-testid="work-view">
+    <div
+      ref={split.grid}
+      className={'task' + (open ? ' q-open' : '')}
+      data-testid="work-view"
+      style={open && split.width !== null ? { gridTemplateColumns: `min(${split.width}px, calc(100% - ${MIN_TERM + 5}px)) 5px minmax(0, 1fr)` } : undefined}
+    >
       <div className="top task-top">
         <span className="name" title={props.title}>
           {props.title}
@@ -157,7 +163,19 @@ export function WorkView(props: {
           )}
         </section>
       )}
-      {open && <div className="task-div" aria-hidden />}
+      {open && (
+        <div
+          className="task-div"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the column"
+          tabIndex={0}
+          title="Drag to resize; double-click to reset"
+          onPointerDown={split.onPointerDown}
+          onKeyDown={split.onKeyDown}
+          onDoubleClick={split.reset}
+        />
+      )}
       <section className="task-term" aria-label="Terminal">
         {open && <div className="term-label">Terminal</div>}
         <TerminalArea
@@ -227,4 +245,87 @@ export function TerminalArea(props: {
       </div>
     </>
   );
+}
+
+// The questions column's width, set by dragging the divider (or the arrow
+// keys on it) and remembered. Only the human changes it; the terminal next to
+// it resizes only then.
+const SPLIT_KEY = 'hopp.questionsWidth';
+const MIN_Q = 280;
+const MIN_TERM = 360;
+
+function readSplit(): number | null {
+  try {
+    const v = Number(localStorage.getItem(SPLIT_KEY));
+    return Number.isFinite(v) && v >= MIN_Q ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSplit(w: number | null): void {
+  try {
+    if (w === null) localStorage.removeItem(SPLIT_KEY);
+    else localStorage.setItem(SPLIT_KEY, String(Math.round(w)));
+  } catch {
+    // Not remembered; the width still applies now.
+  }
+}
+
+export function useSplit() {
+  const grid = useRef<HTMLDivElement>(null);
+  const [width, setWidthState] = useState<number | null>(readSplit);
+  // Key repeat and pointer moves arrive faster than renders: read the width
+  // from a ref, not from the render's closure.
+  const widthRef = useRef<number | null>(width);
+  const setWidth = (w: number | null) => {
+    widthRef.current = w;
+    setWidthState(w);
+  };
+  const clamp = useCallback((w: number) => {
+    const total = grid.current?.getBoundingClientRect().width ?? 0;
+    const max = total > 0 ? total - MIN_TERM - 5 : w;
+    return Math.max(MIN_Q, Math.min(w, max));
+  }, []);
+  const current = () => {
+    const col = grid.current?.querySelector('.task-q') as HTMLElement | null;
+    return widthRef.current ?? (col?.getBoundingClientRect().width || MIN_Q);
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const left = grid.current?.getBoundingClientRect().left ?? 0;
+    const el = e.currentTarget;
+    el.setPointerCapture?.(e.pointerId);
+    let last = current();
+    const move = (ev: PointerEvent) => {
+      last = clamp(ev.clientX - left);
+      setWidth(last);
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      saveSplit(last);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 64 : 16;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const next = clamp(current() + (e.key === 'ArrowRight' ? step : -step));
+    setWidth(next);
+    saveSplit(next);
+  };
+
+  const reset = () => {
+    setWidth(null);
+    saveSplit(null);
+  };
+
+  return { grid, width, onPointerDown, onKeyDown, reset };
 }

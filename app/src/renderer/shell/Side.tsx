@@ -109,6 +109,9 @@ export function Side(props: {
         {props.sessionsError && props.stream === 'open' && (
           <div className="side-notice" role="alert">Could not load sessions: {props.sessionsError}</div>
         )}
+        {props.waitingRows.length === 0 && groups.length === 0 && recent.length === 0 && (
+          <div className="side-empty" data-testid="side-empty">No tasks yet. Start one with New task.</div>
+        )}
         {props.waitingRows.length > 0 && (
           <section aria-label="Waiting for you">
             <div className="head">Waiting for you</div>
@@ -142,7 +145,7 @@ export function Side(props: {
           <section aria-label="Work">
             <div className="head">Work</div>
             {groups.map((g) => (
-              <div key={g.project.slug}>
+              <div key={g.project.slug} className="work-group">
                 <div className="project-head" title={g.project.name}>{g.project.name}</div>
                 {g.tasks.map((t) => (
                   <TaskRow key={t.id} task={t} status={status(t)} sel={selTask === t.id} go={go} />

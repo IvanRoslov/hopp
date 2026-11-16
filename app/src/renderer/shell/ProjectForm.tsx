@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Project, ProjectInput, ShellBridge, ShellError } from '../../shared/shell';
 import { slugify } from '../../shared/slug';
 import { cleanError } from '../errors';
@@ -33,6 +33,8 @@ export function ProjectForm(props: {
   const [error, setError] = useState<ShellError | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  // A second Enter while the first request runs does nothing.
+  const inFlight = useRef(false);
 
   const shownSlug = slugTouched ? slug : slugify(name);
   const fieldError = (f: string) => (error?.field === f ? error.message : undefined);
@@ -47,6 +49,8 @@ export function ProjectForm(props: {
   };
 
   const submit = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     const input: ProjectInput = {
@@ -67,6 +71,7 @@ export function ProjectForm(props: {
     } catch (err) {
       setError({ code: 'failed', message: cleanError(err) });
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
