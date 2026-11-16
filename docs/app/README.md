@@ -15,7 +15,7 @@ The desktop app is a window onto the daemon: it lists the daemon's sessions, ope
 
 1. The app reads and changes daemon state only through the daemon's API on its Unix socket (`$HOPP_HOME/hopp.sock`, by default `~/.hopp/hopp.sock`), never through the daemon's database, so it sees exactly what the CLI sees.
 2. The list follows the daemon's event stream; when the stream drops, the app reconnects and asks the daemon to replay what it missed, and every time the stream opens it loads the whole list again.
-3. When no daemon answers on the socket, the window says so, names the socket, keeps retrying, and offers a button that runs `hopp daemon start` with the `hopp` found on `PATH` (or says it found none).
+3. When no daemon answers on the socket, the list's place says so, names the socket, keeps retrying, and offers a button that runs `hopp daemon start` (or says it found no `hopp`); an open terminal stays, since tmux does not need the daemon. The app takes `PATH` from the user's login shell, so a daemon it starts finds the same agents a terminal would.
 4. Only the main process touches the socket and processes; the page runs without Node, isolated and sandboxed, and reaches the main process through a short list of named calls.
 
 ### The terminal

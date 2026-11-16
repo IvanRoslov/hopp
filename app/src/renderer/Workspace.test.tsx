@@ -4,9 +4,18 @@ import { fakeBridge } from '../../test/bridge';
 import { makeSession } from '../../test/fakeDaemon';
 
 // The terminal itself is tested on its own; here it is a marker.
-vi.mock('./terminal/Terminal', () => ({
-  Terminal: (p: { sessionId: string }) => <div data-testid="terminal">terminal:{p.sessionId}</div>,
-}));
+const mounts = vi.hoisted(() => ({ n: 0 }));
+vi.mock('./terminal/Terminal', async () => {
+  const { useEffect } = await import('react');
+  return {
+    Terminal: (p: { sessionId: string }) => {
+      useEffect(() => {
+        mounts.n++;
+      }, []);
+      return <div data-testid="terminal">terminal:{p.sessionId}</div>;
+    },
+  };
+});
 
 const { Workspace } = await import('./Workspace');
 
@@ -102,5 +111,22 @@ describe('<Workspace>', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start daemon' }));
     await flush();
     expect(screen.getByText('hopp was not found on PATH')).toBeTruthy();
+  });
+
+  it('a daemon outage keeps the open terminal mounted', async () => {
+    const f = fakeBridge({ sessions: [makeSession('a')] });
+    render(<Workspace bridge={f.bridge} />);
+    await flush();
+    fireEvent.click(screen.getByTestId('session-row'));
+    await flush();
+    const before = mounts.n;
+    act(() => f.setState('down'));
+    await flush();
+    expect(screen.getByTestId('daemon-down')).toBeTruthy();
+    expect(screen.getByTestId('terminal').textContent).toBe('terminal:a');
+    act(() => f.setState('open'));
+    await flush();
+    expect(screen.getByTestId('terminal').textContent).toBe('terminal:a');
+    expect(mounts.n).toBe(before);
   });
 });

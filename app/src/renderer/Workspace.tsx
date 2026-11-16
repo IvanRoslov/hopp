@@ -20,7 +20,6 @@ export function Workspace(props: { bridge?: HoppBridge }) {
   const [showQuestions, setShowQuestions] = useState(false);
   const { asks, reload: reloadAsks } = useAsks(bridge.daemon, selectedId, stream);
 
-  if (stream === 'down') return <DaemonDown daemon={bridge.daemon} />;
   if (stream === 'connecting') return <div className="connecting">Connecting to the hopp daemon…</div>;
 
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
@@ -45,23 +44,35 @@ export function Workspace(props: { bridge?: HoppBridge }) {
     <Frame
       header={header}
       left={
-        <SessionList
-          sessions={sessions}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          showEnded={showEnded}
-          onShowEnded={setShowEnded}
-        />
+        // While no daemon answers, the list's place says so. The terminal
+        // stays: it is a tmux client and does not need the daemon.
+        stream === 'down' ? (
+          <DaemonDown daemon={bridge.daemon} />
+        ) : (
+          <SessionList
+            sessions={sessions}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            showEnded={showEnded}
+            onShowEnded={setShowEnded}
+          />
+        )
       }
       middle={
-        showQuestions && selected ? (
-          <QuestionsColumn
-            daemon={bridge.daemon}
-            session={selected}
-            asks={asks}
-            reloadAsks={reloadAsks}
-            reloadSession={refresh}
-          />
+        // The column stays while it is open, even when the session goes
+        // away: only the person opens or closes it (it resizes the terminal).
+        showQuestions && selectedId ? (
+          selected ? (
+            <QuestionsColumn
+              daemon={bridge.daemon}
+              session={selected}
+              asks={asks}
+              reloadAsks={reloadAsks}
+              reloadSession={refresh}
+            />
+          ) : (
+            <div className="questions muted">The daemon no longer has this session.</div>
+          )
         ) : null
       }
       right={

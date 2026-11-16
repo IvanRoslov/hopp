@@ -25,7 +25,9 @@ input { font: inherit; color: var(--fg); background: var(--bg); border: 1px soli
 .state-errored { color: var(--danger); }
 .header-id { font-weight: 600; }
 .placeholder { padding: var(--gap); }
-.daemon-down, .connecting { padding: calc(var(--gap) * 4); }
+.daemon-down { padding: var(--gap); }
+.daemon-down h2 { font-size: var(--font-size); margin: 0 0 var(--gap); }
+.connecting { padding: calc(var(--gap) * 4); }
 .daemon-note { color: var(--fg-muted); }
 .header-spacer { flex: 1; }
 button.active { background: var(--bg-selected); border-color: var(--accent); }

@@ -28,6 +28,8 @@ test('list follows the daemon; down and back; a session opens in the terminal', 
     await d.stop();
     await expect(page.getByTestId('daemon-down')).toBeVisible();
     await expect(page.getByTestId('daemon-down')).toContainText(d.socketPath);
+    // The terminal does not need the daemon: it stays, with its text.
+    await expect(page.locator('.xterm-rows')).toContainText('typed in the app');
 
     // It comes back with a new session: the list returns, reloaded.
     d.sessions.push(makeSession('newcomer'));

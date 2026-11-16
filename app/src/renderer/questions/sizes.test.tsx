@@ -56,4 +56,19 @@ describe('terminal size', () => {
     expect(FakeXterm.instances).toHaveLength(1);
     expect({ cols: x.cols, rows: x.rows }).toEqual(before);
   });
+
+  it('the questions column stays when the selected session goes away', async () => {
+    const f = fakeBridge({ sessions: [makeSession('a')] });
+    render(<Workspace bridge={f.bridge} />);
+    await flush();
+    fireEvent.click(screen.getAllByTestId('session-row')[0]!);
+    fireEvent.click(screen.getByTestId('questions-button'));
+    await flush();
+    expect(screen.getByTestId('zone-middle')).toBeTruthy();
+    f.db.sessions = [];
+    f.emit('session.removed', 'a');
+    await flush();
+    expect(screen.getByTestId('zone-middle').textContent).toMatch(/no longer/);
+    expect(f.terminal.close).not.toHaveBeenCalled();
+  });
 });

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { DaemonBridge } from '../../shared/bridge';
 
-// DaemonDown fills the content area while no daemon answers on the socket.
+// DaemonDown takes the session list's place while no daemon answers on the
+// socket.
 // The app keeps retrying on its own; the button runs `hopp daemon start`.
 export function DaemonDown(props: { daemon: DaemonBridge }) {
   const [socketPath, setSocketPath] = useState('');
