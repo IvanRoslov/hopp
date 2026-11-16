@@ -114,15 +114,7 @@ export function WorkView(props: {
   const selected = props.tree.find((s) => s.id === selectedId) ?? null;
   const { asks, reload: reloadAsks } = useAsks(bridge.daemon, selectedId, props.stream);
   const count = asks.filter((a) => a.status === 'open').length + (selected?.question ? 1 : 0);
-  const [nonce, setNonce] = useState(0);
-  const [closed, setClosed] = useState(false);
-  const live = !!selected && (selected.state === 'running' || selected.state === 'spawning');
-
-  // A new session or a fresh attach starts with an open terminal.
-  useEffect(() => setClosed(false), [selectedId, nonce]);
-
   const open = props.panel !== null;
-  const options = props.tree.map((s) => ({ value: s.id, label: `${s.id} · ${sessionWord(s)}`, dim: !(s.state === 'running' || s.state === 'spawning') }));
 
   return (
     <div className={'task' + (open ? ' q-open' : '')} data-testid="work-view">
@@ -168,34 +160,71 @@ export function WorkView(props: {
       {open && <div className="task-div" aria-hidden />}
       <section className="task-term" aria-label="Terminal">
         {open && <div className="term-label">Terminal</div>}
-        <div className="term-bar">
-          {props.tree.length > 0 && (
-            <Dropdown
-              label={selected ? `${selected.id} · ${sessionWord(selected)}` : selectedId}
-              testId="session-picker"
-              options={options}
-              value={selectedId}
-              onChange={props.onSelect}
-            />
-          )}
-          {props.status && <div className="status-line">{props.status}</div>}
-          {closed && live && props.attachable && (
-            <div className="status-line">
-              Terminal closed.
-              <button type="button" className="c-btn" onClick={() => setNonce((n) => n + 1)}>
-                Reattach
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="term-box">
-          {props.attachable && selected ? (
-            <Terminal key={selectedId + ':' + nonce} sessionId={selectedId} bridge={bridge.terminal} onEnded={() => setClosed(true)} />
-          ) : (
-            <div className="term-empty">{props.noTerminal}</div>
-          )}
-        </div>
+        <TerminalArea
+          bridge={bridge}
+          tree={props.tree}
+          selectedId={selectedId}
+          onSelect={props.onSelect}
+          status={props.status}
+          attachable={props.attachable}
+          noTerminal={props.noTerminal}
+        />
       </section>
     </div>
+  );
+}
+
+// TerminalArea: the session picker, the state line, and the terminal of the
+// selected session (or why there is none). A closed terminal offers Reattach.
+// Task views without a pipeline and pipeline task views both use it.
+export function TerminalArea(props: {
+  bridge: HoppBridge;
+  tree: Session[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  status: ReactNode;
+  attachable: boolean;
+  noTerminal: ReactNode;
+}) {
+  const { bridge, selectedId } = props;
+  const selected = props.tree.find((s) => s.id === selectedId) ?? null;
+  const [nonce, setNonce] = useState(0);
+  const [closed, setClosed] = useState(false);
+  const live = !!selected && (selected.state === 'running' || selected.state === 'spawning');
+
+  // A new session or a fresh attach starts with an open terminal.
+  useEffect(() => setClosed(false), [selectedId, nonce]);
+
+  const options = props.tree.map((s) => ({ value: s.id, label: `${s.id} · ${sessionWord(s)}`, dim: !(s.state === 'running' || s.state === 'spawning') }));
+  return (
+    <>
+      <div className="term-bar">
+        {props.tree.length > 0 && (
+          <Dropdown
+            label={selected ? `${selected.id} · ${sessionWord(selected)}` : selectedId}
+            testId="session-picker"
+            options={options}
+            value={selectedId}
+            onChange={props.onSelect}
+          />
+        )}
+        {props.status && <div className="status-line">{props.status}</div>}
+        {closed && live && props.attachable && (
+          <div className="status-line">
+            Terminal closed.
+            <button type="button" className="c-btn" onClick={() => setNonce((n) => n + 1)}>
+              Reattach
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="term-box">
+        {props.attachable && selected ? (
+          <Terminal key={selectedId + ':' + nonce} sessionId={selectedId} bridge={bridge.terminal} onEnded={() => setClosed(true)} />
+        ) : (
+          <div className="term-empty">{props.noTerminal}</div>
+        )}
+      </div>
+    </>
   );
 }

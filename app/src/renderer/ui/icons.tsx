@@ -54,3 +54,18 @@ export const FolderIcon = (p: P) => (
     <path d="M2.5 4.5h4l1.5 1.5h5.5v6.5h-11z" />
   </svg>
 );
+export const RightIcon = (p: P) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" strokeWidth={1.6} aria-hidden {...line} {...p}>
+    <path d="M6 4l4 4-4 4" />
+  </svg>
+);
+export const ArrowUpIcon = (p: P) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" strokeWidth={1.6} aria-hidden {...line} {...p}>
+    <path d="M8 13V3.5M4.5 7l3.5-3.5L11.5 7" />
+  </svg>
+);
+export const ArrowDownIcon = (p: P) => (
+  <svg width="14" height="14" viewBox="0 0 16 16" strokeWidth={1.6} aria-hidden {...line} {...p}>
+    <path d="M8 3v9.5M4.5 9l3.5 3.5L11.5 9" />
+  </svg>
+);

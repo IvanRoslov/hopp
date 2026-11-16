@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ModelProfile, Project, ShellBridge, ShellError, Task, TaskInput } from '../../shared/shell';
+import type { ModelProfile, Pipeline, Project, ShellBridge, ShellError, Task, TaskInput } from '../../shared/shell';
 import { slugify } from '../../shared/slug';
 import { cleanError } from '../errors';
+import { Checkbox } from '../ui/Checkbox';
 import { Dropdown } from '../ui/Dropdown';
 import { Field } from '../ui/Field';
 import { UpIcon } from '../ui/icons';
@@ -39,6 +40,7 @@ export function titleFrom(brief: string): string {
 export function NewTask(props: {
   shell: ShellBridge;
   projects: Project[];
+  pipelines: Pipeline[];
   profiles: ModelProfile[] | null;
   profilesError: string | null;
   initialProject?: string;
@@ -53,6 +55,8 @@ export function NewTask(props: {
   const [orchestrator, setOrchestrator] = useState('');
   const [workers, setWorkers] = useState<string[] | null>(null);
   const [more, setMore] = useState(false);
+  // "No pipeline" by default, every time.
+  const [pipelineId, setPipelineId] = useState('');
   const [title, setTitle] = useState('');
   const [sessionName, setSessionName] = useState('');
   const [extra, setExtra] = useState('');
@@ -73,6 +77,7 @@ export function NewTask(props: {
   }, [enabled, last]);
 
   const proj = props.projects.find((p) => p.slug === project);
+  const pipeline = props.pipelines.find((p) => p.id === pipelineId) ?? null;
   const effectiveTitle = title.trim() || titleFrom(brief);
   const fieldError = (f: string) => (error?.field === f ? error.message : undefined);
   const ready = brief.trim() !== '' && !!proj && !!orchestrator && !busy;
@@ -85,6 +90,7 @@ export function NewTask(props: {
     if (title.trim()) input.title = title.trim();
     if (sessionName.trim()) input.sessionName = sessionName.trim();
     if (extra.trim()) input.extraSystemPrompt = extra.trim();
+    if (pipeline) input.pipelineId = pipeline.id;
     try {
       const r = await props.shell.createTask(input);
       if (r.ok) {
@@ -163,6 +169,13 @@ export function NewTask(props: {
                 value={workers ?? []}
                 onChange={setWorkers}
               />
+              <Dropdown
+                label={`Pipeline: ${pipeline?.name ?? 'No pipeline'}`}
+                testId="pick-pipeline"
+                options={[{ value: '', label: 'No pipeline' }, ...props.pipelines.map((p) => ({ value: p.id, label: p.name }))]}
+                value={pipelineId}
+                onChange={setPipelineId}
+              />
               <span className="sp" />
               <button type="button" className={'c-btn' + (more ? ' on' : '')} aria-expanded={more} onClick={() => setMore((m) => !m)}>
                 More
@@ -175,6 +188,21 @@ export function NewTask(props: {
           <div className={'folder-hint' + (generalError ? ' error' : '')} role={generalError ? 'alert' : undefined}>
             {busy ? 'Starting the orchestrator…' : generalError ?? (props.profilesError ? `Model profiles: ${props.profilesError}` : where)}
           </div>
+          {pipeline && (
+            <div className="pl-preview" data-testid="pipeline-preview">
+              <div className="pl-chain">{pipeline.stages.map((st) => st.name).join(' → ')}</div>
+              {pipeline.stages.map((st) => (
+                <div key={st.id} className="pl-preview-stage">
+                  <div className="nm">{st.name}</div>
+                  {st.does && <div className="ds">{st.does}</div>}
+                  <div className="cb-row">
+                    <Checkbox readOnly label="may have substages" checked={st.substages} />
+                    <Checkbox readOnly label="wait for approval" checked={st.approval} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {more && (
             <div className="more-box fields">
               <Field

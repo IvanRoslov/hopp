@@ -9,6 +9,7 @@ import { applyTheme, initialTheme, saveTheme, type Theme } from '../ui/theme';
 import { Workspace } from '../Workspace';
 import { AgentView, NewAgent } from './Agents';
 import { NewTask } from './NewTask';
+import { Pipelines } from './Pipelines';
 import { ProjectForm } from './ProjectForm';
 import type { Route } from './route';
 import { Settings } from './Settings';
@@ -167,6 +168,9 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
       );
       break;
     }
+    case 'pipelines':
+      view = <Pipelines shell={bridge.shell} pipelines={state.pipelines} selected={route.id} go={setRoute} />;
+      break;
     case 'newAgent':
       view = <NewAgent shell={bridge.shell} profiles={profiles} onCreated={(a) => setRoute({ k: 'agent', name: a.name })} onCancel={() => setRoute({ k: 'newTask' })} />;
       break;
@@ -198,6 +202,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
           key={route.project ?? ''}
           shell={bridge.shell}
           projects={state.projects}
+          pipelines={state.pipelines}
           profiles={profiles}
           profilesError={profilesError}
           initialProject={route.project}

@@ -1,7 +1,7 @@
 import type { LongAgent, ShellState, Task } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
 import { agentStatus, recentTasks, taskStatus, workGroups, type Status, type WaitingRow } from '../model/shellModel';
-import { LogoMark, PlusIcon, SlidersIcon, ThemeIcon } from '../ui/icons';
+import { LogoMark, PlusIcon, RightIcon, SlidersIcon, ThemeIcon } from '../ui/icons';
 import type { Go, Route } from './route';
 
 export function Mark(props: { status: Status }) {
@@ -99,6 +99,10 @@ export function Side(props: {
           <span className="ic"><PlusIcon /></span>
           <span className="t">New task</span>
         </button>
+        <button type="button" className={'row' + (route.k === 'pipelines' ? ' sel' : '')} onClick={() => go({ k: 'pipelines' })}>
+          <span className="ic"><RightIcon /></span>
+          <span className="t">Pipelines</span>
+        </button>
       </div>
       <div className="side-scroll">
         {props.daemonNotice}
@@ -116,15 +120,13 @@ export function Side(props: {
                 data-testid="waiting-row"
                 title={r.text}
                 onClick={() => {
-                  if (r.owner?.kind === 'task') go({ k: 'task', id: r.owner.id, panel: 'questions', session: r.session });
+                  if (r.owner?.kind === 'task') go({ k: 'task', id: r.owner.id, panel: 'questions', session: r.session, focusAskId: r.askId });
                   else if (r.owner?.kind === 'agent') go({ k: 'agent', name: r.owner.name, panel: 'questions' });
                 }}
                 disabled={!r.owner}
               >
-                <span className="t">
-                  {r.text}
-                  <small>{r.under}</small>
-                </span>
+                <span className="t">{r.text}</span>
+                <small>{r.under}</small>
               </button>
             ))}
           </section>
