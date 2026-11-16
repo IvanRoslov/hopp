@@ -66,6 +66,9 @@ function taskInput(v: unknown): TaskInput {
     const x = optStr(v[k], k);
     if (x !== undefined) out[k] = x;
   }
+  // pipelineId: a pipeline's id, or null for "No pipeline".
+  if (v['pipelineId'] === null) out.pipelineId = null;
+  else if (v['pipelineId'] !== undefined) out.pipelineId = str(v['pipelineId'], 'pipelineId', 200);
   return out;
 }
 
