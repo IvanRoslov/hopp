@@ -1,11 +1,19 @@
 // Project validation: every check names the form field it belongs to.
 import { stat } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { homedir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import type { Project, ProjectInput, Result, ShellError } from '../../shared/shell';
 import { SLUG_PATTERN, slugify } from '../../shared/slug';
 import type { Runner } from './exec';
 
 export const MAX_SLUG = 40;
+
+// expandHome turns a leading ~ (as the form's hint shows it) into the home folder.
+export function expandHome(p: string, home = homedir()): string {
+  if (p === '~') return home;
+  if (p.startsWith('~/')) return join(home, p.slice(2));
+  return p;
+}
 
 export const fail = <T>(code: string, message: string, field?: string): Result<T> => {
   const error: ShellError = { code, message };
@@ -33,8 +41,9 @@ export async function repoRoot(git: Runner, dir: string): Promise<string | null>
   }
 }
 
-async function checkRepo(git: Runner, dir: string, field: string, label: string): Promise<Result<string>> {
-  if (typeof dir !== 'string' || dir.trim() === '') return fail('folder_missing', `${label}: choose a folder`, field);
+async function checkRepo(git: Runner, raw: string, field: string, label: string): Promise<Result<string>> {
+  if (typeof raw !== 'string' || raw.trim() === '') return fail('folder_missing', `${label}: choose a folder`, field);
+  const dir = expandHome(raw.trim());
   if (!isAbsolute(dir)) return fail('folder_not_absolute', `${label}: ${dir} is not an absolute path`, field);
   if (!(await isDir(dir))) return fail('folder_missing', `${label}: ${dir} does not exist`, field);
   const top = await repoRoot(git, dir);

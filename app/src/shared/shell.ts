@@ -341,7 +341,7 @@ export interface ShellBridge {
   // Accept or Return a submission ask.
   answerSubmission(askId: number, answer: SubmissionAnswer): Promise<Result<Ask>>;
   // A URL the page can load an artifact version from (img, video, iframe):
-  // hopp-artifact://<id>. Served only from $HOPP_HOME/artifacts.
+  // hopp-artifact://v/<id>. Served only from $HOPP_HOME/artifacts.
   artifactUrl(id: number): string;
   // The text of an artifact version, for the text viewer; refused for a file
   // over 2 MB or one that is not text.

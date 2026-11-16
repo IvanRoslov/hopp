@@ -37,7 +37,9 @@ export class DaemonError extends Error {
 }
 
 // DaemonUnavailable is a request that reached no daemon: the socket is
-// missing or nothing listens on it.
+// missing or nothing listens on it, or the daemon did not answer in time.
+// neverSent tells the first case (nothing could have happened) from the
+// others (the daemon may have acted before going quiet).
 export class DaemonUnavailable extends Error {
   constructor(
     readonly socketPath: string,
@@ -45,6 +47,11 @@ export class DaemonUnavailable extends Error {
   ) {
     super(`hopp daemon is not running (socket ${socketPath})`);
     this.name = 'DaemonUnavailable';
+  }
+
+  get neverSent(): boolean {
+    const code = (this.cause as { code?: string } | undefined)?.code;
+    return code === 'ENOENT' || code === 'ECONNREFUSED' || code === 'ENOTSOCK';
   }
 }
 
@@ -69,9 +76,12 @@ export function isUnavailableError(err: unknown): boolean {
 const enc = encodeURIComponent;
 
 export class DaemonClient {
+  // spawnTimeoutMs bounds a session launch: the daemon answers it only after
+  // the agent's tmux session exists, which can take long on a cold start.
   constructor(
     readonly socketPath: string,
     private readonly timeoutMs = 10_000,
+    private readonly spawnTimeoutMs = 120_000,
   ) {}
 
   health(): Promise<Health> {
@@ -120,7 +130,7 @@ export class DaemonClient {
 
   // createSession launches a session (POST /v1/sessions).
   createSession(body: CreateSessionBody): Promise<Session> {
-    return this.call('POST', '/v1/sessions', body);
+    return this.call('POST', '/v1/sessions', body, this.spawnTimeoutMs);
   }
 
   // killSession stops a session and its live descendants; final is "killed"
@@ -189,7 +199,7 @@ export class DaemonClient {
     return this.call('POST', '/v1/messages', body);
   }
 
-  private call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private call<T>(method: string, path: string, body?: unknown, timeoutMs = this.timeoutMs): Promise<T> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     return new Promise<T>((resolve, reject) => {
       const req = request(
@@ -202,7 +212,7 @@ export class DaemonClient {
             Accept: 'application/json',
             ...(payload !== undefined ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
           },
-          timeout: this.timeoutMs,
+          timeout: timeoutMs,
         },
         (res) => {
           let text = '';

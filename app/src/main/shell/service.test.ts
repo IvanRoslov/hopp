@@ -7,6 +7,7 @@ import { FakeDaemon, makeLesson, makeProfile, makeSession } from '../../../test/
 import type { ProjectInput, ShellState, TaskInput } from '../../shared/shell';
 import { DaemonClient } from '../daemon/client';
 import { makeRunner, RunError, type Runner } from './exec';
+import { expandHome } from './projects';
 import { ShellService, taskTitle, uniqueId } from './service';
 import { ShellStore } from './store';
 
@@ -136,6 +137,16 @@ describe('projects', () => {
       if (!r.ok) expect([r.error.field, r.error.code], JSON.stringify(over)).toEqual([field, code]);
     }
     expect((await svc.state()).projects).toHaveLength(1);
+  });
+
+  it('accepts a repository written with ~ and expands it', async () => {
+    expect(expandHome('~/projects/site', '/Users/u')).toBe('/Users/u/projects/site');
+    expect(expandHome('~', '/Users/u')).toBe('/Users/u');
+    expect(expandHome('/abs/~x', '/Users/u')).toBe('/abs/~x');
+    const fake = await svc.createProject(projectInput({ name: 'Other', orchestratorRepo: '~/surely-not-a-folder-hopp' }));
+    expect(!fake.ok && fake.error).toMatchObject({ code: 'folder_missing', field: 'orchestratorRepo' });
+    const agent = await svc.createAgent({ name: 'ops', profile: 'sonnet', dir: '~/surely-not-a-folder-hopp' });
+    expect(!agent.ok && agent.error.code).toBe('folder_missing');
   });
 
   it('updates a project, keeps createdAt, and locks the slug once it has tasks', async () => {
@@ -301,6 +312,66 @@ describe('task launch', () => {
     const r2 = await svc.createTask(taskInput());
     expect(!r2.ok && r2.error.code).toBe('unavailable');
     expect(existsSync(join(home, 'work', 'site', 'fix-the-header'))).toBe(false);
+  });
+
+  it('a spawn the daemon answers late keeps its worktree and records the task', async () => {
+    const repo = mkRepo('site');
+    await project({ orchestratorRepo: repo });
+    const slow = new ShellService({
+      home, store, client: new DaemonClient(d.socketPath, 100, 2_000), git, hopp: fakeHopp, pickFolder: async () => null, now: () => 1000,
+    });
+    d.delay.set('POST /v1/sessions', 600);
+    const r = await slow.createTask(taskInput());
+    expect(r.ok && r.value.id).toBe('fix-the-header');
+    expect(d.sessions.map((s) => s.id)).toEqual(['fix-the-header']);
+    expect(existsSync(join(home, 'worktrees', 'site', 'fix-the-header', 'README'))).toBe(true);
+    expect(branches(repo)).toContain('hopp/fix-the-header');
+    expect((await svc.state()).tasks.map((t) => t.id)).toEqual(['fix-the-header']);
+  });
+
+  it('when the spawn may have happened and the daemon cannot say, nothing is removed', async () => {
+    const repo = mkRepo('site');
+    await project({ orchestratorRepo: repo });
+    const slow = new ShellService({
+      home, store, client: new DaemonClient(d.socketPath, 200, 100), git, hopp: fakeHopp, pickFolder: async () => null, now: () => 1000,
+    });
+    d.delay.set('POST /v1/sessions', 600);
+    d.delay.set('GET /v1/sessions/fix-the-header', 600);
+    const r = await slow.createTask(taskInput());
+    expect(!r.ok && r.error.code).toBe('launch_uncertain');
+    expect(!r.ok && r.error.message).toContain('fix-the-header');
+    expect(existsSync(join(home, 'worktrees', 'site', 'fix-the-header'))).toBe(true);
+    expect(branches(repo)).toContain('hopp/fix-the-header');
+  });
+
+  it('a running orchestrator whose task cannot be recorded is named, and its worktree kept', async () => {
+    const repo = mkRepo('site');
+    await project({ orchestratorRepo: repo });
+    const orig = store.update.bind(store);
+    let calls = 0;
+    store.update = (async () => {
+      calls++;
+      throw new Error('disk full');
+    }) as typeof store.update;
+    const r = await svc.createTask(taskInput());
+    store.update = orig;
+    expect(calls).toBe(2);
+    expect(!r.ok && r.error).toMatchObject({ code: 'task_not_recorded' });
+    expect(!r.ok && r.error.message).toContain('fix-the-header is running');
+    expect(!r.ok && r.error.message).toContain('disk full');
+    expect(d.sessions.map((s) => s.id)).toEqual(['fix-the-header']);
+    expect(existsSync(join(home, 'worktrees', 'site', 'fix-the-header'))).toBe(true);
+  });
+
+  it('a write that fails once is retried', async () => {
+    await project();
+    const orig = store.update.bind(store);
+    let calls = 0;
+    store.update = ((fn: Parameters<typeof orig>[0]) => (++calls === 1 ? Promise.reject(new Error('busy')) : orig(fn))) as typeof store.update;
+    const r = await svc.createTask(taskInput());
+    store.update = orig;
+    expect(r.ok).toBe(true);
+    expect((await svc.state()).tasks).toHaveLength(1);
   });
 
   it('makes nothing when the tool catalog cannot be read', async () => {

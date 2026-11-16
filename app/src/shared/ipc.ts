@@ -38,6 +38,15 @@ export const SHELL_CHANGED = 'shell:changed';
 // Sent with a task id when that task's feed changed.
 export const SHELL_FEED_CHANGED = 'shell:feed-changed';
 
-// The scheme the page loads artifact files from: hopp-artifact://<id>.
+// The scheme the page loads artifact files from: hopp-artifact://v/<id>.
+// The id is in the path: a standard scheme parses a numeric host as an IPv4
+// address, so hopp-artifact://12 would arrive as host 0.0.0.12.
 export const ARTIFACT_SCHEME = 'hopp-artifact';
-export const artifactUrl = (id: number): string => `${ARTIFACT_SCHEME}://${id}`;
+export const artifactUrl = (id: number): string => `${ARTIFACT_SCHEME}://v/${id}`;
+
+// artifactIdOf reads the id back from such a URL; null when it is not one.
+export function artifactIdOf(url: string): number | null {
+  const m = /^hopp-artifact:\/\/v\/(\d+)\/?$/.exec(url);
+  const id = m ? Number(m[1]) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
