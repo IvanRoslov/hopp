@@ -42,10 +42,15 @@ export class DaemonUnavailable extends Error {
   }
 }
 
+// resolveHoppHome returns $HOPP_HOME, or ~/.hopp.
+export function resolveHoppHome(env: NodeJS.ProcessEnv | Record<string, string | undefined>, home = homedir()): string {
+  const h = env['HOPP_HOME'];
+  return h ? h : join(home, '.hopp');
+}
+
 // resolveSocketPath returns $HOPP_HOME/hopp.sock, or ~/.hopp/hopp.sock.
 export function resolveSocketPath(env: NodeJS.ProcessEnv | Record<string, string | undefined>, home = homedir()): string {
-  const h = env['HOPP_HOME'];
-  return join(h ? h : join(home, '.hopp'), 'hopp.sock');
+  return join(resolveHoppHome(env, home), 'hopp.sock');
 }
 
 const UNAVAILABLE_CODES = new Set(['ENOENT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTSOCK', 'EPIPE']);
