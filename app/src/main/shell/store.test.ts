@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -92,6 +92,49 @@ describe('ShellStore', () => {
     await expect(s.read()).rejects.toThrow(/newer/);
     await expect(s.update(() => {})).rejects.toThrow(/newer/);
     expect(JSON.parse(readFileSync(p, 'utf8')).version).toBe(STORE_VERSION + 1);
+  });
+
+  it('keeps the previous state in state.json.bak', async () => {
+    const s = new ShellStore(home);
+    await s.update((st) => {
+      st.projects.push(project('a'));
+    });
+    await s.update((st) => {
+      st.projects.push(project('b'));
+    });
+    const bak = JSON.parse(readFileSync(join(home, 'shell', 'state.json.bak'), 'utf8'));
+    expect(bak.projects.map((p: Project) => p.slug)).toEqual(['a']);
+    expect(readdirSync(join(home, 'shell')).sort()).toEqual(['state.json', 'state.json.bak']);
+  });
+
+  it('falls back to state.json.bak when state.json is empty or broken, and says so', async () => {
+    const s = new ShellStore(home);
+    await s.update((st) => {
+      st.projects.push(project('a'));
+    });
+    await s.update((st) => {
+      st.projects.push(project('b'));
+    });
+    for (const broken of ['', '{"version":1,"proj']) {
+      writeFileSync(join(home, 'shell', 'state.json'), broken);
+      const again = new ShellStore(home);
+      expect((await again.read()).projects.map((p) => p.slug)).toEqual(['a']);
+      expect(again.recovered).toMatch(/state\.json\.bak/);
+    }
+    // The next write repairs state.json and keeps the broken one aside.
+    const again = new ShellStore(home);
+    await again.update((st) => {
+      st.projects.push(project('c'));
+    });
+    expect(JSON.parse(readFileSync(join(home, 'shell', 'state.json'), 'utf8')).projects.map((p: Project) => p.slug)).toEqual(['a', 'c']);
+    expect(existsSync(join(home, 'shell', 'state.json.broken'))).toBe(true);
+  });
+
+  it('refuses to start, naming both files, when neither can be read', async () => {
+    mkdirSync(join(home, 'shell'));
+    writeFileSync(join(home, 'shell', 'state.json'), '{not json');
+    writeFileSync(join(home, 'shell', 'state.json.bak'), '');
+    await expect(new ShellStore(home).read()).rejects.toThrow(/state\.json.*state\.json\.bak/s);
   });
 
   it('refuses a corrupt file and never overwrites it', async () => {

@@ -79,6 +79,13 @@ describe('deriveStages', () => {
     expect(status([], [ask(2, { 'hopp.stage': 'spec', 'hopp.kind': 'paid' })])[0]).toBe('started');
   });
 
+  it('a close stamped before its own creation still counts after it', () => {
+    const p = [started('spec', 1)];
+    const ret = submit('spec', 10, { status: 'answered', choice: 'Return', answer: 'x', closed_at: 2 });
+    const again = submit('spec', 20, { status: 'answered', choice: 'Accept', closed_at: 2 });
+    expect(status(p, [ret, again])[0]).toBe('accepted');
+  });
+
   it('an older answered submission does not override a newer open one', () => {
     const old = submit('spec', 2, { status: 'answered', choice: 'Return', closed_at: 5 });
     const newer = submit('spec', 4);
