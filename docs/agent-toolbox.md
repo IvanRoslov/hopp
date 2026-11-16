@@ -44,6 +44,7 @@ The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without wr
 
 - `make test` runs `go test ./...` inside `daemon/`, where the Go module lives (its module path stays `github.com/IvanRoslov/hopp`); run `go vet ./...` and `gofmt -l .` there too.
 - `make build` builds the program into `bin/hopp`.
+- `make app-pack` builds an unsigned `app/dist/hopp-darwin-arm64/hopp.app` for this Mac (not signed, not installed anywhere).
 - `make app-test` type-checks the desktop app in `app/` and runs its vitest unit tests and its Playwright end-to-end tests (Electron), all against a fake daemon on a temporary socket; `make app-install` (`npm ci`) comes first, and `make app-dev` runs the app against the daemon of `HOPP_HOME`.
 - The Pi delivery extension tests run with `node --experimental-strip-types --test daemon/internal/agent/pi/delivery-extension.test.ts`; `go test` does not run them.
 

@@ -12,6 +12,7 @@ Step-by-step runbooks for recurring operations the agent performs. Each playbook
 - [[docs/playbooks/run-parallel-workers]] — the standing rules for briefing, running and merging parallel workers
 - [[docs/playbooks/test-the-fact-tree]] — prove the fact tree answers questions in ≤4 files (the golden set lives here)
 - [[docs/playbooks/consolidate-lessons]] — distill open lessons into the tree and the playbooks (the episodic→semantic loop)
+- [[docs/playbooks/first-task]] — the first task in the desktop app: a project, a task, its questions, a pipeline, tools and lessons
 - [[docs/playbooks/_template]] — copy this to start a new playbook
 
 <!-- Add a line per playbook as you write them (deploy, debug, release, …). -->

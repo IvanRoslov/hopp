@@ -1,4 +1,4 @@
-.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build
+.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build app-pack
 
 lint-docs:
 	python3 scripts/lint_docs.py .
@@ -62,3 +62,8 @@ app-test:
 
 app-build:
 	cd app && npm run build
+
+# An unsigned macOS bundle for this machine (arm64): app/dist/hopp-darwin-arm64/hopp.app.
+# Not signed or notarized; nothing is installed or copied to /Applications.
+app-pack:
+	cd app && npm run build && node scripts/pack.mjs
