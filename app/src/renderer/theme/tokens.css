@@ -33,6 +33,9 @@
   --term-cursor: #cfccc7;
   --term-selection: rgba(207, 204, 199, 0.25);
 
+  /* An HTML artifact is drawn on white, as a browser would, in both themes. */
+  --frame-bg: #ffffff;
+
   /* Only the skeleton view (legacy.css) uses these two. */
   --legacy-danger: #e06c6c;
   --legacy-warn: #e5b45b;
