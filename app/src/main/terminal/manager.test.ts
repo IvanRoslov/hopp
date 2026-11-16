@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TerminalManager } from './manager';
 
@@ -127,16 +128,20 @@ describe('TerminalManager with tmux', () => {
   const sock = `hopp-app-test-${process.pid}`;
   const tmux = (...args: string[]) => execFileSync('tmux', ['-L', sock, '-f', '/dev/null', ...args], { encoding: 'utf8' });
 
+  let socketPath = '';
   afterEach(() => {
     try {
       tmux('kill-server');
     } catch {
       // already gone
     }
+    // tmux leaves its socket file behind; remove this test's own.
+    if (socketPath.includes(sock)) rmSync(socketPath, { force: true });
   });
 
   it('close detaches and leaves the session running', async () => {
     tmux('new-session', '-d', '-s', 'probe', '-x', '80', '-y', '24', 'sh -c "echo inside-tmux; sleep 600"');
+    socketPath = tmux('display-message', '-p', '-t', '=probe', '#{socket_path}').trim();
     const a = new FakeAttach();
     a.commands['probe'] = ['tmux', '-L', sock, 'attach', '-t', '=probe'];
     const m = new TerminalManager(a);
