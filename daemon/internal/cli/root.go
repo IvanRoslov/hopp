@@ -66,6 +66,8 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newReplyCmd())
 	root.AddCommand(newLessonCmd())
 	root.AddCommand(newLessonsCmd())
+	root.AddCommand(newPostCmd())
+	root.AddCommand(newPostsCmd())
 	root.AddCommand(newToolsCmd())
 	root.AddCommand(newEventsCmd())
 	root.AddCommand(newUsageCmd())

@@ -47,25 +47,14 @@ func registerLessonRoutes(mux *http.ServeMux, d Deps) {
 			writeErr(w, http.StatusBadRequest, "bad_request", "body must not be empty")
 			return
 		}
-		// The writer's labels at the time of writing, overlaid with the
-		// request's, so the lesson keeps them after the session is removed.
-		labels := map[string]string{}
-		if req.From != "" {
-			sess, err := d.Store.GetSession(req.From)
-			if errors.Is(err, store.ErrNotFound) {
-				writeErr(w, http.StatusBadRequest, "bad_request", "from session not found: "+req.From)
-				return
-			}
-			if err != nil {
-				writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
-				return
-			}
-			for k, v := range sess.Labels {
-				labels[k] = v
-			}
+		labels, err := writerLabels(d, req.From, req.Labels)
+		if errors.Is(err, errFromUnknown) {
+			writeErr(w, http.StatusBadRequest, "bad_request", "from session not found: "+req.From)
+			return
 		}
-		for k, v := range req.Labels {
-			labels[k] = v
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
 		}
 		id, err := d.Store.AddLesson(store.Lesson{FromSession: req.From, Labels: labels, Body: req.Body})
 		if err != nil {

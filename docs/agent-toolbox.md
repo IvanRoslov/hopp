@@ -86,6 +86,13 @@ bin/hopp tools guide                          # how to add a tool
 bin/hopp tools import <registry.yaml> [--update]   # from rocket's format; the file is only read
 ```
 
+Posts, notes to the human that wait for no answer (from an agent, or the human's own with `--from ""`):
+
+```bash
+bin/hopp post "<text>" [--label k=v] [--attach <path|url|name@version>]   # or -f <file>, or stdin; prints the id
+bin/hopp posts [--label k=v] [--from <id>] [--after <id>] [--limit <n>]
+```
+
 Lessons, from an agent or the human:
 
 ```bash
