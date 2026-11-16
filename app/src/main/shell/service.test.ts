@@ -7,6 +7,7 @@ import { FakeDaemon, makeLesson, makeProfile, makeSession } from '../../../test/
 import type { ProjectInput, ShellState, TaskInput } from '../../shared/shell';
 import { DaemonClient } from '../daemon/client';
 import { makeRunner, RunError, type Runner } from './exec';
+import { expandHome } from './projects';
 import { ShellService, taskTitle, uniqueId } from './service';
 import { ShellStore } from './store';
 
@@ -136,6 +137,16 @@ describe('projects', () => {
       if (!r.ok) expect([r.error.field, r.error.code], JSON.stringify(over)).toEqual([field, code]);
     }
     expect((await svc.state()).projects).toHaveLength(1);
+  });
+
+  it('accepts a repository written with ~ and expands it', async () => {
+    expect(expandHome('~/projects/site', '/Users/u')).toBe('/Users/u/projects/site');
+    expect(expandHome('~', '/Users/u')).toBe('/Users/u');
+    expect(expandHome('/abs/~x', '/Users/u')).toBe('/abs/~x');
+    const fake = await svc.createProject(projectInput({ name: 'Other', orchestratorRepo: '~/surely-not-a-folder-hopp' }));
+    expect(!fake.ok && fake.error).toMatchObject({ code: 'folder_missing', field: 'orchestratorRepo' });
+    const agent = await svc.createAgent({ name: 'ops', profile: 'sonnet', dir: '~/surely-not-a-folder-hopp' });
+    expect(!agent.ok && agent.error.code).toBe('folder_missing');
   });
 
   it('updates a project, keeps createdAt, and locks the slug once it has tasks', async () => {

@@ -31,7 +31,7 @@ import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
 import { starterPipelines, validatePipeline } from './pipelines';
-import { fail, MAX_SLUG, validateProject } from './projects';
+import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
 import { agentText, allowedRepos, orchestratorText, workerText, type WorkerFile } from './startText';
 import type { ShellStore } from './store';
 
@@ -423,7 +423,7 @@ export class ShellService {
       if (st.tasks.some((t) => t.sessionId === name)) return fail('name_taken', `"${name}" is the session of a task`, 'name');
       const profiles = await this.listProfiles();
       if (!profiles.some((p) => p.enabled && p.name === input.profile)) return fail('profile_unknown', 'Choose an enabled profile', 'profile');
-      const dir = (input.dir ?? '').trim();
+      const dir = expandHome((input.dir ?? '').trim());
       if (!dir || !isAbsolute(dir) || !(await isDir(dir))) return fail('folder_missing', 'Choose an existing folder', 'dir');
       try {
         await this.d.client.addMailbox(name);
