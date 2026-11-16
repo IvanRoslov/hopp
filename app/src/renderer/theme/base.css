@@ -1,0 +1,11 @@
+/* Layout only; values come from tokens.css. */
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: var(--font-size) var(--font-ui); overflow: hidden; }
+button { font: inherit; color: var(--fg); background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px var(--gap); cursor: pointer; }
+input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px var(--gap); }
+.frame { display: flex; height: 100%; }
+.frame-left { width: var(--left-width); flex: none; background: var(--bg-panel); border-right: 1px solid var(--border); overflow: auto; }
+.frame-middle { width: var(--middle-width); flex: none; background: var(--bg-panel); border-right: 1px solid var(--border); overflow: auto; }
+.frame-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.frame-header { height: var(--header-height); flex: none; display: flex; align-items: center; gap: var(--gap); padding: 0 var(--gap); border-bottom: 1px solid var(--border); }
+.frame-right-body { flex: 1; min-height: 0; position: relative; }
