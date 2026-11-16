@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ModelProfile, Pipeline, Project, ShellBridge, ShellError, Task, TaskInput } from '../../shared/shell';
 import { slugify } from '../../shared/slug';
 import { cleanError } from '../errors';
@@ -62,6 +62,7 @@ export function NewTask(props: {
   const [extra, setExtra] = useState('');
   const [error, setError] = useState<ShellError | null>(null);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
 
   // Defaults once the profiles arrive: the last choice if it is still
   // enabled, else the first enabled profile.
@@ -83,7 +84,8 @@ export function NewTask(props: {
   const ready = brief.trim() !== '' && !!proj && !!orchestrator && !busy;
 
   const submit = async () => {
-    if (!ready || !proj) return;
+    if (!ready || !proj || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     const input: TaskInput = { projectSlug: proj.slug, brief: brief.trim(), orchestratorProfile: orchestrator, workerProfiles: workers ?? [] };
@@ -103,6 +105,7 @@ export function NewTask(props: {
     } catch (err) {
       setError({ code: 'failed', message: cleanError(err) });
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };

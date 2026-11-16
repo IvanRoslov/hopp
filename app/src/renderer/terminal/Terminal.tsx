@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { TerminalBridge } from '../../shared/bridge';
 import { hopp } from '../bridge';
 import { cleanError } from '../errors';
@@ -24,6 +24,9 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
   const box = useRef<HTMLDivElement>(null);
   const onEnded = useRef(props.onEnded);
   onEnded.current = props.onEnded;
+  // Until the pty is open (the first attach may wait for the login shell's
+  // PATH), the box says so instead of standing empty.
+  const [attaching, setAttaching] = useState(true);
 
   useEffect(() => {
     const el = box.current!;
@@ -77,6 +80,7 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
           return;
         }
         termId = id;
+        setAttaching(false);
         for (const [eid, d] of early) if (eid === id) term.write(d);
         early.length = 0;
         term.focus();
@@ -84,6 +88,7 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
       (err) => {
         if (disposed) return;
         ended = true;
+        setAttaching(false);
         term.write(`\x1b[31mcannot open the terminal: ${cleanError(err)}\x1b[0m\r\n`);
       },
     );
@@ -118,5 +123,9 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
     };
   }, [sessionId, bridge]);
 
-  return <div ref={box} className="terminal" data-testid="terminal" />;
+  return (
+    <div ref={box} className="terminal" data-testid="terminal">
+      {attaching && <div className="term-attaching">Attaching…</div>}
+    </div>
+  );
 }

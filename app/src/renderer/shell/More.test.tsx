@@ -203,3 +203,23 @@ describe('day-one fixes', () => {
     expect(block().textContent).toContain('No confirmation yet');
   });
 });
+
+describe('double submit', () => {
+  it('two quick Enters create one project', async () => {
+    const f = fakeBridge({ shell: { state: { projects: [makeProject('a')] } } });
+    let release!: () => void;
+    f.shell!.createProject.mockImplementationOnce(
+      (input) => new Promise((r) => (release = () => r({ ok: true, value: makeProject('x', { name: input.name }) }))),
+    );
+    await mount(f);
+    fireEvent.click(screen.getByText('Settings'));
+    fireEvent.click(screen.getByText('New project'));
+    type(screen.getByLabelText('Name'), 'X');
+    const form = screen.getByLabelText('Name').closest('form')!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await act(async () => release());
+    await flush();
+    expect(f.shell!.createProject).toHaveBeenCalledTimes(1);
+  });
+});

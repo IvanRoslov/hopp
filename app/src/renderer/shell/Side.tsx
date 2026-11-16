@@ -142,7 +142,7 @@ export function Side(props: {
           <section aria-label="Work">
             <div className="head">Work</div>
             {groups.map((g) => (
-              <div key={g.project.slug}>
+              <div key={g.project.slug} className="work-group">
                 <div className="project-head" title={g.project.name}>{g.project.name}</div>
                 {g.tasks.map((t) => (
                   <TaskRow key={t.id} task={t} status={status(t)} sel={selTask === t.id} go={go} />

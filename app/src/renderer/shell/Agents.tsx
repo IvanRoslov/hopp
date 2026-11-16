@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { HoppBridge } from '../../shared/bridge';
 import type { LongAgent, ModelProfile, Result, ShellBridge, ShellError } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
@@ -23,10 +23,13 @@ export function NewAgent(props: {
   const [dir, setDir] = useState('');
   const [error, setError] = useState<ShellError | null>(null);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const chosen = profile || enabled[0]?.name || '';
   const fieldError = (f: string) => (error?.field === f ? error.message : undefined);
 
   const submit = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -36,6 +39,7 @@ export function NewAgent(props: {
     } catch (e) {
       setError({ code: 'failed', message: cleanError(e) });
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };

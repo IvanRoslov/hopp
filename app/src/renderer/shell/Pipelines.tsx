@@ -50,6 +50,7 @@ export function Pipelines(props: { shell: ShellBridge; pipelines: Pipeline[]; se
   };
   const [error, setError] = useState<ShellError | null>(null);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
@@ -72,6 +73,8 @@ export function Pipelines(props: { shell: ShellBridge; pipelines: Pipeline[]; se
     });
 
   const save = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -84,6 +87,7 @@ export function Pipelines(props: { shell: ShellBridge; pipelines: Pipeline[]; se
     } catch (e) {
       setError({ code: 'failed', message: cleanError(e) });
     } finally {
+      inFlight.current = false;
       setBusy(false);
       bump((n) => n + 1);
     }
