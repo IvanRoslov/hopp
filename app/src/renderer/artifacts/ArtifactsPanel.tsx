@@ -103,14 +103,13 @@ function Viewer(props: {
             Compare
           </button>
         )}
-        {compare && (
-          <Dropdown label={label(compare)} testId="compare-picker" options={opts.filter((o) => o.value !== String(a.id))} value={String(compare.id)} onChange={(id) => setCompare(pick(id))} />
-        )}
       </div>
       <div className={'viewer-body' + (compare ? ' split' : '')}>
         {compare && (
           <figure className="viewer-pane">
-            <figcaption>{label(compare)}</figcaption>
+            <figcaption>
+              <Dropdown label={label(compare)} testId="compare-picker" options={opts.filter((o) => o.value !== String(a.id))} value={String(compare.id)} onChange={(id) => setCompare(pick(id))} />
+            </figcaption>
             <Show shell={props.shell} artifact={compare} />
           </figure>
         )}

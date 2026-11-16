@@ -38,7 +38,7 @@ export function ArtifactTile(props: {
   return (
     <button
       type="button"
-      className={'af-tile ' + (props.size ?? 'feed')}
+      className={'af-tile af-' + (props.size ?? 'feed')}
       title={`${a.name}@${a.version} — ${a.filename}`}
       onClick={() => props.onOpen(a)}
       data-testid={`artifact-tile-${a.name}@${a.version}`}

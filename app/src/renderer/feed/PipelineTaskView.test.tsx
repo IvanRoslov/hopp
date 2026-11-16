@@ -199,7 +199,7 @@ describe('PipelineTaskView panels', () => {
     expect(img.getAttribute('src')).toBe(`hopp-artifact://${scene2.id}`);
     fireEvent.click(within(viewer).getByRole('button', { name: 'Compare' }));
     expect(viewer.querySelectorAll('img.viewer-img')).toHaveLength(2);
-    expect(within(viewer).getByText('Version 1', { selector: 'figcaption' })).toBeTruthy();
+    expect(within(viewer).getByTestId('compare-picker').textContent).toContain('Version 1');
     fireEvent.click(within(viewer).getByRole('button', { name: 'All artifacts' }));
     expect(screen.getByTestId('artifacts-panel')).toBeTruthy();
   });
