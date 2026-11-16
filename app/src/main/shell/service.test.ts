@@ -107,10 +107,10 @@ describe('projects', () => {
   it('creates a project with a slug from the name and tells listeners', async () => {
     const repo = mkRepo('site');
     mkdirSync(join(repo, 'sub'));
-    const p = await project({ name: 'Мой Сайт', orchestratorRepo: join(repo, 'sub'), guardrails: '  no force push ' });
-    expect(p).toMatchObject({ slug: 'moi-sait', name: 'Мой Сайт', orchestratorRepo: repo, guardrails: 'no force push', createdAt: 1000 });
+    const p = await project({ name: 'Наша Студия', orchestratorRepo: join(repo, 'sub'), guardrails: '  no force push ' });
+    expect(p).toMatchObject({ slug: 'nasha-studiya', name: 'Наша Студия', orchestratorRepo: repo, guardrails: 'no force push', createdAt: 1000 });
     expect((await svc.state()).projects).toHaveLength(1);
-    expect(changes.at(-1)!.projects[0]!.slug).toBe('moi-sait');
+    expect(changes.at(-1)!.projects[0]!.slug).toBe('nasha-studiya');
   });
 
   it('names the field of each error', async () => {

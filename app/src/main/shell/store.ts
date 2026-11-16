@@ -10,6 +10,8 @@ export const STORE_VERSION = 1;
 
 interface FileShape extends ShellState {
   version: number;
+  // Names of one-time seeds already applied (see seedOnce).
+  seeded?: string[];
 }
 
 const empty = (): ShellState => ({ projects: [], pipelines: [], tasks: [], agents: [] });
@@ -17,6 +19,7 @@ const empty = (): ShellState => ({ projects: [], pipelines: [], tasks: [], agent
 export class ShellStore {
   readonly path: string;
   private state: ShellState | null = null;
+  private seeded: string[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private listeners = new Set<(s: ShellState) => void>();
 
@@ -57,6 +60,21 @@ export class ShellStore {
     return p;
   }
 
+  // seedOnce runs fn once per key over the store's whole life: after it ran
+  // (even if the human later removed what it added) it never runs again.
+  async seedOnce(key: string, fn: (s: ShellState) => void): Promise<boolean> {
+    await this.load();
+    if (this.seeded.includes(key)) return false;
+    let ran = false;
+    await this.update((s) => {
+      if (this.seeded.includes(key)) return;
+      fn(s);
+      this.seeded = [...this.seeded, key];
+      ran = true;
+    });
+    return ran;
+  }
+
   private async load(): Promise<ShellState> {
     if (this.state) return this.state;
     let text: string;
@@ -85,13 +103,14 @@ export class ShellStore {
       tasks: (raw.tasks ?? []).map((t) => ({ ...t, pipeline: t.pipeline ?? null })),
       agents: raw.agents ?? [],
     };
+    this.seeded = Array.isArray(raw.seeded) ? raw.seeded.filter((x) => typeof x === 'string') : [];
     this.state = state;
     return state;
   }
 
   private async write(s: ShellState): Promise<void> {
     await mkdir(join(this.home, 'shell'), { recursive: true });
-    const body: FileShape = { version: STORE_VERSION, ...s };
+    const body: FileShape = { version: STORE_VERSION, seeded: this.seeded, ...s };
     const tmp = `${this.path}.${process.pid}.${Date.now()}.tmp`;
     await writeFile(tmp, JSON.stringify(body, null, 2) + '\n', { mode: 0o600 });
     await rename(tmp, this.path);

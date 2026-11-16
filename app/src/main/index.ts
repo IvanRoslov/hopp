@@ -1,4 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { pathToFileURL } from 'node:url';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, session } from 'electron';
+import { ARTIFACT_SCHEME, SHELL_FEED_CHANGED } from '../shared/ipc';
 import { DaemonClient, resolveHoppHome, resolveSocketPath } from './daemon/client';
 import { startDaemon } from './daemon/start';
 import { EventStream } from './daemon/stream';
@@ -11,6 +13,11 @@ import { loginShellPath, mergePath } from './shellEnv';
 import { resolveExecutable } from './terminal/manager';
 import { TerminalManager } from './terminal/manager';
 import { createWindow } from './window';
+
+// Artifacts load in the page from hopp-artifact://<id> (img, video, iframe).
+protocol.registerSchemesAsPrivileged([
+  { scheme: ARTIFACT_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+]);
 
 const hoppHome = resolveHoppHome(process.env);
 const socketPath = resolveSocketPath(process.env);
@@ -67,9 +74,31 @@ app.whenReady().then(() => {
       return startDaemon(process.env);
     },
   });
-  registerShellIpc(ipcMain, shellService, (channel, ...args) => {
+  const send = (channel: string, ...args: unknown[]) => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.webContents.isDestroyed()) w.webContents.send(channel, ...args);
+    }
+  };
+  registerShellIpc(ipcMain, shellService, send);
+  stream.on('event', (e) => {
+    const task = shellService.feedTaskOf(e);
+    if (task) send(SHELL_FEED_CHANGED, task);
+  });
+  void shellService.seedPipelines().catch((err) => console.error('hopp: could not add the starter pipelines:', err));
+  // Only files inside $HOPP_HOME/artifacts are served; anything else is 404.
+  protocol.handle(ARTIFACT_SCHEME, async (req) => {
+    const id = Number(new URL(req.url).hostname);
+    if (!Number.isInteger(id) || id <= 0) return new Response('not found', { status: 404 });
+    try {
+      const f = await shellService.artifactFile(id);
+      const r = await net.fetch(pathToFileURL(f.path).toString(), { headers: req.headers });
+      const headers = new Headers(r.headers);
+      headers.set('Content-Type', f.mime);
+      headers.set('X-Content-Type-Options', 'nosniff');
+      headers.set('Content-Security-Policy', "default-src 'none'; img-src hopp-artifact: data:; media-src hopp-artifact:; style-src 'unsafe-inline'; sandbox");
+      return new Response(r.body, { status: r.status, headers });
+    } catch {
+      return new Response('not found', { status: 404 });
     }
   });
   stream.start();
