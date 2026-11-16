@@ -45,8 +45,8 @@ describe('<Terminal>', () => {
     await flush();
     const x = FakeXterm.instances[0]!;
     act(() => b.emitExit('t1', 0));
-    expect(x.text).toMatch(/terminal ended/);
-    expect(x.text.match(/terminal ended/g)).toHaveLength(1);
+    expect(x.text).toMatch(/terminal closed/);
+    expect(x.text.match(/terminal closed/g)).toHaveLength(1);
     expect(onEnded).toHaveBeenCalledTimes(1);
     x.type('x');
     expect(b.write).not.toHaveBeenCalled();

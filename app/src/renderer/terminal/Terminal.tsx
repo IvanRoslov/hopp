@@ -14,7 +14,9 @@ function cssVar(name: string, fallback: string): string {
 }
 
 // Terminal shows one session in xterm.js. It opens a pty on mount and closes
-// it on unmount (which detaches the tmux client). The terminal size changes
+// it on unmount (which detaches the tmux client). When the pty ends (the
+// session ended, or the human detached with the tmux key) it prints one line
+// and calls onEnded; the parent offers to reattach. The terminal size changes
 // only when its own container changes size; nothing else resizes it.
 export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; onEnded?: () => void }) {
   const { sessionId } = props;
@@ -27,8 +29,15 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
     const el = box.current!;
     const term = new XTerm({
       fontFamily: cssVar('--font-mono', 'monospace'),
-      fontSize: parseInt(cssVar('--font-size-mono', '13'), 10) || 13,
-      theme: { background: cssVar('--bg', '#000000'), foreground: cssVar('--fg', '#ffffff') },
+      fontSize: parseInt(cssVar('--fs-mono', '13'), 10) || 13,
+      lineHeight: 1.25,
+      // The terminal keeps its dark colors in both themes.
+      theme: {
+        background: cssVar('--term', '#100f0e'),
+        foreground: cssVar('--term-ink', '#cfccc7'),
+        cursor: cssVar('--term-cursor', '#cfccc7'),
+        selectionBackground: cssVar('--term-selection', 'rgba(207,204,199,.25)'),
+      },
       cursorBlink: true,
       scrollback: 5000,
     });
@@ -54,7 +63,7 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
     const offExit = bridge.onExit((id) => {
       if (id !== termId || ended) return;
       ended = true;
-      term.write('\r\n\x1b[2m[the session terminal ended]\x1b[0m\r\n');
+      term.write('\r\n\x1b[2m[terminal closed]\x1b[0m\r\n');
       onEnded.current?.();
     });
     const input = term.onData((d) => {

@@ -11,7 +11,7 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: 'renderer', environment: 'jsdom', include: ['src/renderer/**/*.test.tsx', 'src/renderer/**/*.test.ts'] },
+        test: { name: 'renderer', environment: 'jsdom', environmentOptions: { jsdom: { url: 'http://localhost/' } }, setupFiles: ['test/setup-renderer.ts'], include: ['src/renderer/**/*.test.tsx', 'src/renderer/**/*.test.ts'] },
       },
     ],
     testTimeout: 15000,

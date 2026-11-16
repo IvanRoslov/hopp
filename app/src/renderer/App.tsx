@@ -1,5 +1,5 @@
-import { Workspace } from './Workspace';
+import { ShellApp } from './shell/ShellApp';
 
 export function App() {
-  return <Workspace />;
+  return <ShellApp />;
 }
