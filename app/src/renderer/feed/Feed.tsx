@@ -298,7 +298,7 @@ function ChoiceBlock(props: FeedProps & { ask: Ask; options: string[]; primary: 
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && text.trim()) void send({ answer: text.trim() });
+              if (e.key === 'Enter' && text.trim() && !busy) void send({ answer: text.trim() });
             }}
           />
           <button type="button" className="c-btn" disabled={busy || !text.trim()} onClick={() => void send({ answer: text.trim() })}>

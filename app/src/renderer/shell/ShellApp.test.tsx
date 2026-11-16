@@ -121,7 +121,7 @@ describe('new task', () => {
   it('offers only enabled profiles and launches with what was chosen', async () => {
     const f = seed();
     await mount(f);
-    expect(screen.getByText('A new worktree of /repos/hopp')).toBeTruthy();
+    expect(screen.getByText('A new worktree of /repos/hopp at its current commit; uncommitted changes are not included.')).toBeTruthy();
     fireEvent.click(screen.getByTestId('pick-orchestrator'));
     expect(screen.getAllByRole('menuitemradio').map((b) => b.textContent)).toEqual(['opus · A profile', 'sonnet · A profile']);
     fireEvent.click(screen.getAllByRole('menuitemradio')[1]!);
