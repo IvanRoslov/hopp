@@ -223,3 +223,23 @@ describe('double submit', () => {
     expect(f.shell!.createProject).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('column width', () => {
+  it('the divider resizes the questions column, remembers it, and keeps the terminal', async () => {
+    const f = fakeBridge({ sessions: [makeSession('orc')], shell: { state: { ...base, tasks: [makeTask('t', 'p', { sessionId: 'orc' })] } } });
+    await mount(f);
+    fireEvent.click(screen.getByTestId('task-row'));
+    fireEvent.click(screen.getByTestId('questions-button'));
+    const mounts = ends.mounts;
+    const sep = screen.getByRole('separator', { name: 'Resize the column' });
+    fireEvent.keyDown(sep, { key: 'ArrowRight' });
+    fireEvent.keyDown(sep, { key: 'ArrowRight' });
+    // jsdom has no layout: the width starts at the 280 px minimum.
+    expect(localStorage.getItem('hopp.questionsWidth')).toBe('312');
+    expect(screen.getByTestId('work-view').style.gridTemplateColumns).toContain('min(312px');
+    expect(ends.mounts).toBe(mounts);
+    fireEvent.doubleClick(sep);
+    expect(localStorage.getItem('hopp.questionsWidth')).toBeNull();
+    expect(screen.getByTestId('work-view').style.gridTemplateColumns).toBe('');
+  });
+});
