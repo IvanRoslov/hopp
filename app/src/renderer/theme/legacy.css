@@ -1,0 +1,44 @@
+/* The skeleton workspace, kept only while the shell layer is not wired (the
+   existing e2e drive it). Scoped to .legacy; colors map onto the tokens. */
+.legacy { --fg: var(--text); --fg-muted: var(--muted); --bg-panel: var(--side); --bg-hover: var(--hover); --bg-selected: var(--sel); --border: var(--line); --danger: var(--legacy-danger); --warn: var(--legacy-warn); --font-size: 13px; --font-size-mono: 13px; --left-width: 280px; --middle-width: 340px; --header-height: 36px; --gap: 8px; --indent: 14px; --radius: 4px; height: 100%; font-size: 13px; }
+.legacy button { font: inherit; color: var(--fg); background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px var(--gap); cursor: pointer; }
+.legacy input { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px var(--gap); }
+.legacy .frame { display: flex; height: 100%; }
+.legacy .frame-left { width: var(--left-width); flex: none; background: var(--bg-panel); border-right: 1px solid var(--border); overflow: auto; }
+.legacy .frame-middle { width: var(--middle-width); flex: none; background: var(--bg-panel); border-right: 1px solid var(--border); overflow: auto; }
+.legacy .frame-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.legacy .frame-header { height: var(--header-height); flex: none; display: flex; align-items: center; gap: var(--gap); padding: 0 var(--gap); border-bottom: 1px solid var(--border); }
+.legacy .frame-right-body { flex: 1; min-height: 0; position: relative; }
+.legacy .terminal { position: absolute; inset: 0; padding: var(--gap); background: var(--bg); }
+.legacy .muted { color: var(--fg-muted); }
+.legacy .sessions-head { display: flex; justify-content: space-between; align-items: center; padding: var(--gap); color: var(--fg-muted); }
+.legacy .sessions-head label { display: flex; align-items: center; gap: 4px; }
+.legacy .sessions-empty { padding: var(--gap); color: var(--fg-muted); }
+.legacy .sessions-list { list-style: none; margin: 0; padding: 0; }
+.legacy .session-row { display: flex; justify-content: space-between; gap: var(--gap); padding: 4px var(--gap); cursor: pointer; }
+.legacy .session-row:hover { background: var(--bg-hover); }
+.legacy .session-row.selected { background: var(--bg-selected); }
+.legacy .session-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legacy .session-state { color: var(--fg-muted); flex: none; }
+.legacy .state-working { color: var(--accent); }
+.legacy .state-waiting-for-input { color: var(--warn); }
+.legacy .state-errored { color: var(--danger); }
+.legacy .header-id { font-weight: 600; }
+.legacy .placeholder { padding: var(--gap); }
+.legacy .daemon-down { padding: var(--gap); }
+.legacy .daemon-down h2 { font-size: var(--font-size); margin: 0 0 var(--gap); }
+.legacy .connecting { padding: calc(var(--gap) * 4); }
+.legacy .daemon-note { color: var(--fg-muted); }
+.legacy .header-spacer { flex: 1; }
+.legacy button.active { background: var(--bg-selected); border-color: var(--accent); }
+.legacy button:disabled { opacity: 0.5; cursor: default; }
+.legacy .questions { padding: var(--gap); }
+.legacy .questions h3,.legacy .questions h4 { margin: 0 0 var(--gap); font-weight: 600; }
+.legacy .question-card { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); margin-bottom: var(--gap); display: flex; flex-direction: column; gap: 6px; }
+.legacy .question-card.closed { opacity: 0.7; }
+.legacy .question-body { white-space: pre-wrap; }
+.legacy .question-options { display: flex; flex-wrap: wrap; gap: 4px; }
+.legacy .question-text { display: flex; gap: 4px; }
+.legacy .question-text input { flex: 1; min-width: 0; }
+.legacy .question-raw { font: var(--font-size-mono) var(--font-mono); white-space: pre-wrap; margin: 0; }
+.legacy .question-error { color: var(--danger); }

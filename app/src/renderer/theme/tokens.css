@@ -1,23 +1,104 @@
-/* Temporary styling: every color, size and font of the app lives here. */
+/* Every color, size and font of the app lives here. Values come from the
+   accepted prototype (SPEC §6): dark by default, light under
+   [data-theme="light"]. Components use only these variables. */
 :root {
-  --bg: #1e1f22;
-  --bg-panel: #26272b;
-  --bg-hover: #303136;
-  --bg-selected: #3a3d45;
-  --fg: #d8d8dc;
-  --fg-muted: #8c8d93;
-  --accent: #5b8def;
-  --danger: #e06c6c;
-  --warn: #e5b45b;
-  --border: #3a3b40;
-  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: Menlo, Monaco, 'Courier New', monospace;
-  --font-size: 13px;
-  --font-size-mono: 13px;
-  --left-width: 280px;
-  --middle-width: 340px;
-  --header-height: 36px;
-  --gap: 8px;
-  --indent: 14px;
-  --radius: 4px;
+  --bg: #1e1c1a;
+  --side: #191716;
+  --panel: #161413;
+  --line: rgba(255, 244, 232, 0.07);
+  --text: #f0eeeb;
+  --muted: #a8a5a0;
+  --faint: #75716c;
+  --hover: rgba(255, 244, 232, 0.045);
+  --sel: rgba(255, 244, 232, 0.075);
+  --field: #252220;
+  --raise: #262321;
+  --tile: #2a2725;
+  --tile-ink: #3d3935;
+  --accent: #7fd1a0;
+  --on-accent: #10180f;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(0, 0, 0, 0.42);
+  --control-border: #817b75;
+  --control-hover: #35302c;
+  --control-focus: #b9b1a7;
+  --tree-hover: #201e1d;
+  --tree-pressed: #272523;
+  color-scheme: dark;
+
+  /* The terminal keeps its dark colors in both themes. */
+  --term: #100f0e;
+  --term-ink: #cfccc7;
+  --term-note: #6c6e6b;
+  --term-cursor: #cfccc7;
+  --term-selection: rgba(207, 204, 199, 0.25);
+
+  /* Only the skeleton view (legacy.css) uses these two. */
+  --legacy-danger: #e06c6c;
+  --legacy-warn: #e5b45b;
+
+  --r-s: 6px;
+  --r-m: 8px;
+  --r-l: 12px;
+  --r-field: 10px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --fs-body: 15px;
+  --fs-row: 14.5px;
+  --fs-name: 14px;
+  --fs-control: 13px;
+  --fs-small: 13px;
+  --fs-state: 12px;
+  --fs-tiny: 11px;
+  --fs-title: 23px;
+  --fs-brief: 17px;
+  --fs-brand: 17px;
+  --fs-mono: 13px;
+  --fs-mono-inline: 13.5px;
+
+  --side-w: 264px;
+  --top-h: 52px;
+  --page-x: 28px;
+  --form-w: 640px;
+  --brief-w: 720px;
+  --settings-w: 740px;
+  --term-pad: 20px;
+  --agents-max: 230px;
+  --row-h: 34px;
+  --control-h: 32px;
+}
+
+[data-theme='light'] {
+  --bg: #fbfaf8;
+  --side: #f3f1ee;
+  --panel: #f6f4f1;
+  --line: rgba(60, 40, 20, 0.09);
+  --text: #1f1d1b;
+  --muted: #69655f;
+  --faint: #a29d96;
+  --hover: rgba(60, 40, 20, 0.04);
+  --sel: rgba(60, 40, 20, 0.07);
+  --field: #f1eeea;
+  --raise: #ffffff;
+  --tile: #ece9e4;
+  --tile-ink: #d6d1ca;
+  --accent: #1f8a55;
+  --on-accent: #ffffff;
+  --shadow: 0 10px 30px rgba(60, 40, 20, 0.09);
+  --scrim: rgba(40, 30, 20, 0.18);
+  --control-border: #827a71;
+  --control-hover: #e8e2da;
+  --control-focus: #514a43;
+  --tree-hover: #efece8;
+  --tree-pressed: #e9e6e2;
+  color-scheme: light;
+}
+
+/* SPEC §6: up to 1500 px wide the terminal's inner padding is 20 px, above
+   it 24 px. */
+@media (min-width: 1501px) {
+  :root {
+    --term-pad: 24px;
+  }
 }
