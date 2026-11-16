@@ -2,6 +2,7 @@
 // push stream states and events.
 import { vi } from 'vitest';
 import type { HoppBridge } from '../src/shared/bridge';
+import type { ShellBridge } from '../src/shared/shell';
 import type { Ask, DaemonEvent, Session, StreamState } from '../src/shared/types';
 import { fakeTerminalBridge } from './renderer';
 
@@ -38,7 +39,9 @@ export function fakeBridge(init: { sessions?: Session[]; asks?: Ask[]; state?: S
     answerQuiz: vi.fn(async (_id: string, _body: unknown) => ({ status: 'answering' })),
   };
   const terminal = fakeTerminalBridge();
-  const bridge: HoppBridge = { daemon, terminal };
+  // The shell layer is faked per test; by default every call rejects.
+  const shell = new Proxy({}, { get: (_t, name) => () => Promise.reject(new Error(`shell.${String(name)} not faked`)) }) as ShellBridge;
+  const bridge: HoppBridge = { daemon, terminal, shell };
   return {
     bridge,
     daemon,

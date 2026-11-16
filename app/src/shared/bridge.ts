@@ -1,6 +1,7 @@
 // The API the preload bridge exposes to the page as `window.hopp`.
 // Named functions only: the page never sees ipcRenderer or Node.
 
+import type { ShellBridge } from './shell';
 import type { Ask, AskAnswer, DaemonEvent, QuizAnswer, Session, StreamState } from './types';
 
 export type Unsubscribe = () => void;
@@ -35,6 +36,7 @@ export interface TerminalBridge {
 export interface HoppBridge {
   daemon: DaemonBridge;
   terminal: TerminalBridge;
+  shell: ShellBridge;
 }
 
 declare global {
