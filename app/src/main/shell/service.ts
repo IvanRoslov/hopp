@@ -655,10 +655,17 @@ export class ShellService {
       if (page.length < 500) break;
       after = page[page.length - 1]!.id;
     }
-    const [asks, stored] = await Promise.all([
-      this.d.client.listAsks({ status: 'all', labels }),
+    // Asks: the daemon does not copy a session's labels into its asks, so an
+    // ask belongs to the task when it carries the task's label or comes from
+    // one of the task's sessions (the orchestrator, or a session labelled
+    // with the task).
+    const [allAsks, sessions, stored] = await Promise.all([
+      this.d.client.listAsks({ status: 'all' }),
+      this.d.client.listSessions({ all: true }),
       this.d.client.listArtifacts({ scope: t.sessionId, versions: true }),
     ]);
+    const mine = new Set([t.sessionId, ...sessions.filter((s) => s.labels?.[LABEL.task] === t.id).map((s) => s.id)]);
+    const asks = allAsks.filter((a) => a.labels?.[LABEL.task] === t.id || mine.has(a.from));
     const artifacts: Artifact[] = stored.map(({ path: _path, ...a }) => a);
     const byTime = <T extends { id: number; created_at: number }>(a: T, b: T) => a.created_at - b.created_at || a.id - b.id;
     return { posts: posts.sort(byTime), asks: [...asks].sort(byTime), artifacts: artifacts.sort(byTime) };

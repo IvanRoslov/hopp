@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, w
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FakeDaemon, makeAsk, makeProfile } from '../../../test/fakeDaemon';
+import { FakeDaemon, makeAsk, makeProfile, makeSession } from '../../../test/fakeDaemon';
 import type { PipelineInput, Post } from '../../shared/shell';
 import { DaemonClient } from '../daemon/client';
 import { makeRunner, type Runner } from './exec';
@@ -152,6 +152,19 @@ describe('the feed', () => {
     expect(f.artifacts.map((a) => [a.name, a.version])).toEqual([['spec', 1], ['spec', 2]]);
     expect(f.artifacts[0]).not.toHaveProperty('path');
     await expect(svc.taskFeed('nope')).rejects.toThrow();
+  });
+
+  it('includes asks from the task\'s sessions even when the daemon did not copy the task label', async () => {
+    const { task } = await taskWithPipeline();
+    d.sessions.push(makeSession('w1', { parent: task.sessionId, labels: { 'hopp.task': task.id } }));
+    d.sessions.push(makeSession('stranger', { labels: { 'hopp.task': 'other' } }));
+    d.asks = [
+      makeAsk(1, task.sessionId, { labels: { 'hopp.stage': 'spec', 'hopp.kind': 'submission' } }),
+      makeAsk(2, 'w1', { labels: {} }),
+      makeAsk(3, 'stranger', { labels: {} }),
+      makeAsk(4, 'x', { labels: { 'hopp.task': task.id } }),
+    ];
+    expect((await svc.taskFeed(task.id)).asks.map((a) => a.id)).toEqual([1, 2, 4]);
   });
 
   it('pages through more than one batch of posts', async () => {
