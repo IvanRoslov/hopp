@@ -36,3 +36,16 @@ export function saveTheme(t: Theme): void {
     // Storage may be unavailable; the theme still applies for this session.
   }
 }
+
+// onSystemTheme calls cb when the system appearance changes; returns a
+// function that stops listening.
+export function onSystemTheme(cb: (t: Theme) => void): () => void {
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const h = () => cb(mq.matches ? 'light' : 'dark');
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  } catch {
+    return () => {};
+  }
+}

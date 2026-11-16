@@ -113,14 +113,14 @@ export function TaskView(props: {
       run: () => void act(() => shell.finishTask(task.id)),
     });
   }
-  items.push({
-    label: 'Remove from list',
-    confirm: {
-      text: task.status === 'active' && rootLive ? `Remove ${task.title} from the list? Its sessions keep running.` : `Remove ${task.title} from the list?`,
-      action: 'Remove',
-    },
-    run: () => void act(() => shell.hideTask(task.id), () => go({ k: 'newTask' })),
-  });
+  // The store refuses to hide a running task: stop or finish it first.
+  if (!rootLive) {
+    items.push({
+      label: 'Remove from list',
+      confirm: { text: `Remove ${task.title} from the list?`, action: 'Remove' },
+      run: () => void act(() => shell.hideTask(task.id), () => go({ k: 'newTask' })),
+    });
+  }
   const here = { k: 'task' as const, id: task.id, session: selectedId };
   items.push({
     label: 'Task details',

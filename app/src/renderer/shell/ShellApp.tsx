@@ -5,7 +5,7 @@ import { hopp } from '../bridge';
 import { useAgentMail, useProfiles, useShellState, useWaiting } from '../data/hooks';
 import { waitingCount, waitingRows } from '../model/shellModel';
 import { useSessions } from '../sessions/useSessions';
-import { applyTheme, initialTheme, saveTheme, type Theme } from '../ui/theme';
+import { applyTheme, initialTheme, onSystemTheme, saveTheme, storedTheme, type Theme } from '../ui/theme';
 import { Workspace } from '../Workspace';
 import { AgentView, NewAgent } from './Agents';
 import { NewTask } from './NewTask';
@@ -65,6 +65,8 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
   const [theme, setTheme] = useState<Theme>(initialTheme);
 
   useEffect(() => applyTheme(theme), [theme]);
+  // Until the human picks a theme, the app follows the system's, live.
+  useEffect(() => onSystemTheme((t) => storedTheme() === null && setTheme(t)), []);
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
       const next = t === 'dark' ? 'light' : 'dark';
