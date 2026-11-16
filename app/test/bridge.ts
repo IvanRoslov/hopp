@@ -162,7 +162,7 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       }
       return fail('ask_not_found', 'No such submission.');
     }),
-    artifactUrl: (id: number) => 'hopp-artifact://' + id,
+    artifactUrl: (id: number) => 'hopp-artifact://v/' + id,
     artifactText: vi.fn(async (id: number) =>
       seed.artifactTexts && id in seed.artifactTexts ? ok(seed.artifactTexts[id]!) : fail('not_text', 'This artifact is not text.'),
     ),

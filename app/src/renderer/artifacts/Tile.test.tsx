@@ -12,7 +12,7 @@ describe('ArtifactThumb', () => {
   it('a file that does not load becomes the placeholder, not a broken image', () => {
     const { container } = render(<ArtifactThumb shell={fakeShell().shell} artifact={art} />);
     const img = container.querySelector('img')!;
-    expect(img.getAttribute('src')).toBe('hopp-artifact://3');
+    expect(img.getAttribute('src')).toBe('hopp-artifact://v/3');
     fireEvent.error(img);
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('.af-ph')?.getAttribute('title')).toBe('The file could not be loaded');
