@@ -1,11 +1,47 @@
 // registerIpc connects the page's bridge calls to the main-process services.
 // Every channel is named; arguments are checked before use.
-import { ipcMain, type WebContents } from 'electron';
+import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { IPC } from '../shared/ipc';
+import type { AskAnswer, QuizAnswer } from '../shared/types';
+import { DaemonError, type DaemonClient } from './daemon/client';
+import type { EventStream } from './daemon/stream';
 import type { TerminalManager } from './terminal/manager';
 
 export interface Services {
+  client: DaemonClient;
+  stream: EventStream;
   terminals: TerminalManager;
+  startDaemon: () => Promise<{ ok: boolean; message: string }>;
+}
+
+function broadcast(channel: string, ...args: unknown[]): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.webContents.isDestroyed()) w.webContents.send(channel, ...args);
+  }
+}
+
+const ASK_STATUSES = new Set(['open', 'answered', 'withdrawn', 'all']);
+
+function askAnswer(v: unknown): AskAnswer {
+  const o = (v ?? {}) as Record<string, unknown>;
+  const out: AskAnswer = {};
+  if (typeof o['choice'] === 'string') out.choice = o['choice'];
+  if (typeof o['answer'] === 'string') out.answer = o['answer'];
+  return out;
+}
+
+function quizAnswer(v: unknown): QuizAnswer {
+  const list = (v as { answers?: unknown })?.answers;
+  if (!Array.isArray(list)) throw new TypeError('answers must be a list');
+  return {
+    answers: list.map((a) => {
+      const o = a as Record<string, unknown>;
+      const r: QuizAnswer['answers'][number] = { question_index: int(o['question_index']) };
+      if (Array.isArray(o['option_indices'])) r.option_indices = o['option_indices'].map(int);
+      if (typeof o['text'] === 'string') r.text = o['text'];
+      return r;
+    }),
+  };
 }
 
 const str = (v: unknown): string => {
@@ -18,6 +54,33 @@ const int = (v: unknown): number => {
 };
 
 export function registerIpc(s: Services): void {
+  s.stream.on('state', (st) => broadcast(IPC.daemonStateChanged, st));
+  s.stream.on('event', (e) => broadcast(IPC.daemonEvent, e));
+
+  ipcMain.handle(IPC.daemonSocketPath, () => s.client.socketPath);
+  ipcMain.handle(IPC.daemonStreamState, () => s.stream.currentState ?? 'connecting');
+  ipcMain.handle(IPC.daemonListSessions, (_e, opts: unknown) =>
+    s.client.listSessions({ all: (opts as { all?: unknown } | undefined)?.all === true }),
+  );
+  ipcMain.handle(IPC.daemonGetSession, async (_e, id: unknown) => {
+    try {
+      return await s.client.getSession(str(id));
+    } catch (err) {
+      if (err instanceof DaemonError && err.status === 404) return null;
+      throw err;
+    }
+  });
+  ipcMain.handle(IPC.daemonStart, () => s.startDaemon());
+  ipcMain.handle(IPC.daemonListAsks, (_e, opts: unknown) => {
+    const o = (opts ?? {}) as Record<string, unknown>;
+    const q: Parameters<DaemonClient['listAsks']>[0] = {};
+    if (typeof o['from'] === 'string') q.from = o['from'];
+    if (typeof o['status'] === 'string' && ASK_STATUSES.has(o['status'])) q.status = o['status'] as 'all';
+    return s.client.listAsks(q);
+  });
+  ipcMain.handle(IPC.daemonAnswerAsk, (_e, id: unknown, body: unknown) => s.client.answerAsk(int(id), askAnswer(body)));
+  ipcMain.handle(IPC.daemonAnswerQuiz, (_e, id: unknown, body: unknown) => s.client.answerQuiz(str(id), quizAnswer(body)));
+
   // Each terminal belongs to the page that opened it; its output goes only
   // there, and the page going away closes it.
   const owner = new Map<string, WebContents>();

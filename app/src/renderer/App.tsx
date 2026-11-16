@@ -1,5 +1,5 @@
-import { Frame } from './frame/Frame';
+import { Workspace } from './Workspace';
 
 export function App() {
-  return <Frame left={<div />} middle={null} right={<div />} />;
+  return <Workspace />;
 }

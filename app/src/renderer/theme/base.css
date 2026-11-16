@@ -10,3 +10,20 @@ input { font: inherit; color: var(--fg); background: var(--bg); border: 1px soli
 .frame-header { height: var(--header-height); flex: none; display: flex; align-items: center; gap: var(--gap); padding: 0 var(--gap); border-bottom: 1px solid var(--border); }
 .frame-right-body { flex: 1; min-height: 0; position: relative; }
 .terminal { position: absolute; inset: 0; padding: var(--gap); background: var(--bg); }
+.muted { color: var(--fg-muted); }
+.sessions-head { display: flex; justify-content: space-between; align-items: center; padding: var(--gap); color: var(--fg-muted); }
+.sessions-head label { display: flex; align-items: center; gap: 4px; }
+.sessions-empty { padding: var(--gap); color: var(--fg-muted); }
+.sessions-list { list-style: none; margin: 0; padding: 0; }
+.session-row { display: flex; justify-content: space-between; gap: var(--gap); padding: 4px var(--gap); cursor: pointer; }
+.session-row:hover { background: var(--bg-hover); }
+.session-row.selected { background: var(--bg-selected); }
+.session-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-state { color: var(--fg-muted); flex: none; }
+.state-working { color: var(--accent); }
+.state-waiting-for-input { color: var(--warn); }
+.state-errored { color: var(--danger); }
+.header-id { font-weight: 600; }
+.placeholder { padding: var(--gap); }
+.daemon-down, .connecting { padding: calc(var(--gap) * 4); }
+.daemon-note { color: var(--fg-muted); }

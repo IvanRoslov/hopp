@@ -21,17 +21,17 @@ interface Events {
 // Homebrew's bin.
 const EXTRA_PATH = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
 
-export function searchPath(env: NodeJS.ProcessEnv): string[] {
+export function searchPath(env: NodeJS.ProcessEnv, extra: string[] = EXTRA_PATH): string[] {
   const dirs = (env['PATH'] ?? '').split(delimiter).filter(Boolean);
-  for (const d of EXTRA_PATH) if (!dirs.includes(d)) dirs.push(d);
+  for (const d of extra) if (!dirs.includes(d)) dirs.push(d);
   return dirs;
 }
 
 // resolveExecutable finds a command name on the search path; an absolute or
 // relative path is returned as it is. Undefined when not found.
-export function resolveExecutable(cmd: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+export function resolveExecutable(cmd: string, env: NodeJS.ProcessEnv = process.env, extra?: string[]): string | undefined {
   if (isAbsolute(cmd) || cmd.includes('/')) return existsSync(cmd) ? cmd : undefined;
-  for (const d of searchPath(env)) {
+  for (const d of searchPath(env, extra)) {
     const p = join(d, cmd);
     if (existsSync(p)) return p;
   }

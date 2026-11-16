@@ -1,8 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { FakeDaemon } from '../test/fakeDaemon';
 import { launchApp } from './launch';
 
 test('window opens with the frame and a locked-down page', async () => {
-  const app = await launchApp();
+  const d = new FakeDaemon();
+  await d.start();
+  const app = await launchApp({ HOPP_HOME: d.home });
   const page = await app.firstWindow();
   await expect(page.getByTestId('zone-left')).toBeVisible();
   await expect(page.getByTestId('zone-right')).toBeVisible();
@@ -19,5 +22,14 @@ test('window opens with the frame and a locked-down page', async () => {
   expect(prefs.contextIsolation).toBe(true);
   expect(prefs.nodeIntegration).toBe(false);
   expect(prefs.sandbox).toBe(true);
+  await app.close();
+  await d.dispose();
+});
+
+test('with no daemon the window says so', async () => {
+  const app = await launchApp();
+  const page = await app.firstWindow();
+  await expect(page.getByTestId('daemon-down')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start daemon' })).toBeVisible();
   await app.close();
 });
