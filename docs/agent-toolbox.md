@@ -93,6 +93,14 @@ bin/hopp post "<text>" [--label k=v] [--attach <path|url|name@version>]   # or -
 bin/hopp posts [--label k=v] [--from <id>] [--after <id>] [--limit <n>]
 ```
 
+Artifacts, files kept in immutable versions (scope: the root of `$HOPP_SESSION_ID`'s tree, or `--scope`):
+
+```bash
+bin/hopp artifact publish <file> [--name <n>] [--label k=v] [--scope <s>]   # prints name@version
+bin/hopp artifacts [--all-versions] [--label k=v] [--scope <s>]
+bin/hopp artifact get <name>[@<version>] [--scope <s>]                       # prints the stored path
+```
+
 Lessons, from an agent or the human:
 
 ```bash
