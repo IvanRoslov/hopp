@@ -3,7 +3,20 @@
 import { request } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { Lesson, ModelProfile } from '../../shared/shell';
 import type { Ask, AskAnswer, Health, QuizAnswer, Session, Waiting } from '../../shared/types';
+
+// CreateSessionBody is the request of POST /v1/sessions.
+export interface CreateSessionBody {
+  dir: string;
+  id?: string;
+  parent?: string;
+  labels?: Record<string, string>;
+  spawn_dirs?: string[];
+  profile?: string;
+  system_prompt?: string;
+  message?: string;
+}
 
 // DaemonError is a request the daemon answered with an error status.
 export class DaemonError extends Error {
@@ -91,6 +104,44 @@ export class DaemonClient {
 
   waiting(): Promise<Waiting> {
     return this.call('GET', '/v1/waiting');
+  }
+
+  // createSession launches a session (POST /v1/sessions).
+  createSession(body: CreateSessionBody): Promise<Session> {
+    return this.call('POST', '/v1/sessions', body);
+  }
+
+  // killSession stops a session and its live descendants; final is "killed"
+  // (default) or "done".
+  killSession(id: string, final?: 'killed' | 'done'): Promise<Session> {
+    return this.call('POST', `/v1/sessions/${enc(id)}/kill`, final ? { final } : {});
+  }
+
+  restoreSession(id: string): Promise<Session> {
+    return this.call('POST', `/v1/sessions/${enc(id)}/restore`, {});
+  }
+
+  async listModelProfiles(): Promise<{ profiles: ModelProfile[]; default: string }> {
+    const r = await this.call<{ profiles: ModelProfile[] | null; default?: string }>('GET', '/v1/model-profiles');
+    return { profiles: r.profiles ?? [], default: r.default ?? '' };
+  }
+
+  async listMailboxes(): Promise<{ name: string; unread: number; total: number }[]> {
+    const r = await this.call<{ mailboxes: { name: string; unread: number; total: number }[] | null }>('GET', '/v1/mailboxes');
+    return r.mailboxes ?? [];
+  }
+
+  addMailbox(name: string): Promise<{ name: string }> {
+    return this.call('POST', '/v1/mailboxes', { name });
+  }
+
+  async listLessons(status: 'new' | 'closed' | 'all'): Promise<Lesson[]> {
+    const r = await this.call<{ lessons: Lesson[] | null }>('GET', '/v1/lessons?status=' + enc(status));
+    return r.lessons ?? [];
+  }
+
+  closeLesson(id: number): Promise<Lesson> {
+    return this.call('POST', `/v1/lessons/${enc(String(id))}/close`, {});
   }
 
   private call<T>(method: string, path: string, body?: unknown): Promise<T> {
