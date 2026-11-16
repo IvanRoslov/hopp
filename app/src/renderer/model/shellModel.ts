@@ -129,6 +129,8 @@ export interface WaitingRow {
   under: string;
   owner: Owner | null;
   session: string;
+  // The ask this row stands for; absent for a screen question.
+  askId?: number;
 }
 
 const firstLine = (s: string) => s.split('\n').find((l) => l.trim())?.trim() ?? s.trim();
@@ -155,7 +157,7 @@ export function waitingRows(w: Waiting, state: ShellState, sessions: Session[]):
   }
   for (const a of w.asks) {
     const owner = a.from ? ownerOf(a.from, state, sessions) : null;
-    rows.push({ key: 'a:' + a.id, text: firstLine(a.body), under: under(a.from || 'hopp', owner), owner, session: a.from });
+    rows.push({ key: 'a:' + a.id, text: firstLine(a.body), under: under(a.from || 'hopp', owner), owner, session: a.from, askId: a.id });
   }
   return rows;
 }

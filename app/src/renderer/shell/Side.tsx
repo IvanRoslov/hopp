@@ -120,7 +120,7 @@ export function Side(props: {
                 data-testid="waiting-row"
                 title={r.text}
                 onClick={() => {
-                  if (r.owner?.kind === 'task') go({ k: 'task', id: r.owner.id, panel: 'questions', session: r.session });
+                  if (r.owner?.kind === 'task') go({ k: 'task', id: r.owner.id, panel: 'questions', session: r.session, focusAskId: r.askId });
                   else if (r.owner?.kind === 'agent') go({ k: 'agent', name: r.owner.name, panel: 'questions' });
                 }}
                 disabled={!r.owner}
