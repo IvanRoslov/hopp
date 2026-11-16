@@ -27,3 +27,16 @@ input { font: inherit; color: var(--fg); background: var(--bg); border: 1px soli
 .placeholder { padding: var(--gap); }
 .daemon-down, .connecting { padding: calc(var(--gap) * 4); }
 .daemon-note { color: var(--fg-muted); }
+.header-spacer { flex: 1; }
+button.active { background: var(--bg-selected); border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+.questions { padding: var(--gap); }
+.questions h3, .questions h4 { margin: 0 0 var(--gap); font-weight: 600; }
+.question-card { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); margin-bottom: var(--gap); display: flex; flex-direction: column; gap: 6px; }
+.question-card.closed { opacity: 0.7; }
+.question-body { white-space: pre-wrap; }
+.question-options { display: flex; flex-wrap: wrap; gap: 4px; }
+.question-text { display: flex; gap: 4px; }
+.question-text input { flex: 1; min-width: 0; }
+.question-raw { font: var(--font-size-mono) var(--font-mono); white-space: pre-wrap; margin: 0; }
+.question-error { color: var(--danger); }

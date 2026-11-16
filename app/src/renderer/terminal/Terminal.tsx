@@ -4,18 +4,13 @@ import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
 import type { TerminalBridge } from '../../shared/bridge';
 import { hopp } from '../bridge';
+import { cleanError } from '../errors';
 
 const RESIZE_DEBOUNCE_MS = 80;
 
 function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
-}
-
-function cleanError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  // ipcRenderer.invoke wraps main-process errors in this prefix.
-  return msg.replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '');
 }
 
 // Terminal shows one session in xterm.js. It opens a pty on mount and closes

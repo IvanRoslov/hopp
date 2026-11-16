@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonBridge } from '../../shared/bridge';
 import type { Session, StreamState } from '../../shared/types';
 
@@ -6,6 +6,8 @@ export interface SessionsState {
   stream: StreamState;
   sessions: Session[];
   error: string | null;
+  // refresh reloads one session from the daemon.
+  refresh: (id: string) => void;
 }
 
 // useSessions loads the session list once the event stream is open and then
@@ -16,6 +18,7 @@ export function useSessions(daemon: DaemonBridge): SessionsState {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [error, setError] = useState<string | null>(null);
   const loadSeq = useRef(0);
+  const refreshRef = useRef<(id: string) => void>(() => {});
 
   useEffect(() => {
     let alive = true;
@@ -38,13 +41,7 @@ export function useSessions(daemon: DaemonBridge): SessionsState {
       if (s === 'open') load();
     };
     const offState = daemon.onStreamState(onState);
-    const offEvent = daemon.onEvent((e) => {
-      if (!alive || !e.session_id || !e.type.startsWith('session.')) return;
-      const id = e.session_id;
-      if (e.type === 'session.removed') {
-        setSessions((l) => l.filter((s) => s.id !== id));
-        return;
-      }
+    const refresh = (id: string) => {
       daemon.getSession(id).then(
         (s) => {
           if (!alive) return;
@@ -61,6 +58,16 @@ export function useSessions(daemon: DaemonBridge): SessionsState {
           // The stream's state change will trigger a full reload.
         },
       );
+    };
+    refreshRef.current = refresh;
+    const offEvent = daemon.onEvent((e) => {
+      if (!alive || !e.session_id || !e.type.startsWith('session.')) return;
+      const id = e.session_id;
+      if (e.type === 'session.removed') {
+        setSessions((l) => l.filter((s) => s.id !== id));
+        return;
+      }
+      refresh(id);
     });
     daemon.streamState().then(onState, () => {});
     return () => {
@@ -70,5 +77,6 @@ export function useSessions(daemon: DaemonBridge): SessionsState {
     };
   }, [daemon]);
 
-  return { stream, sessions, error };
+  const refresh = useCallback((id: string) => refreshRef.current(id), []);
+  return { stream, sessions, error, refresh };
 }
