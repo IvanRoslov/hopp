@@ -115,7 +115,7 @@ export function NewTask(props: {
   const generalError = error && (!error.field || !MORE_FIELDS.has(error.field)) ? error.message : null;
   const where = proj
     ? proj.orchestratorRepo
-      ? `A new worktree of ${proj.orchestratorRepo}`
+      ? `A new worktree of ${proj.orchestratorRepo} at its current commit; uncommitted changes are not included.`
       : 'A new folder for this task'
     : '';
 

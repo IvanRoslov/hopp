@@ -243,3 +243,63 @@ describe('column width', () => {
     expect(screen.getByTestId('work-view').style.gridTemplateColumns).toBe('');
   });
 });
+
+describe('menu and theme', () => {
+  it('a running task offers no Remove from list; a stopped one does', async () => {
+    const f = fakeBridge({
+      sessions: [makeSession('run'), makeSession('off', { state: 'killed' })],
+      shell: { state: { ...base, tasks: [makeTask('run', 'p', { title: 'Running' }), makeTask('off', 'p', { title: 'Stopped' })] } },
+    });
+    await mount(f);
+    fireEvent.click(screen.getAllByTestId('task-row')[0]!);
+    fireEvent.click(screen.getByTestId('actions-menu'));
+    expect(screen.queryByText('Remove from list')).toBeNull();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getAllByTestId('task-row')[1]!);
+    fireEvent.click(screen.getByTestId('actions-menu'));
+    expect(screen.getByText('Remove from list')).toBeTruthy();
+  });
+
+  it('follows the system theme until the human picks one', async () => {
+    const listeners = new Set<() => void>();
+    const mq = { matches: false, addEventListener: (_: string, h: () => void) => listeners.add(h), removeEventListener: (_: string, h: () => void) => listeners.delete(h) };
+    const saved = window.matchMedia;
+    window.matchMedia = (() => mq) as unknown as typeof window.matchMedia;
+    try {
+      const f = fakeBridge({ shell: { state: base } });
+      await mount(f);
+      expect(document.documentElement.dataset['theme']).toBeUndefined();
+      mq.matches = true;
+      act(() => listeners.forEach((h) => h()));
+      expect(document.documentElement.dataset['theme']).toBe('light');
+      fireEvent.click(screen.getByRole('button', { name: 'Switch theme' }));
+      expect(document.documentElement.dataset['theme']).toBeUndefined();
+      mq.matches = true;
+      act(() => listeners.forEach((h) => h()));
+      // Picked by hand: the system no longer decides.
+      expect(document.documentElement.dataset['theme']).toBeUndefined();
+    } finally {
+      window.matchMedia = saved;
+      delete document.documentElement.dataset['theme'];
+    }
+  });
+});
+
+describe('left column width', () => {
+  it('the edge resizes the left column, remembers it, and keeps the terminal', async () => {
+    const f = fakeBridge({ sessions: [makeSession('orc')], shell: { state: { ...base, tasks: [makeTask('t', 'p', { sessionId: 'orc' })] } } });
+    await mount(f);
+    fireEvent.click(screen.getByTestId('task-row'));
+    const mounts = ends.mounts;
+    const sep = screen.getByRole('separator', { name: 'Resize the left column' });
+    fireEvent.keyDown(sep, { key: 'ArrowRight', shiftKey: true });
+    // jsdom has no layout: the width starts from 264.
+    expect(localStorage.getItem('hopp.sideWidth')).toBe('312');
+    expect((sep.closest('.app') as HTMLElement).style.getPropertyValue('--side-w')).toBe('312px');
+    for (let i = 0; i < 10; i++) fireEvent.keyDown(sep, { key: 'ArrowRight', shiftKey: true });
+    expect(localStorage.getItem('hopp.sideWidth')).toBe('420');
+    expect(ends.mounts).toBe(mounts);
+    fireEvent.doubleClick(sep);
+    expect(localStorage.getItem('hopp.sideWidth')).toBeNull();
+  });
+});

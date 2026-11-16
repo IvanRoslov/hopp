@@ -5,7 +5,7 @@ import { hopp } from '../bridge';
 import { useAgentMail, useProfiles, useShellState, useWaiting } from '../data/hooks';
 import { waitingCount, waitingRows } from '../model/shellModel';
 import { useSessions } from '../sessions/useSessions';
-import { applyTheme, initialTheme, saveTheme, type Theme } from '../ui/theme';
+import { applyTheme, initialTheme, onSystemTheme, saveTheme, storedTheme, type Theme } from '../ui/theme';
 import { Workspace } from '../Workspace';
 import { AgentView, NewAgent } from './Agents';
 import { NewTask } from './NewTask';
@@ -14,6 +14,7 @@ import { ProjectForm } from './ProjectForm';
 import type { Route } from './route';
 import { Settings } from './Settings';
 import { Brand, Side } from './Side';
+import { SideResizer, useSideWidth } from './sideWidth';
 import { TaskView } from './TaskView';
 
 function DaemonNotice(props: { daemon: DaemonBridge }) {
@@ -63,8 +64,11 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
   const { profiles, error: profilesError } = useProfiles(bridge.shell);
   const [route, setRoute] = useState<Route>({ k: 'newTask' });
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const side = useSideWidth();
 
   useEffect(() => applyTheme(theme), [theme]);
+  // Until the human picks a theme, the app follows the system's, live.
+  useEffect(() => onSystemTheme((t) => storedTheme() === null && setTheme(t)), []);
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
       const next = t === 'dark' ? 'light' : 'dark';
@@ -214,7 +218,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
   }
 
   return (
-    <div className="app">
+    <div className="app" style={side.style}>
       <Side
         state={state}
         sessions={sessions}
@@ -227,6 +231,7 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
         stream={stream}
         sessionsError={sessionsError}
         daemonNotice={daemonNotice}
+        resizer={<SideResizer side={side} />}
       />
       <main className="work" data-testid="zone-right">{view}</main>
     </div>

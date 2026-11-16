@@ -157,7 +157,7 @@ export function ProjectForm(props: {
                 label="Worktree for the orchestrator"
                 value={orchestratorRepo}
                 placeholder="~/projects/site"
-                hint="The repository each task's worktree is made from. Empty: tasks run in a plain folder."
+                hint="Each task gets a new worktree of this repository at its current commit; uncommitted changes are not included. Empty: tasks run in a plain folder."
                 error={fieldError('orchestratorRepo')}
                 onChange={(ev) => setOrchestratorRepo(ev.target.value)}
                 after={
