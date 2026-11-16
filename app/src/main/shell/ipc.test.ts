@@ -92,6 +92,32 @@ describe('shell IPC', () => {
     expect(bad.error.code).toBe('bad_request');
   });
 
+  // Every field of every input type in shared/shell.ts must reach the
+  // service: a validator that silently drops one would launch the wrong thing.
+  it('passes every field of every input type through unchanged', async () => {
+    const seen: Record<string, unknown[]> = {};
+    const rec = (m: string) => async (...args: unknown[]) => {
+      seen[m] = args;
+      return { ok: true, value: null };
+    };
+    const spy = new Proxy({}, { get: (_t, m) => rec(String(m)) }) as unknown as ShellService;
+    const cases: [string, unknown[]][] = [
+      ['createProject', [{ name: 'n', slug: 's', description: 'd', orchestratorRepo: '/r', workerRepos: ['/w'], guardrails: 'g' }]],
+      ['updateProject', ['s', { name: 'n', slug: 's', description: 'd', orchestratorRepo: null, workerRepos: [], guardrails: 'g' }]],
+      ['createTask', [{ projectSlug: 'p', brief: 'b', title: 't', orchestratorProfile: 'o', workerProfiles: ['w'], pipelineId: 'x', sessionName: 's', extraSystemPrompt: 'e' }]],
+      ['createAgent', [{ name: 'a', profile: 'p', dir: '/d' }]],
+      ['createPipeline', [{ name: 'n', stages: [{ id: 'i', name: 's', does: 'd', result: 'r', substages: true, approval: false }] }]],
+      ['updatePipeline', ['x', { name: 'n', stages: [{ name: 's', does: 'd', result: 'r', substages: false, approval: true }] }]],
+      ['postToTask', ['t', 'text', 'stage']],
+      ['answerSubmission', [1, { choice: 'Return', text: 'fix' }]],
+      ['setToolEnabled', ['t', false]],
+    ];
+    for (const [m, args] of cases) {
+      await callShell(spy, m, args);
+      expect([m, seen[m]]).toEqual([m, args]);
+    }
+  });
+
   it('turns a daemon outage into a result, not a throw', async () => {
     await d.stop();
     const r = (await callShell(svc, 'stopTask', ['x'])) as { ok: boolean };
