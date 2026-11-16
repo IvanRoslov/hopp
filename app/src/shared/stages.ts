@@ -73,7 +73,8 @@ export function deriveStages(pipeline: Pipeline, posts: Post[], asks: Ask[]): St
     });
     if (sub && a.status !== 'open') {
       events.push({
-        ts: a.closed_at || a.created_at, order: a.id * 2 + 1,
+        // A close can never come before its ask (clocks, coarse seconds).
+        ts: Math.max(a.closed_at || 0, a.created_at), order: a.id * 2 + 1,
         run: () => {
           if (st.submission?.id !== a.id) {
             // A newer submission replaced this one; only remember the answer.

@@ -326,8 +326,8 @@ export class FakeDaemon {
       a.status = 'answered';
       if (b.choice) a.choice = b.choice;
       if (b.answer) a.answer = b.answer;
-      a.closed_at = 2;
-      this.publish('ask.answered', a.from, { id: a.id });
+      a.closed_at = Math.max(a.created_at, Math.floor(Date.now() / 1000));
+      this.publish('ask.answered', a.from, { id: a.id, ask_labels: a.labels ?? {} });
       return json(res, 200, a);
     }
     if (key === 'GET /v1/waiting') {
