@@ -120,7 +120,14 @@ export function Side(props: {
                 data-testid="waiting-row"
                 title={r.text}
                 onClick={() => {
-                  if (r.owner?.kind === 'task') go({ k: 'task', id: r.owner.id, panel: 'questions', session: r.session, focusAskId: r.askId });
+                  if (r.owner?.kind === 'task') {
+                    const id = r.owner.id;
+                    const piped = !!state.tasks.find((t) => t.id === id)?.pipeline;
+                    // A pipeline task shows asks in its feed; a screen question is
+                    // answered in the terminal.
+                    if (piped && r.askId === undefined) go({ k: 'task', id, session: r.session, pipelinePanel: 'terminal' });
+                    else go({ k: 'task', id, panel: 'questions', session: r.session, focusAskId: r.askId });
+                  }
                   else if (r.owner?.kind === 'agent') go({ k: 'agent', name: r.owner.name, panel: 'questions' });
                 }}
                 disabled={!r.owner}

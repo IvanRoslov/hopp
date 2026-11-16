@@ -141,6 +141,8 @@ export function ShellApp(props: { bridge?: HoppBridge }) {
           waiting={counts.get('task:' + task.id) ?? 0}
           panel={route.panel ?? null}
           session={route.session}
+          pipelinePanel={route.pipelinePanel}
+          focusAskId={route.focusAskId}
           go={setRoute}
           refreshSession={refresh}
         />

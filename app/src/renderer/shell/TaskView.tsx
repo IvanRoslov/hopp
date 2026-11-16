@@ -4,8 +4,9 @@ import type { Project, Result, Task } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
 import { cleanError } from '../errors';
 import { STARTING_GRACE_MS, taskSessions, toMs } from '../model/shellModel';
-import type { Go, Panel } from './route';
-import { ActionsMenu, WorkView, type MenuItem } from './WorkView';
+import type { Go, Panel, PipelinePanel } from './route';
+import { ActionsMenu, TerminalArea, WorkView, type MenuItem } from './WorkView';
+import { PipelineTaskView } from '../feed/PipelineTaskView';
 
 function when(ms: number): string {
   if (!ms) return '—';
@@ -56,6 +57,10 @@ export function TaskView(props: {
   waiting: number;
   panel: Panel;
   session?: string;
+  // For a task with a pipeline: the right-hand panel, and the ask a
+  // "Waiting for you" row points to.
+  pipelinePanel?: PipelinePanel | null;
+  focusAskId?: number;
   go: Go;
   refreshSession: (id: string) => void;
 }) {
@@ -116,7 +121,11 @@ export function TaskView(props: {
     },
     run: () => void act(() => shell.hideTask(task.id), () => go({ k: 'newTask' })),
   });
-  items.push({ label: 'Task details', run: () => go({ k: 'task', id: task.id, panel: 'details', session: selectedId }) });
+  const here = { k: 'task' as const, id: task.id, session: selectedId };
+  items.push({
+    label: 'Task details',
+    run: () => go(task.pipeline ? { ...here, pipelinePanel: 'details' } : { ...here, panel: 'details' }),
+  });
 
   // The line above the terminal: what state the task is in and what to do.
   let status: React.ReactNode = null;
@@ -151,6 +160,43 @@ export function TaskView(props: {
     status = 'The agent exited. The terminal shows the shell it left.';
   }
 
+  const statusLine =
+    status || error ? (
+      <>
+        {status}
+        {error && <span className="form-error" role="alert">! {error}</span>}
+      </>
+    ) : null;
+
+  // A task with a pipeline: the feed in the center; stages, artifacts, the
+  // terminal and the details open on the right (feed/PipelineTaskView).
+  if (task.pipeline) {
+    const pipelinePanel = props.pipelinePanel ?? null;
+    return (
+      <PipelineTaskView
+        bridge={bridge}
+        task={task}
+        menu={<ActionsMenu items={items} />}
+        terminal={
+          <TerminalArea
+            bridge={bridge}
+            tree={tree}
+            selectedId={selectedId}
+            onSelect={(id) => go({ ...here, session: id, pipelinePanel })}
+            status={null}
+            attachable={!!selected && selected.state === 'running'}
+            noTerminal={noTerminal}
+          />
+        }
+        details={<TaskDetails task={task} project={props.project} />}
+        status={statusLine}
+        panel={pipelinePanel}
+        onPanel={(p) => go({ ...here, pipelinePanel: p })}
+        focusAskId={props.focusAskId}
+      />
+    );
+  }
+
   return (
     <WorkView
       bridge={bridge}
@@ -162,14 +208,7 @@ export function TaskView(props: {
       panel={props.panel}
       onPanel={(p) => go({ k: 'task', id: task.id, panel: p, session: selectedId })}
       menu={<ActionsMenu items={items} />}
-      status={
-        status || error ? (
-          <>
-            {status}
-            {error && <span className="form-error" role="alert">! {error}</span>}
-          </>
-        ) : null
-      }
+      status={statusLine}
       attachable={!!selected && selected.state === 'running'}
       noTerminal={noTerminal}
       details={<TaskDetails task={task} project={props.project} />}
