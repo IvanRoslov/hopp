@@ -14,10 +14,13 @@ import (
 
 // SpawnReq describes a request to launch a new session. An empty ID is
 // derived from Dir; an empty Profile.Agent means the configured default
-// agent.
+// agent. CallerID is the session the request came from, which may differ
+// from ParentID; SpawnDirs are the folders the new session may launch in.
 type SpawnReq struct {
 	ID             string
 	ParentID       string
+	CallerID       string
+	SpawnDirs      []string
 	Dir            string
 	Labels         map[string]string
 	Profile        LaunchProfile
@@ -67,6 +70,10 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnReq) (store.Session, error
 		}
 	}
 	labels := mergeLabels(parent.Labels, req.Labels)
+	spawnDirs, err := m.spawnDirs(req, parent)
+	if err != nil {
+		return store.Session{}, err
+	}
 
 	if agent.TakesFirstMessageByInput(ag) && req.FirstMessage != "" && m.firstMessage == nil {
 		return store.Session{}, validationErr("first_message_needs_queue", "this agent takes its first message by input, and no message queue is set")
@@ -120,6 +127,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnReq) (store.Session, error
 			SystemPrompt:   req.SystemPrompt,
 			PermissionMode: req.PermissionMode,
 			Env:            req.Env,
+			SpawnDirs:      spawnDirs,
 		}
 
 		if err := m.st.AddSession(sess); err != nil {

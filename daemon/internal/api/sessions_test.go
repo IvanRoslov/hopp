@@ -354,7 +354,8 @@ func TestSessionJSONHasNoScenarioKeys(t *testing.T) {
 	// purpose: "children" (a session with children) and "question" (the
 	// question a session waits on) are omitted when empty.
 	allowed := map[string]bool{"id": true, "parent": true, "dir": true, "labels": true, "agent": true, "profile": true, "model": true,
-		"effort": true, "state": true, "activity": true, "created_at": true, "updated_at": true, "children": true, "question": true}
+		"effort": true, "state": true, "activity": true, "created_at": true, "updated_at": true, "children": true, "question": true,
+		"spawn_dirs": true}
 	if err := e.st.SetPendingQuiz("s1", `{"questions":[{"question":"Q?","header":"H","multiSelect":false,"options":[{"label":"A"}]}],"asked_at":1}`); err != nil {
 		t.Fatal(err)
 	}

@@ -32,8 +32,11 @@ type Session struct {
 	DeliveryTransport string
 	DeliveryInstance  string
 	DeliveryEndpoint  string
-	CreatedAt         int64
-	UpdatedAt         int64
+	// SpawnDirs are the folders this session may launch sessions in; empty
+	// means no limit.
+	SpawnDirs []string
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 // SessionFilter narrows ListSessions. All == false returns only spawning and
@@ -48,7 +51,7 @@ type SessionFilter struct {
 
 const sessionColumns = `id, parent_id, dir, tmux_name, labels, agent, profile, model, effort,
 	state, activity, activity_ts, prompt, system_prompt, permission_mode, env, pending_quiz,
-	delivery_transport, delivery_instance, delivery_endpoint, created_at, updated_at`
+	delivery_transport, delivery_instance, delivery_endpoint, spawn_dirs, created_at, updated_at`
 
 // AddSession inserts a new session. Returns ErrExists if the id is already taken.
 func (s *Store) AddSession(sess Session) error {
@@ -63,15 +66,19 @@ func (s *Store) AddSession(sess Session) error {
 	if err != nil {
 		return err
 	}
+	dirs, err := marshalStringList(sess.SpawnDirs)
+	if err != nil {
+		return err
+	}
 
 	_, err = s.db.Exec(
 		`INSERT INTO sessions (`+sessionColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sess.ID, nullIfEmpty(sess.ParentID), sess.WorktreePath, sess.TmuxName, labels,
 		sess.Agent, sess.Profile, sess.Model, sess.Effort,
 		sess.State, sess.Activity, sess.ActivityTS, sess.Prompt, sess.SystemPrompt,
 		sess.PermissionMode, env, nullIfEmpty(sess.PendingQuiz),
-		sess.DeliveryTransport, sess.DeliveryInstance, sess.DeliveryEndpoint,
+		sess.DeliveryTransport, sess.DeliveryInstance, sess.DeliveryEndpoint, dirs,
 		sess.CreatedAt, sess.UpdatedAt,
 	)
 	if isUniqueViolation(err) {
@@ -166,18 +173,22 @@ func (s *Store) UpdateSession(sess Session) error {
 	if err != nil {
 		return err
 	}
+	dirs, err := marshalStringList(sess.SpawnDirs)
+	if err != nil {
+		return err
+	}
 	res, err := s.db.Exec(
 		`UPDATE sessions SET
 			parent_id = ?, dir = ?, tmux_name = ?, labels = ?, agent = ?,
 			profile = ?, model = ?, effort = ?, state = ?, activity = ?, activity_ts = ?,
 			prompt = ?, system_prompt = ?, permission_mode = ?, env = ?, pending_quiz = ?,
-			delivery_transport = ?, delivery_instance = ?, delivery_endpoint = ?,
+			delivery_transport = ?, delivery_instance = ?, delivery_endpoint = ?, spawn_dirs = ?,
 			updated_at = ?
 		 WHERE id = ?`,
 		nullIfEmpty(sess.ParentID), sess.WorktreePath, sess.TmuxName, labels, sess.Agent,
 		sess.Profile, sess.Model, sess.Effort, sess.State, sess.Activity, sess.ActivityTS,
 		sess.Prompt, sess.SystemPrompt, sess.PermissionMode, env, nullIfEmpty(sess.PendingQuiz),
-		sess.DeliveryTransport, sess.DeliveryInstance, sess.DeliveryEndpoint,
+		sess.DeliveryTransport, sess.DeliveryInstance, sess.DeliveryEndpoint, dirs,
 		time.Now().Unix(), sess.ID,
 	)
 	if err != nil {
@@ -281,17 +292,29 @@ func marshalStringMap(m map[string]string) (string, error) {
 	return string(b), nil
 }
 
+// marshalStringList stores a list as JSON; nil and empty are both "[]".
+func marshalStringList(l []string) (string, error) {
+	if len(l) == 0 {
+		return "[]", nil
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return "", fmt.Errorf("marshal list: %w", err)
+	}
+	return string(b), nil
+}
+
 func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var sess Session
 	var parentID, pendingQuiz sql.NullString
-	var labels, env string
+	var labels, env, dirs string
 
 	err := row.Scan(
 		&sess.ID, &parentID, &sess.WorktreePath, &sess.TmuxName, &labels,
 		&sess.Agent, &sess.Profile, &sess.Model, &sess.Effort,
 		&sess.State, &sess.Activity, &sess.ActivityTS, &sess.Prompt, &sess.SystemPrompt,
 		&sess.PermissionMode, &env, &pendingQuiz,
-		&sess.DeliveryTransport, &sess.DeliveryInstance, &sess.DeliveryEndpoint,
+		&sess.DeliveryTransport, &sess.DeliveryInstance, &sess.DeliveryEndpoint, &dirs,
 		&sess.CreatedAt, &sess.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -310,6 +333,12 @@ func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	sess.Env = map[string]string{}
 	if err := json.Unmarshal([]byte(env), &sess.Env); err != nil {
 		return Session{}, fmt.Errorf("unmarshal env of %s: %w", sess.ID, err)
+	}
+	if err := json.Unmarshal([]byte(dirs), &sess.SpawnDirs); err != nil {
+		return Session{}, fmt.Errorf("unmarshal spawn dirs of %s: %w", sess.ID, err)
+	}
+	if len(sess.SpawnDirs) == 0 {
+		sess.SpawnDirs = nil
 	}
 
 	return sess, nil

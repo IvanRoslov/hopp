@@ -11,7 +11,7 @@ import (
 func newRunCmd() *cobra.Command {
 	var (
 		name, profile, agent, model, effort    string
-		labels, env                            []string
+		labels, env, spawnDirs                 []string
 		systemPromptFile, message, messageFile string
 		permissionMode, parent                 string
 		noParent, attach                       bool
@@ -53,13 +53,24 @@ func newRunCmd() *cobra.Command {
 				}
 			}
 			// Called from inside a session, the caller becomes the parent.
+			// The caller is sent apart from the parent, whatever --parent or
+			// --no-parent say, so the daemon applies the caller's folder limit.
+			caller := os.Getenv("HOPP_SESSION_ID")
 			if parent == "" && !noParent {
-				parent = os.Getenv("HOPP_SESSION_ID")
+				parent = caller
+			}
+			var absDirs []string
+			for _, d := range spawnDirs {
+				a, err := filepath.Abs(d)
+				if err != nil {
+					return err
+				}
+				absDirs = append(absDirs, a)
 			}
 
 			body := map[string]any{"dir": abs}
 			for k, v := range map[string]string{
-				"id": name, "parent": parent, "profile": profile, "agent": agent, "model": model, "effort": effort,
+				"id": name, "parent": parent, "caller": caller, "profile": profile, "agent": agent, "model": model, "effort": effort,
 				"system_prompt": systemPrompt, "message": message, "permission_mode": permissionMode,
 			} {
 				if v != "" {
@@ -71,6 +82,9 @@ func newRunCmd() *cobra.Command {
 			}
 			if envMap != nil {
 				body["env"] = envMap
+			}
+			if absDirs != nil {
+				body["spawn_dirs"] = absDirs
 			}
 
 			c, _, err := connect(true)
@@ -118,6 +132,7 @@ func newRunCmd() *cobra.Command {
 	f.StringVar(&messageFile, "message-file", "", "file with the first message")
 	f.StringVar(&permissionMode, "permission-mode", "", "permission mode for the harness")
 	f.StringArrayVar(&env, "env", nil, "extra environment K=V (repeatable)")
+	f.StringArrayVar(&spawnDirs, "spawn-dir", nil, "folder the new session may launch sessions in (repeatable; default: the caller's limit)")
 	f.StringVar(&parent, "parent", "", "parent session (default: $HOPP_SESSION_ID)")
 	f.BoolVar(&noParent, "no-parent", false, "launch without a parent even inside a session")
 	f.BoolVar(&attach, "attach", false, "attach to the session after launch")

@@ -18,6 +18,7 @@ type sessionView struct {
 	Parent    string            `json:"parent"`
 	Dir       string            `json:"dir"`
 	Labels    map[string]string `json:"labels"`
+	SpawnDirs []string          `json:"spawn_dirs"`
 	Agent     string            `json:"agent"`
 	Profile   string            `json:"profile"`
 	Model     string            `json:"model"`
@@ -38,8 +39,12 @@ func toSessionView(s store.Session) sessionView {
 	if labels == nil {
 		labels = map[string]string{}
 	}
+	dirs := s.SpawnDirs
+	if dirs == nil {
+		dirs = []string{}
+	}
 	return sessionView{
-		ID: s.ID, Parent: s.ParentID, Dir: s.WorktreePath, Labels: labels,
+		ID: s.ID, Parent: s.ParentID, Dir: s.WorktreePath, Labels: labels, SpawnDirs: dirs,
 		Agent: s.Agent, Profile: s.Profile, Model: s.Model, Effort: s.Effort,
 		State: s.State, Activity: s.Activity, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 		Question: parseQuizResponse(s.PendingQuiz),
@@ -50,6 +55,8 @@ type createSessionReq struct {
 	Dir            string            `json:"dir"`
 	ID             string            `json:"id"`
 	Parent         string            `json:"parent"`
+	Caller         string            `json:"caller"`
+	SpawnDirs      []string          `json:"spawn_dirs"`
 	Labels         map[string]string `json:"labels"`
 	Profile        string            `json:"profile"`
 	Agent          string            `json:"agent"`
@@ -88,7 +95,7 @@ func registerSessionRoutes(mux *http.ServeMux, d Deps) {
 			return
 		}
 		sess, err := d.Manager.Spawn(r.Context(), session.SpawnReq{
-			ID: req.ID, ParentID: req.Parent, Dir: req.Dir, Labels: req.Labels, Profile: prof,
+			ID: req.ID, ParentID: req.Parent, CallerID: req.Caller, SpawnDirs: req.SpawnDirs, Dir: req.Dir, Labels: req.Labels, Profile: prof,
 			SystemPrompt: req.SystemPrompt, FirstMessage: req.Message,
 			PermissionMode: req.PermissionMode, Env: req.Env,
 		})

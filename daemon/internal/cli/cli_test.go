@@ -239,6 +239,41 @@ func TestRunEmptyLabelIsSent(t *testing.T) {
 	}
 }
 
+// TestRunSendsCallerAndSpawnDirs: the caller is $HOPP_SESSION_ID whatever
+// --parent or --no-parent say, and --spawn-dir is made absolute.
+func TestRunSendsCallerAndSpawnDirs(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/sessions", 201, created)
+	dir := t.TempDir()
+	if _, errOut, code := runCLI(t, f, "run", dir); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if _, ok := f.last(t).Body["caller"]; ok {
+		t.Errorf("caller sent outside a session: %v", f.last(t).Body)
+	}
+	t.Setenv("HOPP_SESSION_ID", "me")
+	for _, args := range [][]string{nil, {"--no-parent"}, {"--parent", "other"}} {
+		if _, errOut, code := runCLI(t, f, append([]string{"run", dir}, args...)...); code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, errOut)
+		}
+		if got := f.last(t).Body["caller"]; got != "me" {
+			t.Errorf("%v: caller = %v, want me", args, got)
+		}
+	}
+	wd, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(wd) })
+	if _, errOut, code := runCLI(t, f, "run", dir, "--spawn-dir", "a", "--spawn-dir", "/abs/b"); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	got, _ := f.last(t).Body["spawn_dirs"].([]any)
+	if len(got) != 2 || got[1] != "/abs/b" || !filepath.IsAbs(got[0].(string)) || filepath.Base(got[0].(string)) != "a" {
+		t.Errorf("spawn_dirs = %v", f.last(t).Body["spawn_dirs"])
+	}
+}
+
 func TestLsTable(t *testing.T) {
 	f := newFakeAPI(t)
 	row := map[string]any{"id": "s1", "parent": "p", "dir": "/work", "agent": "codex", "model": "", "state": "running", "activity": "idle"}

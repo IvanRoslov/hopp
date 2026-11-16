@@ -295,3 +295,35 @@ func TestSessionsTableHasNoScenarioColumns(t *testing.T) {
 		t.Fatal("sessions table has no columns")
 	}
 }
+
+func TestSessionSpawnDirsRoundTrip(t *testing.T) {
+	s := openTestStore(t)
+	mustAddSession(t, s, "plain")
+	got, err := s.GetSession("plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.SpawnDirs) != 0 {
+		t.Errorf("default spawn dirs = %v, want none", got.SpawnDirs)
+	}
+	got.SpawnDirs = []string{"/a/one", "/b/two"}
+	if err := s.UpdateSession(got); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.GetSession("plain"); !reflect.DeepEqual(again.SpawnDirs, []string{"/a/one", "/b/two"}) {
+		t.Errorf("after update: %v", again.SpawnDirs)
+	}
+	if err := s.AddSession(Session{ID: "limited", WorktreePath: "/w", TmuxName: "limited", State: "running",
+		SpawnDirs: []string{"/w"}}); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sess := range list {
+		if sess.ID == "limited" && !reflect.DeepEqual(sess.SpawnDirs, []string{"/w"}) {
+			t.Errorf("listed spawn dirs = %v", sess.SpawnDirs)
+		}
+	}
+}
