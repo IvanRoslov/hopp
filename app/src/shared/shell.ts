@@ -3,7 +3,7 @@
 // sessions. This file is the contract between the main process (which
 // implements ShellBridge) and the page (which only calls it).
 
-import type { Waiting } from './types';
+import type { Ask, Waiting } from './types';
 
 // ---- results ---------------------------------------------------------------
 
@@ -44,6 +44,46 @@ export interface ProjectInput {
   guardrails: string;
 }
 
+// ---- pipelines ---------------------------------------------------------------
+
+// A stage of a pipeline. `id` is stable: it survives renames and moves, and
+// it is the value of the `hopp.stage` label on everything of that stage.
+export interface PipelineStage {
+  id: string;
+  name: string;
+  // "What the stage does".
+  does: string;
+  // "What the result looks like".
+  result: string;
+  // "May have substages".
+  substages: boolean;
+  // "Wait for approval": the stage is passed only after the human accepts it.
+  approval: boolean;
+}
+
+export interface Pipeline {
+  id: string;
+  name: string;
+  stages: PipelineStage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+// A stage in a form: `id` omitted for a new stage, kept for an existing one.
+export interface PipelineStageInput {
+  id?: string;
+  name: string;
+  does: string;
+  result: string;
+  substages: boolean;
+  approval: boolean;
+}
+
+export interface PipelineInput {
+  name: string;
+  stages: PipelineStageInput[];
+}
+
 export type TaskStatus = 'active' | 'finished';
 
 export interface Task {
@@ -61,6 +101,9 @@ export interface Task {
   branch: string | null;
   orchestratorProfile: string;
   workerProfiles: string[];
+  // A copy of the pipeline taken at launch; null for a task without one.
+  // Later edits of the pipeline do not change it.
+  pipeline: Pipeline | null;
   status: TaskStatus;
   // Removed from the list by the human; kept in the store.
   hidden: boolean;
@@ -75,6 +118,8 @@ export interface TaskInput {
   title?: string;
   orchestratorProfile: string;
   workerProfiles: string[];
+  // Omitted or null: "No pipeline".
+  pipelineId?: string | null;
   // "More" section of the form.
   sessionName?: string;
   extraSystemPrompt?: string;
@@ -97,6 +142,7 @@ export interface LongAgentInput {
 
 export interface ShellState {
   projects: Project[];
+  pipelines: Pipeline[];
   tasks: Task[];
   agents: LongAgent[];
 }
@@ -146,6 +192,86 @@ export interface Lesson {
   created_at: number;
   closed_at: number;
 }
+
+// ---- the feed, stages and artifacts (daemon posts, asks and artifacts) -------
+
+// Labels on everything of a task. `hopp.project` and `hopp.task` come from
+// the task's sessions; the orchestrator adds the others.
+export const LABEL = {
+  project: 'hopp.project',
+  task: 'hopp.task',
+  role: 'hopp.role',
+  stage: 'hopp.stage',
+  substage: 'hopp.substage',
+  substageTitle: 'hopp.substage_title',
+  event: 'hopp.event',
+  kind: 'hopp.kind',
+} as const;
+
+// Values of hopp.event and hopp.kind.
+export const EVENT_STAGE_STARTED = 'stage_started';
+export const EVENT_STAGE_DONE = 'stage_done';
+export const KIND_SUBMISSION = 'submission';
+export const KIND_PAID = 'paid';
+// The options of a submission ask.
+export const ACCEPT = 'Accept';
+export const RETURN = 'Return';
+
+// A post: a note in the feed. `from` is empty for the human's own line.
+export interface Post {
+  id: number;
+  from: string;
+  labels: Record<string, string>;
+  body: string;
+  // File paths, URLs, or artifact references `name@version`.
+  attachments: string[];
+  created_at: number;
+}
+
+// One stored, immutable version of an artifact.
+export interface Artifact {
+  id: number;
+  scope: string;
+  name: string;
+  version: number;
+  filename: string;
+  mime: string;
+  size: number;
+  sha256: string;
+  from: string;
+  labels: Record<string, string>;
+  created_at: number;
+}
+
+// Everything of one task the feed shows, oldest first: its posts and its asks
+// (open and closed; submissions and paid asks are told apart by
+// labels[LABEL.kind]), and every version of its artifacts.
+export interface TaskFeed {
+  posts: Post[];
+  asks: Ask[];
+  artifacts: Artifact[];
+}
+
+export type StageStatus = 'not_started' | 'started' | 'submitted' | 'accepted' | 'returned';
+
+export interface SubstageState {
+  slug: string;
+  title: string;
+}
+
+// The derived state of one stage (see deriveStages in shared/stages.ts).
+export interface StageState {
+  stageId: string;
+  status: StageStatus;
+  substages: SubstageState[];
+  // The open submission ask, when status is "submitted".
+  submission: Ask | null;
+  // The latest answered submission, for "returned" (its answer is what to fix).
+  lastAnswer: Ask | null;
+}
+
+// The human's answer to a submission. Return needs the text of what to fix.
+export type SubmissionAnswer = { choice: 'Accept' } | { choice: 'Return'; text: string };
 
 // ---- the bridge -------------------------------------------------------------
 
@@ -197,4 +323,27 @@ export interface ShellBridge {
 
   listLessons(status: 'new' | 'closed' | 'all'): Promise<Lesson[]>;
   closeLesson(id: number): Promise<Result<null>>;
+
+  // Pipelines (kept by the app; in state().pipelines).
+  createPipeline(input: PipelineInput): Promise<Result<Pipeline>>;
+  updatePipeline(id: string, input: PipelineInput): Promise<Result<Pipeline>>;
+  // Allowed any time: running tasks keep their own copy.
+  removePipeline(id: string): Promise<Result<null>>;
+
+  // The task's feed: posts, asks and artifacts labelled with its hopp.task.
+  taskFeed(taskId: string): Promise<TaskFeed>;
+  // Fires with the task id whenever a post, ask or artifact of that task
+  // appears or changes; call taskFeed again to read it.
+  onFeedChanged(cb: (taskId: string) => void): () => void;
+  // The human's line: sent to the orchestrator as a message and recorded in
+  // the feed as a post without `from`. stageId tags it with that stage.
+  postToTask(taskId: string, text: string, stageId?: string): Promise<Result<Post>>;
+  // Accept or Return a submission ask.
+  answerSubmission(askId: number, answer: SubmissionAnswer): Promise<Result<Ask>>;
+  // A URL the page can load an artifact version from (img, video, iframe):
+  // hopp-artifact://<id>. Served only from $HOPP_HOME/artifacts.
+  artifactUrl(id: number): string;
+  // The text of an artifact version, for the text viewer; refused for a file
+  // over 2 MB or one that is not text.
+  artifactText(id: number): Promise<Result<string>>;
 }

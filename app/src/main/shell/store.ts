@@ -12,7 +12,7 @@ interface FileShape extends ShellState {
   version: number;
 }
 
-const empty = (): ShellState => ({ projects: [], tasks: [], agents: [] });
+const empty = (): ShellState => ({ projects: [], pipelines: [], tasks: [], agents: [] });
 
 export class ShellStore {
   readonly path: string;
@@ -79,8 +79,14 @@ export class ShellStore {
     if (raw.version > STORE_VERSION) {
       throw new Error(`${this.path} was written by a newer hopp app (version ${raw.version}); update the app`);
     }
-    this.state = { projects: raw.projects ?? [], tasks: raw.tasks ?? [], agents: raw.agents ?? [] };
-    return this.state;
+    const state: ShellState = {
+      projects: raw.projects ?? [],
+      pipelines: raw.pipelines ?? [],
+      tasks: (raw.tasks ?? []).map((t) => ({ ...t, pipeline: t.pipeline ?? null })),
+      agents: raw.agents ?? [],
+    };
+    this.state = state;
+    return state;
   }
 
   private async write(s: ShellState): Promise<void> {

@@ -18,7 +18,7 @@ const project = (slug: string): Project => ({
 describe('ShellStore', () => {
   it('starts empty when there is no file and writes nothing until changed', async () => {
     const s = new ShellStore(home);
-    expect(await s.read()).toEqual({ projects: [], tasks: [], agents: [] });
+    expect(await s.read()).toEqual({ projects: [], pipelines: [], tasks: [], agents: [] });
     expect(() => readdirSync(join(home, 'shell'))).toThrow();
   });
 

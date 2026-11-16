@@ -2,7 +2,7 @@
 // page are checked here; a malformed call gets an error back (a Result error
 // for methods that return a Result, a rejected promise for the others) and
 // never throws in the main process.
-import type { LongAgentInput, ProjectInput, Result, TaskInput } from '../../shared/shell';
+import type { LongAgentInput, PipelineInput, PipelineStageInput, ProjectInput, Result, SubmissionAnswer, TaskInput } from '../../shared/shell';
 import { SHELL_CHANGED, SHELL_METHODS, shellChannel, type ShellMethod } from '../../shared/ipc';
 import { errorResult, type ShellService } from './service';
 
@@ -74,6 +74,34 @@ function agentInput(v: unknown): LongAgentInput {
   return { name: str(v['name'], 'name', 200), profile: str(v['profile'], 'profile', 200), dir: str(v['dir'], 'dir', 4096) };
 }
 
+function pipelineInput(v: unknown): PipelineInput {
+  if (!isObj(v)) throw new ArgError('pipeline must be an object');
+  if (!Array.isArray(v['stages']) || v['stages'].length > 100) throw new ArgError('stages must be a list');
+  return {
+    name: str(v['name'], 'name', 200),
+    stages: v['stages'].map((x, i): PipelineStageInput => {
+      if (!isObj(x)) throw new ArgError(`stages[${i}] must be an object`);
+      const st: PipelineStageInput = {
+        name: str(x['name'], `stages[${i}].name`, 200),
+        does: str(x['does'] ?? '', `stages[${i}].does`),
+        result: str(x['result'] ?? '', `stages[${i}].result`),
+        substages: bool(x['substages'] ?? false, `stages[${i}].substages`),
+        approval: bool(x['approval'] ?? false, `stages[${i}].approval`),
+      };
+      const id = optStr(x['id'], `stages[${i}].id`);
+      if (id !== undefined) st.id = id;
+      return st;
+    }),
+  };
+}
+
+function submissionAnswer(v: unknown): SubmissionAnswer {
+  if (!isObj(v)) throw new ArgError('answer must be an object');
+  if (v['choice'] === 'Accept') return { choice: 'Accept' };
+  if (v['choice'] === 'Return') return { choice: 'Return', text: str(v['text'], 'text') };
+  throw new ArgError('choice must be Accept or Return');
+}
+
 function lessonStatus(v: unknown): 'new' | 'closed' | 'all' {
   if (v === 'new' || v === 'closed' || v === 'all') return v;
   throw new ArgError('status must be new, closed or all');
@@ -107,6 +135,16 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   setToolRules: { result: true, run: (s, a) => s.setToolRules(str(a[0], 'rules', 1_000_000)) },
   listLessons: { result: false, run: (s, a) => s.listLessons(lessonStatus(a[0])) },
   closeLesson: { result: true, run: (s, a) => s.closeLesson(int(a[0], 'lesson id')) },
+  createPipeline: { result: true, run: (s, a) => s.createPipeline(pipelineInput(a[0])) },
+  updatePipeline: { result: true, run: (s, a) => s.updatePipeline(str(a[0], 'pipeline id', 200), pipelineInput(a[1])) },
+  removePipeline: { result: true, run: (s, a) => s.removePipeline(str(a[0], 'pipeline id', 200)) },
+  taskFeed: { result: false, run: (s, a) => s.taskFeed(str(a[0], 'task id', 200)) },
+  postToTask: {
+    result: true,
+    run: (s, a) => s.postToTask(str(a[0], 'task id', 200), str(a[1], 'text'), optStr(a[2], 'stage id')),
+  },
+  answerSubmission: { result: true, run: (s, a) => s.answerSubmission(int(a[0], 'ask id'), submissionAnswer(a[1])) },
+  artifactText: { result: true, run: (s, a) => s.artifactText(int(a[0], 'artifact id')) },
 };
 
 // callShell runs one method with arguments from the page.

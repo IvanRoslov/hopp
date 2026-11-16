@@ -18,9 +18,14 @@ import type {
   ToolCatalog,
   ToolRules,
   Lesson,
+  Pipeline,
+  PipelineInput,
+  Post,
+  SubmissionAnswer,
+  TaskFeed,
 } from '../../shared/shell';
 import { SLUG_PATTERN, slugify } from '../../shared/slug';
-import type { Session, Waiting } from '../../shared/types';
+import type { Ask, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
 import { fail, MAX_SLUG, validateProject } from './projects';
@@ -270,7 +275,7 @@ export class ShellService {
     const task: Task = {
       id, projectSlug: project.slug, title, brief, sessionId: id, dir,
       branch: project.orchestratorRepo ? 'hopp/' + id : null,
-      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name),
+      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline: null,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
     await this.d.store.update((s) => {
@@ -526,6 +531,36 @@ export class ShellService {
       await this.d.client.closeLesson(id);
       return ok(null);
     });
+  }
+
+  // ---- pipelines, feed, artifacts (Plan 10; being implemented) --------------
+
+  async createPipeline(_input: PipelineInput): Promise<Result<Pipeline>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async updatePipeline(_id: string, _input: PipelineInput): Promise<Result<Pipeline>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async removePipeline(_id: string): Promise<Result<null>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async taskFeed(_taskId: string): Promise<TaskFeed> {
+    return { posts: [], asks: [], artifacts: [] };
+  }
+
+  async postToTask(_taskId: string, _text: string, _stageId?: string): Promise<Result<Post>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async answerSubmission(_askId: number, _answer: SubmissionAnswer): Promise<Result<Ask>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async artifactText(_id: number): Promise<Result<string>> {
+    return fail('not_implemented', 'not implemented yet');
   }
 }
 

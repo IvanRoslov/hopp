@@ -30,14 +30,16 @@ afterEach(async () => {
 });
 
 describe('shell IPC', () => {
-  it('covers every bridge method but onChanged', () => {
+  it('covers every bridge method but the listeners and artifactUrl', () => {
     const bridgeKeys: (keyof ShellBridge)[] = [
       'state', 'onChanged', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
       'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
       'removeAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
-      'listLessons', 'closeLesson',
+      'listLessons', 'closeLesson', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
+      'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText',
     ];
-    expect([...SHELL_METHODS].sort()).toEqual(bridgeKeys.filter((k) => k !== 'onChanged').sort());
+    const local = ['onChanged', 'onFeedChanged', 'artifactUrl'];
+    expect([...SHELL_METHODS].sort()).toEqual(bridgeKeys.filter((k) => !local.includes(k)).sort());
   });
 
   it('answers a malformed call to a Result method with a bad_request result', async () => {
