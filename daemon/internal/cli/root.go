@@ -64,6 +64,8 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newAsksCmd())
 	root.AddCommand(newWaitingCmd())
 	root.AddCommand(newReplyCmd())
+	root.AddCommand(newLessonCmd())
+	root.AddCommand(newLessonsCmd())
 	root.AddCommand(newEventsCmd())
 	root.AddCommand(newUsageCmd())
 	root.AddCommand(newLogsCmd())

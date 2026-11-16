@@ -71,6 +71,14 @@ bin/hopp inbox [--mailbox <id>]        # a mailbox's unread messages; inbox next
 
 Inside a session an agent asks with `hopp ask "<text>" [--option <choice>]… [--wait]` and withdraws with `hopp ask withdraw <ask-id>`.
 
+Lessons, from an agent or the human:
+
+```bash
+bin/hopp lesson "<text>" [--label k=v]   # or -f <file>, or the text on stdin; prints the id
+bin/hopp lessons [--all|--closed] [--label k=v] [--from <id>]
+bin/hopp lessons close <id>...
+```
+
 ## Related
 
 - [[docs/invariants]] — the rules these tools must not be used to break
