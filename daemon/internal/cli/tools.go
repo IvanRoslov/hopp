@@ -64,7 +64,7 @@ func newToolsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newToolsListCmd(), newToolsShowCmd(), newToolsRulesCmd(),
 		newToolsSwitchCmd("enable", true), newToolsSwitchCmd("disable", false),
-		newToolsPathCmd(), newToolsCheckCmd())
+		newToolsPathCmd(), newToolsCheckCmd(), newToolsPromptCmd(), newToolsGuideCmd(), newToolsImportCmd())
 	return cmd
 }
 
@@ -393,4 +393,75 @@ func toolProblems(t toolcatalog.Tool) []string {
 		}
 	}
 	return out
+}
+
+func newToolsPromptCmd() *cobra.Command {
+	var harness string
+	cmd := &cobra.Command{
+		Use:   "prompt --harness <name>",
+		Short: "Print the tools section for a session's start text in that harness",
+		Long: "Prints one line per switched-on tool available in the harness and the four rules for using\n" +
+			"tools. Whoever launches a session puts it into the start text. Prints nothing when no tool fits.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if harness == "" {
+				return &usageError{message: "--harness is required"}
+			}
+			if err := checkHarnessFlag(harness); err != nil {
+				return err
+			}
+			_, tools, _, err := loadTools(cmd)
+			if err != nil {
+				return err
+			}
+			cmd.Print(toolcatalog.Prompt(tools, harness))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&harness, "harness", "", "harness the session runs in")
+	return cmd
+}
+
+func newToolsGuideCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "guide",
+		Short: "Print the instructions for adding a tool to the catalog",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.Print(toolcatalog.Guide)
+			return nil
+		},
+	}
+}
+
+func newToolsImportCmd() *cobra.Command {
+	var update bool
+	cmd := &cobra.Command{
+		Use:   "import <registry.yaml>",
+		Short: "Create tools from a registry in rocket's format (the file is only read)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			data, err := os.ReadFile(args[0])
+			if err != nil {
+				return err
+			}
+			home, err := toolsHomeDir()
+			if err != nil {
+				return err
+			}
+			res, err := toolcatalog.Import(home, data, update)
+			for _, n := range res.Created {
+				cmd.Printf("created %s\n", n)
+			}
+			for _, n := range res.Updated {
+				cmd.Printf("updated %s\n", n)
+			}
+			for _, n := range res.Skipped {
+				cmd.PrintErrf("skipped %s: it exists; --update rewrites its tool.yaml and USAGE.md\n", n)
+			}
+			return err
+		},
+	}
+	cmd.Flags().BoolVar(&update, "update", false, "rewrite tool.yaml and USAGE.md of tools that exist")
+	return cmd
 }

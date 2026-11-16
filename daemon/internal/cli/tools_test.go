@@ -304,3 +304,70 @@ func TestToolsCheck(t *testing.T) {
 		t.Error("check ghost exited 0")
 	}
 }
+
+// Review Focus 5 on the command line.
+func TestToolsPrompt(t *testing.T) {
+	toolsCatalog(t)
+	out, errOut, code := runTools(t, "tools", "prompt", "--harness", "codex")
+	if code != 0 || !strings.HasPrefix(out, "## Tools\n") || strings.Contains(out, "voice") || strings.Contains(out, "refs") ||
+		!strings.Contains(out, "- fetcher — Fetch a page") {
+		t.Errorf("codex: exit %d, %q %q", code, out, errOut)
+	}
+	out, _, _ = runTools(t, "tools", "prompt", "--harness", "claude-code")
+	if !strings.Contains(out, "- voice — Speech and music (paid) (MCP server elevenvoice)") {
+		t.Errorf("claude-code prompt = %q", out)
+	}
+	if _, _, code := runTools(t, "tools", "prompt"); code != 3 {
+		t.Errorf("without --harness: exit %d, want 3", code)
+	}
+	if _, _, code := runTools(t, "tools", "prompt", "--harness", "vim"); code != 3 {
+		t.Errorf("unknown harness: exit %d, want 3", code)
+	}
+}
+
+func TestToolsPromptEmptyCatalog(t *testing.T) {
+	home := toolsHome(t)
+	if out, errOut, code := runTools(t, "tools", "prompt", "--harness", "pi"); code != 0 || out != "" || errOut != "" {
+		t.Errorf("missing catalog: exit %d, %q %q", code, out, errOut)
+	}
+	os.MkdirAll(filepath.Join(home, "tools"), 0o755)
+	if out, _, code := runTools(t, "tools", "prompt", "--harness", "pi"); code != 0 || out != "" {
+		t.Errorf("empty catalog: exit %d, %q", code, out)
+	}
+}
+
+func TestToolsGuide(t *testing.T) {
+	toolsHome(t)
+	out, _, code := runTools(t, "tools", "guide")
+	if code != 0 || !strings.Contains(out, "hopp tools check") {
+		t.Errorf("guide: exit %d, %q", code, out)
+	}
+}
+
+func TestToolsImport(t *testing.T) {
+	home := toolsHome(t)
+	reg := filepath.Join(t.TempDir(), "registry.yaml")
+	data := []byte("tools:\n  - name: pdfx\n    description: Extract text\n    command: [pdfx]\n    usage: pdfx FILE\n")
+	os.WriteFile(reg, data, 0o644)
+	out, errOut, code := runTools(t, "tools", "import", reg)
+	if code != 0 || !strings.Contains(out, "created pdfx") {
+		t.Fatalf("import: exit %d, %q %q", code, out, errOut)
+	}
+	if _, err := toolcatalog.Get(home, "pdfx"); err != nil {
+		t.Errorf("imported tool: %v", err)
+	}
+	_, errOut, code = runTools(t, "tools", "import", reg)
+	if code != 0 || !strings.Contains(errOut, "pdfx") {
+		t.Errorf("second import: exit %d, stderr %q", code, errOut)
+	}
+	out, _, code = runTools(t, "tools", "import", reg, "--update")
+	if code != 0 || !strings.Contains(out, "updated pdfx") {
+		t.Errorf("--update: exit %d, %q", code, out)
+	}
+	if after, _ := os.ReadFile(reg); !bytes.Equal(after, data) {
+		t.Error("import changed its source file")
+	}
+	if _, _, code := runTools(t, "tools", "import", filepath.Join(t.TempDir(), "none.yaml")); code == 0 {
+		t.Error("import of a missing file exited 0")
+	}
+}
