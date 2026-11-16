@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import type { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Lesson, ModelProfile } from '../src/shared/shell';
+import type { Artifact, Lesson, ModelProfile, Post } from '../src/shared/shell';
 import type { Ask, DaemonEvent, Session } from '../src/shared/types';
 
 export interface RecordedRequest {
@@ -53,6 +53,9 @@ export class FakeDaemon {
   attach: Record<string, string[]> = {};
   defaultAttach: string[] = ['/bin/sh', '-c', 'echo hello; cat'];
   profiles: ModelProfile[] = [];
+  posts: Post[] = [];
+  artifacts: (Artifact & { path: string })[] = [];
+  messages: { id: number; from?: string; to: string; body: string }[] = [];
   mailboxes: { name: string; unread: number; total: number }[] = [];
   lessons: Lesson[] = [];
   // created records every POST /v1/sessions body, in order.
@@ -214,6 +217,48 @@ export class FakeDaemon {
       this.publish('session.restored', id, {});
       return json(res, 200, s);
     }
+    if (key === 'POST /v1/messages') {
+      const b = JSON.parse(body || '{}') as { from?: string; to?: string; body?: string };
+      const to = this.sessions.find((x) => x.id === b.to);
+      if (!to) return notFound(res, String(b.to));
+      if (!LIVE.has(to.state)) return json(res, 409, { error: { code: 'recipient_terminal', message: 'recipient session has ended' } });
+      const msg = { id: this.messages.length + 1, to: to.id, body: String(b.body ?? ''), ...(b.from ? { from: b.from } : {}) };
+      this.messages.push(msg);
+      return json(res, 201, { ...msg, status: 'queued' });
+    }
+    if (key === 'POST /v1/posts') {
+      const b = JSON.parse(body || '{}') as { from?: string; body?: string; labels?: Record<string, string>; attachments?: string[] };
+      if (!b.body || !b.body.trim()) return json(res, 400, { error: { code: 'bad_request', message: 'body must not be empty' } });
+      const from = b.from ?? '';
+      const sess = from ? this.sessions.find((x) => x.id === from) : undefined;
+      if (from && !sess) return json(res, 400, { error: { code: 'bad_request', message: 'from session not found' } });
+      const p: Post = { id: this.posts.length + 1, from, labels: { ...(sess?.labels ?? {}), ...(b.labels ?? {}) }, body: b.body, attachments: b.attachments ?? [], created_at: Math.floor(Date.now() / 1000) };
+      this.posts.push(p);
+      this.publish('post.added', from, { id: p.id, post_labels: p.labels });
+      return json(res, 201, p);
+    }
+    if (key === 'GET /v1/posts') {
+      const want = labelFilter(url);
+      const after = Number(url.searchParams.get('after') ?? 0);
+      const limit = Number(url.searchParams.get('limit') ?? 200);
+      return json(res, 200, { posts: this.posts.filter((p) => p.id > after && hasLabels(p.labels, want)).slice(0, limit) });
+    }
+    if (key === 'GET /v1/artifacts') {
+      const want = labelFilter(url);
+      const scope = url.searchParams.get('scope');
+      let list = this.artifacts.filter((a) => (!scope || a.scope === scope) && hasLabels(a.labels, want));
+      if (url.searchParams.get('versions') !== '1') {
+        const latest = new Map<string, (typeof list)[number]>();
+        for (const a of list) if ((latest.get(a.scope + '/' + a.name)?.version ?? 0) < a.version) latest.set(a.scope + '/' + a.name, a);
+        list = [...latest.values()];
+      }
+      return json(res, 200, { artifacts: list });
+    }
+    if (req.method === 'GET' && (m = path.match(/^\/v1\/artifacts\/(\d+)$/))) {
+      const a = this.artifacts.find((x) => x.id === Number(m![1]));
+      if (!a) return json(res, 404, { error: { code: 'artifact_not_found', message: 'artifact not found' } });
+      return json(res, 200, a);
+    }
     if (key === 'GET /v1/model-profiles') {
       return json(res, 200, { profiles: this.profiles, default: this.profiles[0]?.name ?? '' });
     }
@@ -267,8 +312,10 @@ export class FakeDaemon {
     if (key === 'GET /v1/asks') {
       const status = url.searchParams.get('status') ?? 'open';
       const from = url.searchParams.get('from');
+      const want = labelFilter(url);
       let list = status === 'all' ? this.asks : this.asks.filter((a) => a.status === status);
       if (from) list = list.filter((a) => a.from === from);
+      list = list.filter((a) => hasLabels(a.labels ?? {}, want));
       return json(res, 200, { asks: list });
     }
     if (req.method === 'POST' && (m = path.match(/^\/v1\/asks\/(\d+)\/answer$/))) {
@@ -304,6 +351,19 @@ export class FakeDaemon {
     }
     json(res, 404, { error: { code: 'not_found', message: 'resource not found' } });
   }
+}
+
+function labelFilter(url: URL): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const l of url.searchParams.getAll('label')) {
+    const i = l.indexOf('=');
+    if (i > 0) out[l.slice(0, i)] = l.slice(i + 1);
+  }
+  return out;
+}
+
+function hasLabels(have: Record<string, string>, want: Record<string, string>): boolean {
+  return Object.entries(want).every(([k, v]) => have[k] === v);
 }
 
 function writeEvent(res: ServerResponse, e: DaemonEvent): void {

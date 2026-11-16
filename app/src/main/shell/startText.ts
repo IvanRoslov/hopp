@@ -2,7 +2,7 @@
 // in layers: (1) hopp, (2) role, (3) project, (4) tools, then the human's
 // extra system prompt. A long-lived agent gets layers 1 and 4 only; its role
 // lives in its own folder.
-import type { Project } from '../../shared/shell';
+import type { Pipeline, Project } from '../../shared/shell';
 
 // hoppLayer: you run inside hopp, and the commands every session uses.
 export function hoppLayer(): string {
@@ -39,6 +39,8 @@ export interface OrchestratorContext {
   workers: WorkerFile[];
   toolsPrompt: string;
   extraSystemPrompt?: string;
+  // The task's pipeline; null or absent for a task without one.
+  pipeline?: Pipeline | null;
 }
 
 export interface WorkerContext {
@@ -135,11 +137,20 @@ export function orchestratorText(c: OrchestratorContext): string {
     '',
     'Ask the human with `hopp ask` when a decision is theirs. Workers never ask the human: they ask you.',
     '',
-    `When the work is ready, say so with \`hopp ask "${c.title}: ready for review" --option Accept --option Revise\` and wait for the answer. On Revise, continue with what the human asked for.`,
+    c.pipeline
+      ? 'The task follows a pipeline (below): the human accepts it stage by stage in the feed. When the last stage is accepted, post a short summary of the whole task to the feed.'
+      : `When the work is ready, say so with \`hopp ask "${c.title}: ready for review" --option Accept --option Revise\` and wait for the answer. On Revise, continue with what the human asked for.`,
     '',
     'Record anything that would have made this task go better with `hopp lesson`.',
   ].join('\n');
-  return join([hoppLayer(), role, projectLayer(c.project, true, c.worktreesDir), toolsLayer(c.toolsPrompt), extra(c.extraSystemPrompt)]);
+  return join([
+    hoppLayer(),
+    role,
+    projectLayer(c.project, true, c.worktreesDir),
+    c.pipeline ? pipelineLayer(c.pipeline) : undefined,
+    toolsLayer(c.toolsPrompt),
+    extra(c.extraSystemPrompt),
+  ]);
 }
 
 export function workerText(c: WorkerContext): string {
@@ -165,4 +176,69 @@ function extra(text?: string): string | undefined {
   const t = (text ?? '').trim();
   if (!t) return undefined;
   return '# From the human\n\n' + t;
+}
+
+// pipelineLayer: the stages in order, and the exact commands that keep the
+// human's feed, stages and artifacts in step with the work. The labels are
+// the contract with the app (LABEL in shared/shell.ts).
+export function pipelineLayer(p: Pipeline): string {
+  const lines = [
+    `# Pipeline: ${p.name}`,
+    '',
+    'Work through these stages in order. The human follows the task in its feed, not in your terminal: everything they should see goes there with `hopp post`, `hopp artifact publish` and `hopp ask`, each labelled with its stage.',
+    '',
+    '## Stages',
+    '',
+  ];
+  p.stages.forEach((st, i) => {
+    const flags = [
+      st.approval ? 'waits for the human\'s approval' : 'passes without approval',
+      st.substages ? 'may have substages' : 'no substages',
+    ].join('; ');
+    lines.push(`${i + 1}. **${st.name}** — stage id \`${st.id}\`; ${flags}.`);
+    if (st.does) lines.push(`   What it does: ${st.does}`);
+    if (st.result) lines.push(`   What the result looks like: ${st.result}`);
+  });
+  const anySub = p.stages.some((s) => s.substages);
+  lines.push(
+    '',
+    '## How to work a stage',
+    '',
+    'Replace <id> with the stage id. Put `--label hopp.stage=<id>` on everything of that stage.',
+    '',
+    '1. Start it, saying in one line what you will do:',
+    '',
+    '   hopp post --label hopp.stage=<id> --label hopp.event=stage_started "<what this stage will do>"',
+    '',
+    '2. Write progress, findings and decisions to the feed; attach artifacts by `name@version`:',
+    '',
+    '   hopp post --label hopp.stage=<id> "<text>" [--attach <name>@<version>]',
+    '',
+    '3. Publish every file the human should see as an artifact. Publishing the same name again makes a new version; the command prints `name@version`:',
+    '',
+    '   hopp artifact publish <file> --name <name> --label hopp.stage=<id>',
+    '',
+  );
+  if (anySub) {
+    lines.push(
+      '4. Substages, only in stages that may have them: declare each one before you work on it, then put its two labels on its posts and artifacts:',
+      '',
+      '   hopp post --label hopp.stage=<id> --label hopp.substage=<slug> --label "hopp.substage_title=<title>" --label hopp.event=stage_started "<what this substage is>"',
+      '',
+      '   A stage with substages is still submitted once, as a whole.',
+      '',
+    );
+  }
+  lines.push(
+    `${anySub ? 5 : 4}. Submit the stage once its result is ready, attaching the versions to review:`,
+    '',
+    '   hopp ask "<stage name> is ready: <what to look at>" --label hopp.stage=<id> --label hopp.kind=submission --option Accept --option Return --attach <name>@<version>',
+    '',
+    '   The answer arrives as a message. Accept: the stage is done; start the next one. Return: the answer says what to fix; fix it, post what changed, publish new versions and submit again with a new ask. To take a submission back, `hopp ask withdraw <ask-id>`.',
+    '',
+    '- A stage that waits for approval is never passed without an Accept. Do not start the next stage before it.',
+    '- A stage that passes without approval: when it is done, post `hopp post --label hopp.stage=<id> --label hopp.event=stage_done "<summary>"` and go on.',
+    '- Before any paid call, ask with `hopp ask "<what it costs and why>" --label hopp.stage=<id> --label hopp.kind=paid --option Go --option Deny` and wait for Go. Never put a paid question into a submission.',
+  );
+  return lines.join('\n');
 }

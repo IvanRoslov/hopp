@@ -3,7 +3,13 @@
 import { request } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Lesson, ModelProfile } from '../../shared/shell';
+import type { Artifact, Lesson, ModelProfile, Post } from '../../shared/shell';
+
+// StoredArtifact is an artifact version as the daemon returns it, with the
+// path of its stored file. The path never goes to the page.
+export interface StoredArtifact extends Artifact {
+  path: string;
+}
 import type { Ask, AskAnswer, Health, QuizAnswer, Session, Waiting } from '../../shared/types';
 
 // CreateSessionBody is the request of POST /v1/sessions.
@@ -90,10 +96,11 @@ export class DaemonClient {
     return r.command;
   }
 
-  async listAsks(opts: { status?: 'open' | 'answered' | 'withdrawn' | 'all'; from?: string } = {}): Promise<Ask[]> {
+  async listAsks(opts: { status?: 'open' | 'answered' | 'withdrawn' | 'all'; from?: string; labels?: Record<string, string> } = {}): Promise<Ask[]> {
     const q = new URLSearchParams();
     if (opts.status) q.set('status', opts.status);
     if (opts.from) q.set('from', opts.from);
+    for (const [k, v] of Object.entries(opts.labels ?? {})) q.append('label', `${k}=${v}`);
     const qs = q.toString();
     const r = await this.call<{ asks: Ask[] }>('GET', '/v1/asks' + (qs ? '?' + qs : ''));
     return r.asks;
@@ -147,6 +154,39 @@ export class DaemonClient {
 
   closeLesson(id: number): Promise<Lesson> {
     return this.call('POST', `/v1/lessons/${enc(String(id))}/close`, {});
+  }
+
+  async listPosts(opts: { labels?: Record<string, string>; after?: number; limit?: number } = {}): Promise<Post[]> {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(opts.labels ?? {})) q.append('label', `${k}=${v}`);
+    if (opts.after) q.set('after', String(opts.after));
+    if (opts.limit) q.set('limit', String(opts.limit));
+    const qs = q.toString();
+    const r = await this.call<{ posts: Post[] | null }>('GET', '/v1/posts' + (qs ? '?' + qs : ''));
+    return r.posts ?? [];
+  }
+
+  createPost(body: { from?: string; body: string; labels?: Record<string, string>; attachments?: string[] }): Promise<Post> {
+    return this.call('POST', '/v1/posts', body);
+  }
+
+  async listArtifacts(opts: { scope?: string; labels?: Record<string, string>; versions?: boolean } = {}): Promise<StoredArtifact[]> {
+    const q = new URLSearchParams();
+    if (opts.scope) q.set('scope', opts.scope);
+    for (const [k, v] of Object.entries(opts.labels ?? {})) q.append('label', `${k}=${v}`);
+    if (opts.versions) q.set('versions', '1');
+    const qs = q.toString();
+    const r = await this.call<{ artifacts: StoredArtifact[] | null }>('GET', '/v1/artifacts' + (qs ? '?' + qs : ''));
+    return r.artifacts ?? [];
+  }
+
+  getArtifact(id: number): Promise<StoredArtifact> {
+    return this.call('GET', `/v1/artifacts/${enc(String(id))}`);
+  }
+
+  // sendMessage queues a message; without from it carries no sender prefix.
+  sendMessage(body: { to: string; body: string; from?: string }): Promise<{ id: number; status: string }> {
+    return this.call('POST', '/v1/messages', body);
   }
 
   private call<T>(method: string, path: string, body?: unknown): Promise<T> {
