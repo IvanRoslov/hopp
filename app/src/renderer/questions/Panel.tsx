@@ -30,10 +30,11 @@ export function QuestionsPanel(props: {
           sessionId={props.sessionId}
           q={q}
           reload={() => props.reloadSession(props.sessionId)}
+          lead
         />
       )}
-      {open.map((a) => (
-        <OpenAsk key={a.id} daemon={props.daemon} ask={a} reload={props.reloadAsks} />
+      {open.map((a, i) => (
+        <OpenAsk key={a.id} daemon={props.daemon} ask={a} reload={props.reloadAsks} lead={!q && i === 0} />
       ))}
       {closed.length > 0 && (
         <div data-testid="answered">
@@ -52,7 +53,8 @@ export function QuestionsPanel(props: {
   );
 }
 
-function HarnessQuestion(props: { daemon: DaemonBridge; sessionId: string; q: SessionQuestion; reload: () => void }) {
+// Only the first block (`lead`) carries the accent; the rest are neutral.
+function HarnessQuestion(props: { daemon: DaemonBridge; sessionId: string; q: SessionQuestion; reload: () => void; lead?: boolean }) {
   const { q, daemon, sessionId } = props;
   const [picked, setPicked] = useState<number[][]>(() => q.questions.map(() => []));
   const [busy, setBusy] = useState(false);
@@ -136,7 +138,7 @@ function HarnessQuestion(props: { daemon: DaemonBridge; sessionId: string; q: Se
                   type="button"
                   title={o.description}
                   disabled={busy || sent}
-                  className={'c-btn' + (oneClick && oi === 0 ? ' primary' : '') + (picked[qi]?.includes(oi) ? ' on' : '')}
+                  className={'c-btn' + (props.lead && oneClick && oi === 0 ? ' primary' : '') + (picked[qi]?.includes(oi) ? ' on' : '')}
                   onClick={() => pick(qi, oi)}
                 >
                   {o.label}
@@ -157,7 +159,7 @@ function HarnessQuestion(props: { daemon: DaemonBridge; sessionId: string; q: Se
   );
 }
 
-function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void }) {
+function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; lead?: boolean }) {
   const { ask } = props;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -186,7 +188,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void }) 
         {options.length > 0 ? (
           <div className="btns">
             {options.map((o, i) => (
-              <button key={o} type="button" className={'c-btn' + (i === 0 ? ' primary' : '')} disabled={busy} onClick={() => void answer({ choice: o })}>
+              <button key={o} type="button" className={'c-btn' + (props.lead && i === 0 ? ' primary' : '')} disabled={busy} onClick={() => void answer({ choice: o })}>
                 {o}
               </button>
             ))}

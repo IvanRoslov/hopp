@@ -121,10 +121,8 @@ export function Side(props: {
                 }}
                 disabled={!r.owner}
               >
-                <span className="t">
-                  {r.text}
-                  <small>{r.under}</small>
-                </span>
+                <span className="t">{r.text}</span>
+                <small>{r.under}</small>
               </button>
             ))}
           </section>

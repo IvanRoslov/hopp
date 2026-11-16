@@ -63,9 +63,10 @@ button.row:active { background: var(--tree-pressed); }
 .row.two .t { grid-column: 1; grid-row: 1; }
 .row.two .mark { grid-column: 2; grid-row: 1; }
 .row.two .line2 { grid-column: 1 / -1; grid-row: 2; margin-top: -3px; }
-.row.ask { padding: 6px 8px; min-height: 0; align-items: start; }
+.row.ask { padding: 6px 8px; min-height: 0; align-items: stretch; flex-direction: column; gap: 0; }
 .row.ask .t { font-size: var(--fs-small); line-height: 1.4; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.row.ask small { display: block; font-size: var(--fs-tiny); line-height: 1.4; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+.row.ask .t { flex: none; }
+.row.ask small { display: block; font-size: var(--fs-tiny); line-height: 1.4; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 
 /* State marks: working is a ring with a dot, idle an empty ring; waiting and
    failing are words on a second line. */
