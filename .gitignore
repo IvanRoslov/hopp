@@ -7,6 +7,12 @@ __pycache__/
 *.pyc
 # Go build output
 bin/
+# The desktop app (app/)
+app/node_modules/
+app/out/
+app/dist/
+app/test-results/
+app/playwright-report/
 # OS / local
 .DS_Store
 .env

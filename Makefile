@@ -1,4 +1,4 @@
-.PHONY: lint-docs test-lint build test install start stop restart status
+.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build
 
 lint-docs:
 	python3 scripts/lint_docs.py .
@@ -48,3 +48,17 @@ restart: build
 
 status:
 	bin/hopp daemon status
+
+# The desktop app (app/): Electron + React + TypeScript. Its tests run against a
+# fake daemon on a temporary socket and never touch ~/.hopp.
+app-install:
+	cd app && npm ci
+
+app-dev:
+	cd app && npm run dev
+
+app-test:
+	cd app && npm run typecheck && npm test && npm run test:e2e
+
+app-build:
+	cd app && npm run build

@@ -1,0 +1,23 @@
+/* Temporary styling: every color, size and font of the app lives here. */
+:root {
+  --bg: #1e1f22;
+  --bg-panel: #26272b;
+  --bg-hover: #303136;
+  --bg-selected: #3a3d45;
+  --fg: #d8d8dc;
+  --fg-muted: #8c8d93;
+  --accent: #5b8def;
+  --danger: #e06c6c;
+  --warn: #e5b45b;
+  --border: #3a3b40;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: Menlo, Monaco, 'Courier New', monospace;
+  --font-size: 13px;
+  --font-size-mono: 13px;
+  --left-width: 280px;
+  --middle-width: 340px;
+  --header-height: 36px;
+  --gap: 8px;
+  --indent: 14px;
+  --radius: 4px;
+}
