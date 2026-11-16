@@ -224,6 +224,21 @@ func TestRunLabelsAndEnvParsing(t *testing.T) {
 	}
 }
 
+// TestRunEmptyLabelIsSent: --label k= sends k with an empty value, which the
+// daemon reads as "do not inherit k from the parent".
+func TestRunEmptyLabelIsSent(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("POST /v1/sessions", 201, created)
+	_, errOut, code := runCLI(t, f, "run", t.TempDir(), "--label", "k=")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	labels, _ := f.last(t).Body["labels"].(map[string]any)
+	if v, ok := labels["k"]; !ok || v != "" {
+		t.Errorf("labels = %v, want k with an empty value", labels)
+	}
+}
+
 func TestLsTable(t *testing.T) {
 	f := newFakeAPI(t)
 	row := map[string]any{"id": "s1", "parent": "p", "dir": "/work", "agent": "codex", "model": "", "state": "running", "activity": "idle"}

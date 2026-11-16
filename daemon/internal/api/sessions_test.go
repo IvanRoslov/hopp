@@ -185,7 +185,7 @@ func TestListSessionsFilters(t *testing.T) {
 	e := newAPIEnv(t)
 	dir := t.TempDir()
 	e.create(t, map[string]any{"dir": dir, "id": "p", "labels": map[string]string{"a": "1", "b": "2"}})
-	e.create(t, map[string]any{"dir": dir, "id": "c1", "parent": "p", "labels": map[string]string{"a": "1"}})
+	e.create(t, map[string]any{"dir": dir, "id": "c1", "parent": "p", "labels": map[string]string{"a": "1", "b": ""}})
 	e.create(t, map[string]any{"dir": dir, "id": "c2", "parent": "p"})
 	if code := e.call(t, "POST", "/v1/sessions/c2/kill", nil, nil); code != http.StatusOK {
 		t.Fatalf("kill c2: %d", code)

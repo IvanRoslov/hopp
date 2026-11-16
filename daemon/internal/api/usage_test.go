@@ -27,7 +27,7 @@ func (f *fakeUsage) EnqueueTerminal(collected, missing bool) (int, error) {
 func TestGetUsageRows(t *testing.T) {
 	e := newAPIEnv(t)
 	e.create(t, map[string]any{"dir": t.TempDir(), "id": "p", "labels": map[string]string{"team": "a"}})
-	e.create(t, map[string]any{"dir": t.TempDir(), "id": "c", "parent": "p"})
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "c", "parent": "p", "labels": map[string]string{"team": ""}})
 	end := int64(500)
 	e.st.ReplaceSessionUsage(store.SessionStats{SessionID: "c", Status: "ok", Final: true, StartedAt: 1, EndedAt: &end, CollectedAt: 501},
 		[]store.ModelUsage{{Model: "m1", Tokens: store.UsageTokens{Input: 5, CacheWrite: 1, CacheRead: 2, Output: 3, Reasoning: 1, Messages: 2}}})

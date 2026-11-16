@@ -57,14 +57,16 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnReq) (store.Session, error
 		}
 	}
 
+	var parent store.Session
 	if req.ParentID != "" {
-		if _, err := m.st.GetSession(req.ParentID); err != nil {
+		if parent, err = m.st.GetSession(req.ParentID); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return store.Session{}, validationErr("parent_not_found", "parent session not found: "+req.ParentID)
 			}
 			return store.Session{}, err
 		}
 	}
+	labels := mergeLabels(parent.Labels, req.Labels)
 
 	if agent.TakesFirstMessageByInput(ag) && req.FirstMessage != "" && m.firstMessage == nil {
 		return store.Session{}, validationErr("first_message_needs_queue", "this agent takes its first message by input, and no message queue is set")
@@ -108,7 +110,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnReq) (store.Session, error
 			ParentID:       req.ParentID,
 			WorktreePath:   req.Dir,
 			TmuxName:       id,
-			Labels:         req.Labels,
+			Labels:         labels,
 			Agent:          agentName,
 			Profile:        req.Profile.Name,
 			Model:          req.Profile.Model,
@@ -200,4 +202,22 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnReq) (store.Session, error
 	}
 
 	return m.st.GetSession(id)
+}
+
+// mergeLabels returns the parent's labels overlaid with the request's: the
+// request wins on a shared key, and a request label with an empty value
+// removes that key. Neither input is changed.
+func mergeLabels(parent, req map[string]string) map[string]string {
+	out := make(map[string]string, len(parent)+len(req))
+	for k, v := range parent {
+		out[k] = v
+	}
+	for k, v := range req {
+		if v == "" {
+			delete(out, k)
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
