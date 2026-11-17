@@ -108,7 +108,7 @@ export class ShellStore {
     const state: ShellState = {
       projects: raw.projects ?? [],
       pipelines: raw.pipelines ?? [],
-      tasks: (raw.tasks ?? []).map((t) => ({ ...t, pipeline: t.pipeline ?? null, base: t.base ?? null })),
+      tasks: (raw.tasks ?? []).map((t) => ({ ...t, pipeline: t.pipeline ?? null, base: t.base ?? null, startedBy: t.startedBy ?? null })),
       agents: raw.agents ?? [],
     };
     this.seeded = Array.isArray(raw.seeded) ? raw.seeded.filter((x) => typeof x === 'string') : [];

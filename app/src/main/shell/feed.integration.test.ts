@@ -47,7 +47,7 @@ describe.skipIf(!hasGo)('the feed against the real daemon', () => {
     await store.update((s) => {
       s.tasks.push({
         id: 'demo', projectSlug: 'site', title: 'Demo', brief: 'b', sessionId: 'orch', dir: root, branch: null,
-        orchestratorProfile: 'p', workerProfiles: [], pipeline: null, base: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0,
+        orchestratorProfile: 'p', workerProfiles: [], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0,
       });
     });
   }, 180_000);
