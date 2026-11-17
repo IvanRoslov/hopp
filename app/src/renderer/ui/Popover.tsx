@@ -10,6 +10,9 @@ export function Popover(props: {
   align?: 'left' | 'right';
   children: ReactNode;
   label?: string;
+  // A popover that is not a menu (a picker with a search field) says so.
+  role?: 'menu' | 'dialog';
+  className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -55,8 +58,8 @@ export function Popover(props: {
   return createPortal(
     <div
       ref={box}
-      className="menu"
-      role="menu"
+      className={'menu' + (props.className ? ' ' + props.className : '')}
+      role={props.role ?? 'menu'}
       aria-label={props.label}
       style={pos ? { top: pos.top, left: pos.left } : { top: -9999, left: -9999 }}
     >

@@ -79,15 +79,21 @@ describe('project form', () => {
     fireEvent.click(screen.getByText('Settings'));
     fireEvent.click(screen.getByText('New project'));
     type(screen.getByLabelText('Name'), 'Shop');
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    // The orchestrator's repository is a main field; its error is next to it.
     type(screen.getByLabelText('Worktree for the orchestrator'), '/missing');
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await flush();
+    expect(screen.getByText('This folder does not exist.')).toBeTruthy();
+    type(screen.getByLabelText('Worktree for the orchestrator'), '/repos/shop');
+    // A workers' path that fails opens Advanced by itself.
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    type(screen.getByLabelText('Worktrees for workers'), '/missing');
     fireEvent.click(screen.getByRole('button', { name: 'Hide advanced' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     await flush();
-    expect(screen.getByLabelText('Worktree for the orchestrator')).toBeTruthy();
-    expect(screen.getByText('This folder does not exist.')).toBeTruthy();
-    type(screen.getByLabelText('Worktree for the orchestrator'), '/repos/shop');
-    fireEvent.click(screen.getByRole('button', { name: 'Add folder…' }));
+    expect(screen.getByText('This folder does not exist: /missing.')).toBeTruthy();
+    type(screen.getByLabelText('Worktrees for workers'), '');
+    fireEvent.click(screen.getByRole('button', { name: 'Add folder' }));
     await flush();
     type(screen.getByLabelText('Guardrails'), 'No paid actions.');
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));

@@ -3,12 +3,9 @@ import type { Project, ProjectInput, ShellBridge, ShellError } from '../../share
 import { slugify } from '../../shared/slug';
 import { cleanError } from '../errors';
 import { Field } from '../ui/Field';
+import { RepoList, RepoSlot } from './RepoField';
 
-const ADVANCED_FIELDS = new Set(['orchestratorRepo', 'workerRepos', 'guardrails']);
-
-function lines(text: string): string[] {
-  return text.split('\n').map((l) => l.trim()).filter(Boolean);
-}
+const ADVANCED_FIELDS = new Set(['workerRepos', 'guardrails']);
 
 // ProjectForm creates a project (also on first run) or edits one.
 export function ProjectForm(props: {
@@ -27,9 +24,14 @@ export function ProjectForm(props: {
   const [slugTouched, setSlugTouched] = useState(!!e);
   const [description, setDescription] = useState(e?.description ?? '');
   const [orchestratorRepo, setOrchestratorRepo] = useState(e?.orchestratorRepo ?? '');
-  const [workerRepos, setWorkerRepos] = useState((e?.workerRepos ?? []).join('\n'));
+  const [workerRepos, setWorkerRepos] = useState<string[]>(e?.workerRepos ?? []);
+  // A worker path typed in but not added with Enter yet; saved with the rest.
+  const [workerDraft, setWorkerDraft] = useState('');
+  // Clones running per field: Save waits for them.
+  const [cloning, setCloning] = useState<Record<string, string | null>>({});
+  const clonesRunning = Object.values(cloning).filter((n): n is string => !!n);
   const [guardrails, setGuardrails] = useState(e?.guardrails ?? '');
-  const [advanced, setAdvanced] = useState(!!e && (!!e.orchestratorRepo || e.workerRepos.length > 0 || !!e.guardrails));
+  const [advanced, setAdvanced] = useState(!!e && (e.workerRepos.length > 0 || !!e.guardrails));
   const [error, setError] = useState<ShellError | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -39,17 +41,8 @@ export function ProjectForm(props: {
   const shownSlug = slugTouched ? slug : slugify(name);
   const fieldError = (f: string) => (error?.field === f ? error.message : undefined);
 
-  const pick = async (apply: (dir: string) => void) => {
-    try {
-      const dir = await props.shell.pickFolder();
-      if (dir) apply(dir);
-    } catch (err) {
-      setError({ code: 'pick_failed', message: cleanError(err) });
-    }
-  };
-
   const submit = async () => {
-    if (inFlight.current) return;
+    if (inFlight.current || clonesRunning.length > 0) return;
     inFlight.current = true;
     setBusy(true);
     setError(null);
@@ -57,7 +50,7 @@ export function ProjectForm(props: {
       name: name.trim(),
       description: description.trim(),
       orchestratorRepo: orchestratorRepo.trim() || null,
-      workerRepos: lines(workerRepos),
+      workerRepos: [...new Set([...workerRepos, workerDraft.trim()].filter(Boolean))],
       guardrails: guardrails.trim(),
     };
     if (slugTouched) input.slug = slug.trim();
@@ -92,7 +85,7 @@ export function ProjectForm(props: {
   };
 
   const title = props.first ? 'Create your first project' : e ? 'Project' : 'New project';
-  const generalError = error && (!error.field || !['name', 'slug', 'description', ...ADVANCED_FIELDS].includes(error.field)) ? error.message : null;
+  const generalError = error && (!error.field || !['name', 'slug', 'description', 'orchestratorRepo', ...ADVANCED_FIELDS].includes(error.field)) ? error.message : null;
 
   return (
     <>
@@ -145,6 +138,16 @@ export function ProjectForm(props: {
               error={fieldError('description')}
               onChange={(ev) => setDescription(ev.target.value)}
             />
+            <RepoSlot
+              shell={props.shell}
+              label="Worktree for the orchestrator"
+              value={orchestratorRepo}
+              onChange={setOrchestratorRepo}
+              placeholder="~/projects/site"
+              hint="Each task gets a new worktree of it on a new branch: a repository from GitHub at its latest default branch, a folder at its current commit (without uncommitted changes). Empty: tasks run in a plain folder."
+              error={fieldError('orchestratorRepo')}
+              onCloning={(n) => setCloning((c) => ({ ...c, orchestratorRepo: n }))}
+            />
           </div>
           <div className="adv-toggle">
             <button type="button" className={'c-btn' + (advanced ? ' on' : '')} aria-expanded={advanced} onClick={() => setAdvanced((a) => !a)}>
@@ -153,37 +156,17 @@ export function ProjectForm(props: {
           </div>
           {advanced && (
             <div className="advanced fields">
-              <Field
-                label="Worktree for the orchestrator"
-                value={orchestratorRepo}
-                placeholder="~/projects/site"
-                hint="Each task gets a new worktree of this repository at its current commit; uncommitted changes are not included. Empty: tasks run in a plain folder."
-                error={fieldError('orchestratorRepo')}
-                onChange={(ev) => setOrchestratorRepo(ev.target.value)}
-                after={
-                  <button type="button" className="c-btn" onClick={() => void pick(setOrchestratorRepo)}>
-                    Choose…
-                  </button>
-                }
-              />
-              <Field
+              <RepoList
+                shell={props.shell}
                 label="Worktrees for workers"
-                multiline
-                rows={3}
                 value={workerRepos}
-                placeholder={'~/projects/site-ui\n~/projects/site-api'}
-                hint="One repository per line. If empty, workers run in the orchestrator's repository."
+                onChange={setWorkerRepos}
+                draft={workerDraft}
+                onDraft={setWorkerDraft}
+                placeholder="~/projects/site-api — Enter to add"
+                hint="Repositories where the orchestrator may launch workers. If empty, workers run in the orchestrator's repository."
                 error={fieldError('workerRepos')}
-                onChange={(ev) => setWorkerRepos(ev.target.value)}
-                after={
-                  <button
-                    type="button"
-                    className="c-btn"
-                    onClick={() => void pick((d) => setWorkerRepos((w) => (w.trim() ? w.replace(/\n*$/, '\n') + d : d)))}
-                  >
-                    Add folder…
-                  </button>
-                }
+                onCloning={(n) => setCloning((c) => ({ ...c, workerRepos: n }))}
               />
               <Field
                 label="Guardrails"
@@ -199,7 +182,7 @@ export function ProjectForm(props: {
           )}
           <div className="form-actions">
             <span className="form-error" role={generalError ? 'alert' : undefined}>
-              {generalError}
+              {generalError ?? (clonesRunning.length > 0 ? <span className="subtle-note">Waiting for {clonesRunning.join(' and ')} to clone…</span> : null)}
             </span>
             {e && !confirmRemove && (
               <button type="button" className="link-btn" onClick={() => setConfirmRemove(true)} disabled={busy}>
@@ -217,7 +200,7 @@ export function ProjectForm(props: {
                 </button>
               </>
             )}
-            <button type="submit" className="c-btn primary" disabled={busy || !name.trim()}>
+            <button type="submit" className="c-btn primary" disabled={busy || !name.trim() || clonesRunning.length > 0}>
               {e ? 'Save' : 'Create'}
             </button>
           </div>

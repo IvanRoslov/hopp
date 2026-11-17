@@ -22,6 +22,7 @@ import type {
   ToolRules,
 } from '../src/shared/shell';
 import { SLUG_PATTERN, slugify } from '../src/shared/slug';
+import { managedRepoFolder } from '../src/shared/repos';
 import type { Ask, DaemonEvent, Session, StreamState } from '../src/shared/types';
 import { fakeTerminalBridge } from './renderer';
 
@@ -62,6 +63,13 @@ export interface ShellSeed {
   folders?: (string | null)[];
   feeds?: Record<string, TaskFeed>;
   artifactTexts?: Record<number, string>;
+  // GitHub through gh: the status, the repositories, and what a clone does.
+  github?: {
+    status?: Partial<import('../src/shared/shell').GithubStatus>;
+    repos?: import('../src/shared/shell').GithubRepo[];
+    // Answers addGithubRepo; default: a managed clone under <home>/repos.
+    add?: (fullName: string) => Promise<Result<{ path: string }>>;
+  };
 }
 
 // fakeShell keeps a ShellState in memory and applies changes the way the main
@@ -75,6 +83,10 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
   let tools: ToolCatalog = seed.tools ?? { tools: [], broken: [] };
   let rules: ToolRules = seed.rules ?? { text: '', modifiedAt: 0 };
   let lessons: Lesson[] = seed.lessons ?? [];
+  const ghStatus: import('../src/shared/shell').GithubStatus = {
+    available: false, login: '', reason: 'gh is not set up in this test.', command: 'gh auth login', home: '/h', ...seed.github?.status,
+  };
+  const ghRepos = seed.github?.repos ?? [];
   // The main process stores times in Unix seconds.
   let clock = Math.floor(Date.now() / 1000);
 
@@ -85,6 +97,7 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
     if (st.projects.some((p) => p.slug !== current && p.name === input.name)) return fail('name_taken', 'A project with this name exists.', 'name');
     if (st.projects.some((p) => p.slug !== current && p.slug === slug)) return fail('slug_taken', 'This slug is taken.', 'slug');
     if (input.orchestratorRepo === '/missing') return fail('folder_missing', 'This folder does not exist.', 'orchestratorRepo');
+    if (input.workerRepos.includes('/missing')) return fail('folder_missing', 'This folder does not exist: /missing.', 'workerRepos');
     return ok(slug);
   };
 
@@ -274,9 +287,17 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       return ok(null);
     }),
     // GitHub: off by default in page tests (stubs added with the contract).
-    githubStatus: vi.fn(async () => ({ available: false, login: '', reason: 'gh is not set up in this test', command: 'gh auth login', home: '/h' })),
-    listGithubRepos: vi.fn(async (_q: string) => ok([] as import('../src/shared/shell').GithubRepo[])),
-    addGithubRepo: vi.fn(async (_n: string) => ({ ok: false as const, error: { code: 'not_implemented', message: 'not in tests' } })),
+    githubStatus: vi.fn(async () => ({ ...ghStatus })),
+    listGithubRepos: vi.fn(async (q: string) => {
+      const n = q.trim().toLowerCase();
+      return ok(ghRepos.filter((r) => !n || r.fullName.toLowerCase().includes(n) || r.description.toLowerCase().includes(n)));
+    }),
+    addGithubRepo: vi.fn(async (fullName: string): Promise<Result<{ path: string }>> => {
+      if (seed.github?.add) return seed.github.add(fullName);
+      const folder = managedRepoFolder(fullName);
+      if (!folder) return fail('repo_unknown', `No repository ${fullName}`);
+      return ok({ path: `${ghStatus.home}/repos/${folder}` });
+    }),
   } satisfies ShellBridge;
 
   return {

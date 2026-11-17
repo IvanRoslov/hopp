@@ -21,9 +21,9 @@ You want to run work through the hopp desktop app for the first time: create a p
 2. **Create your first project.** With no project the window shows only this form.
    - **Name** — anything; **Slug** follows the name until you edit it (it names folders and branches).
    - **Description** — a sentence the orchestrator reads at start.
+   - **Worktree for the orchestrator** — one git repository. **Choose from GitHub** searches your repositories through your own `gh` (if `gh` is missing or logged out, it says which command to run) and clones the one you pick into `$HOPP_HOME/repos/`; **Choose folder** (or a typed path) takes a repository on this Mac. Each task gets a new worktree of it on a new branch: a GitHub clone starts from the latest default branch of origin, a folder from its current commit without uncommitted changes. Leave it empty and tasks run in a plain folder.
    - Under **Advanced**:
-     - **Worktree for the orchestrator** — one git repository. Each task gets a new worktree of it, on a new branch, at the repository's current commit: uncommitted changes in your checkout are not included. Leave it empty and tasks run in a plain folder.
-     - **Worktrees for workers** — more repositories, one per line, where the orchestrator may launch workers; empty means workers work in the orchestrator's repository.
+     - **Worktrees for workers** — more repositories, from GitHub or folders, where the orchestrator may launch workers; empty means workers work in the orchestrator's repository.
      - **Guardrails** — text every orchestrator of this project gets at start (for example "no paid actions without my go").
    - An error appears next to the field it is about; nothing you typed is lost.
 3. **Launch a task.** In **New task**:

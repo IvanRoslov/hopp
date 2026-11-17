@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { HoppBridge } from '../../shared/bridge';
 import type { DaemonBridge } from '../../shared/bridge';
 import { hopp } from '../bridge';
+import { GithubProvider } from './repos';
 import { useAgentMail, useProfiles, useShellState, useWaiting } from '../data/hooks';
 import { waitingCount, waitingRows } from '../model/shellModel';
 import { useSessions } from '../sessions/useSessions';
@@ -56,6 +57,15 @@ function DaemonNotice(props: { daemon: DaemonBridge }) {
 // of the daemon's sessions.
 export function ShellApp(props: { bridge?: HoppBridge }) {
   const bridge = props.bridge ?? hopp();
+  return (
+    <GithubProvider shell={bridge.shell}>
+      <Window bridge={bridge} />
+    </GithubProvider>
+  );
+}
+
+function Window(props: { bridge: HoppBridge }) {
+  const bridge = props.bridge;
   const load = useShellState(bridge.shell);
   const ready = load.status === 'ready';
   const { stream, sessions, error: sessionsError, refresh } = useSessions(bridge.daemon);
