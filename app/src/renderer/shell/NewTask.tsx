@@ -6,6 +6,7 @@ import { Checkbox } from '../ui/Checkbox';
 import { Dropdown } from '../ui/Dropdown';
 import { Field } from '../ui/Field';
 import { UpIcon } from '../ui/icons';
+import { RepoLabel, useRepoName } from './repos';
 
 const MORE_FIELDS = new Set(['title', 'sessionName', 'extraSystemPrompt']);
 const LAST_KEY = 'hopp.newTask.last';
@@ -113,11 +114,7 @@ export function NewTask(props: {
   const profileOptions = enabled.map((p) => ({ value: p.name, label: p.name, hint: p.description || p.agent }));
   const workersLabel = workers && workers.length ? workers.join(', ') : 'none';
   const generalError = error && (!error.field || !MORE_FIELDS.has(error.field)) ? error.message : null;
-  const where = proj
-    ? proj.orchestratorRepo
-      ? `A new worktree of ${proj.orchestratorRepo} at its current commit; uncommitted changes are not included.`
-      : 'A new folder for this task'
-    : '';
+  const where = proj ? <WhereHint shell={props.shell} repo={proj.orchestratorRepo} /> : '';
 
   return (
     <>
@@ -256,4 +253,40 @@ function StageText(props: { text: string }) {
       )}
     </>
   );
+}
+
+// WhereHint: where the task's work will happen. A clone from GitHub starts
+// from the latest default branch of origin; a folder from its current commit.
+function WhereHint(props: { shell: ShellBridge; repo: string | null }) {
+  const name = useRepoName()(props.repo ?? '');
+  const branch = useDefaultBranch(props.shell, name);
+  if (!props.repo) return <>A new folder for this task</>;
+  if (name) {
+    return (
+      <>
+        A new worktree of <RepoLabel path={props.repo} />, starting from the latest origin/{branch ?? 'default branch'}.
+      </>
+    );
+  }
+  return <>A new worktree of {props.repo} at its current commit; uncommitted changes are not included.</>;
+}
+
+// useDefaultBranch: the default branch of owner/repo, from the GitHub list.
+function useDefaultBranch(shell: ShellBridge, fullName: string | null): string | null {
+  const [branch, setBranch] = useState<{ name: string; branch: string } | null>(null);
+  useEffect(() => {
+    if (!fullName) return;
+    let alive = true;
+    shell.listGithubRepos(fullName).then(
+      (r) => {
+        const hit = r.ok ? r.value.find((x) => x.fullName === fullName) : undefined;
+        if (alive && hit) setBranch({ name: fullName, branch: hit.defaultBranch });
+      },
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [shell, fullName]);
+  return branch && branch.name === fullName ? branch.branch : null;
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { RepoLabel } from './repos';
 import type { Lesson, ModelProfile, ShellBridge, ShellState, Tool, ToolCatalog, ToolRules } from '../../shared/shell';
 import { cleanError } from '../errors';
 import { Dropdown } from '../ui/Dropdown';
@@ -54,7 +55,7 @@ function ProjectsTab(props: { state: ShellState; go: Go }) {
           <button key={p.slug} type="button" className="set-row" onClick={() => props.go({ k: 'project', slug: p.slug })}>
             <span className="txt">
               <div className="nm">{p.name}</div>
-              <div className="ds">{p.orchestratorRepo ?? 'No repository: tasks run in a plain folder'}</div>
+              <div className="ds">{p.orchestratorRepo ? <RepoLabel path={p.orchestratorRepo} /> : 'No repository: tasks run in a plain folder'}</div>
             </span>
             <span className="def">{tasks ? `${tasks} active ${tasks === 1 ? 'task' : 'tasks'}` : ''}</span>
           </button>

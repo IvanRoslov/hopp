@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { RepoLabel } from './repos';
 import type { HoppBridge } from '../../shared/bridge';
 import type { Project, Result, Task } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
@@ -24,6 +25,14 @@ export function TaskDetails(props: { task: Task; project?: Project }) {
       <dd className="brief">{task.brief}</dd>
       <dt>Session</dt>
       <dd className="mono">{task.sessionId}</dd>
+      {props.project?.orchestratorRepo && (
+        <>
+          <dt>Repository</dt>
+          <dd>
+            <RepoLabel path={props.project.orchestratorRepo} />
+          </dd>
+        </>
+      )}
       <dt>Folder</dt>
       <dd className="mono">{task.dir}</dd>
       {task.branch && (
