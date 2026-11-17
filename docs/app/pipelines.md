@@ -1,6 +1,6 @@
 ---
 kind: leaf
-up: [[docs/app/shell]]
+up: [[docs/app/README]]
 verified: 2026-11-16 — make app-test on shell-main, including a run against the real daemon on a temp HOPP_HOME; facts 6 and 7 by make app-test and e2e/ask-dismiss.spec.ts on ask-dismiss
 ---
 
@@ -15,6 +15,7 @@ A task may follow a pipeline: an ordered list of stages the orchestrator walks w
 5. A stage's state (not started, started, submitted, accepted, returned) is derived by the app from those labels; a stage that does not wait for approval is accepted when the next stage starts or a `stage_done` post says so.
 6. The human's line in the feed is sent to the orchestrator as a message and recorded as a post without a sender, with the task's labels; it is refused while the orchestrator is not running. While exactly one ordinary question of the task is open, the line goes as that question's answer instead, unless the human unticks "Send as the answer to". Once the message is sent, a failure to record the post is logged, not reported, so the line is never sent twice.
 7. A submission is answered Accept, or Return with the text of what to fix, which becomes the ask's answer. Any open ask in the feed can also be closed as "Not relevant" after a one-line confirmation, which leaves a quiet "Dismissed · not relevant" line; a dismissed submission puts its stage back to started, never to accepted.
-8. The page loads artifact files from `hopp-artifact://v/<id>`, which serves only files inside `$HOPP_HOME/artifacts` (after resolving symlinks) under a sandboxing content policy, so an HTML artifact shows without running scripts or loading files beside it. The text viewer reads at most 2 MB. A markdown artifact (by type or `.md` name), the feed's posts, questions and answers, and the stage texts show as formatted markdown (GFM tables and task lists; a Source switch in the viewer, for both sides of a comparison): raw HTML in them shows as text, a link opens in the browser only for https or opens another artifact of the task when it names one (`name@version`, a file name), and images load only from artifacts or `data:`.
+8. The page loads artifact files from `hopp-artifact://v/<id>`, which serves only files inside `$HOPP_HOME/artifacts` (after resolving symlinks) under a sandboxing content policy, so an HTML artifact shows without running scripts or loading files beside it. The text viewer reads at most 2 MB.
+9. A markdown artifact (by type or `.md` name), the feed's posts, questions and answers, and the stage texts show as formatted markdown, with a Source switch in the viewer for both sides of a comparison. Raw HTML in them shows as text, a link opens in the browser only for https or opens another artifact of the task it names (`name@version`, a file name), and images load only from artifacts or `data:`.
 
 Code: [shell](app/src/main/shell), [shared](app/src/shared)

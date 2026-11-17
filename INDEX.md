@@ -2,9 +2,9 @@
 
 Read this whole. Each fact links one level down; follow only the branches your task touches. The rules for reading and writing the tree are in `CLAUDE.md`.
 
-1. hopp: A harness for orchestrating AI agents. What it is for, who uses it and how it ships. → [[docs/overview]]
-2. daemon: The daemon manages tmux sessions that run agents and delivers messages between them, watching what each agent does and telling a parent when a child is stuck. The daemon and its CLI are one program named `hopp`, so the old rocket keeps working while hopp is built. → [[docs/daemon/README]]
-3. app: The desktop app shows the daemon's sessions, opens one in a real terminal as one more tmux client, and answers its questions, talking to the daemon only over its socket. → [[docs/app/README]]
+1. hopp is a harness for orchestrating AI agents, made of a daemon and a desktop app; what it is for, who uses it and how it ships. → [[docs/overview]]
+2. daemon: the program `hopp` runs agents in tmux sessions, carries messages between them, watches what each agent does, brings agents' questions to the human and keeps posts, artifacts, lessons, model profiles and token usage; it knows no roles, projects or tasks. → [[docs/daemon/README]]
+3. app: the desktop app is the other half: projects, tasks that run in a worktree of a folder or a GitHub clone, long-lived agents, pipelines with a feed, stages and artifacts, model profiles, tools and lessons of two kinds, the `hopp project|pipeline|task` commands agents use, and the window where the human works with all of it through the daemon's socket. → [[docs/app/README]]
 4. The hard rules you must never break are a reference list outside the tree. → [[docs/invariants]]
 5. Which tool to use to build, test and ship. → [[docs/agent-toolbox]]
 6. Step-by-step runbooks for recurring operations, including the standing rules for proving a change and for running parallel workers. → [[docs/playbooks/README]]

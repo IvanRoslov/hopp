@@ -1,5 +1,5 @@
 ---
-last-verified: 2026-11-15
+last-verified: 2026-11-17
 ---
 
 # Verify a change
@@ -33,6 +33,9 @@ Why: [staleness that does not announce itself](https://github.com/lepsto/lepsto-
 **Read a ported behaviour before you expect it.** An expectation about code carried over from another system goes into a plan or a test only after you have read it in that system's code or docs, quoted. An assumed expectation turns an inherited behaviour into a false regression.
 Why: [[docs/lessons/read-ported-behaviour-from-the-code-before-expecting-it]]
 
+**Learn what a tool records from its own state.** When an external tool stops a launch or a flow, reproduce it in a throwaway, take the human's step once, and diff the tool's state files before and after. That diff says what the tool reads; the older system's code says only what it used to write.
+Why: [[docs/lessons/claude-code-trusts-a-worktree-through-its-main-repository]]
+
 **"Pre-existing" means reproduced on the commit before the suspect change.** Reproducing a failure on current `main` only rules out your own branch. Bisect `<suspect>^` against `<suspect>`.
 Why: [a stub that answers everything hides the screen it broke](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/a-stub-that-answers-everything-hides-the-screen-it-broke.md)
 
@@ -47,6 +50,15 @@ Why: [version jump size does not predict breakage](https://github.com/lepsto/lep
 **Stub exact routes, never a prefix, and make the fallback loud.** A catch-all stub answers a new endpoint with the wrong shape and the failure shows up far away. An unmatched path must fail the test and name the URL.
 Why: [a stub that answers everything hides the screen it broke](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/a-stub-that-answers-everything-hides-the-screen-it-broke.md)
 
+**A name you hand to another system lives in its namespace.** A session id is also a tmux session name, shared by every tmux user on the machine. When a name is accepted, check every place it will land (tmux sessions, mailboxes, folders, branches) and say the reason next to the name, not at the first use.
+Why: [[docs/lessons/a-session-id-is-a-name-in-every-tmux-on-the-machine]]
+
+**Refuse empty input where it enters.** A command that takes text from an argument, a file or stdin takes it from exactly one source and refuses an empty pipe, a terminal on stdin and a blank text, never sending nothing on.
+Why: [[docs/lessons/a-command-that-reads-stdin-refuses-an-empty-body]]
+
+**Size a test's time bound for a loaded machine.** A test that starts a freshly written executable gives it seconds, not the time it takes on an idle machine; only the case that must time out keeps a short bound.
+Why: [[docs/lessons/a-freshly-written-executable-starts-slowly-under-load]]
+
 **Search every string form.** A sweep for a pattern must match every way the code can spell it (quoted strings, template literals, concatenation), and a test must exercise the case where the forms differ.
 Why: [template-literal absolute paths evade grep](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/fed-003-template-literal-absolute-paths-evade-grep.md)
 
@@ -54,6 +66,9 @@ Why: [template-literal absolute paths evade grep](https://github.com/lepsto/leps
 
 **Check live the flows the old system never took.** A ported suite proves only the flows the old system used. List the uses your design makes ordinary that the old flow avoided (a launch without a prompt, a restart at an odd moment) and run each one live before you call the port done.
 Why: [[docs/lessons/live-check-the-path-the-old-system-never-took]]
+
+**Live-check the desktop app the way the human starts it.** A launch from a shell inherits the shell's locale and `PATH`; one launch of the packed app from Finder or `open` is part of every live check of the app.
+Why: [[docs/lessons/check-the-desktop-app-as-the-human-starts-it]]
 
 **Every check needs a case on which it must go red.** A check that only ever reports "clean" cannot be told apart from one that measures nothing. Keep the red case next to the check as a test. Never accept a proxy as evidence.
 Why: [checks that are empty by construction](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/checks-that-are-empty-by-construction.md)

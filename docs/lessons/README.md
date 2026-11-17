@@ -42,3 +42,8 @@ New lessons are added here as they are written.
 | [[docs/lessons/_template]] (lesson template) | — | — |
 | [[docs/lessons/live-check-the-path-the-old-system-never-took]] | 2026-11-15 | [[docs/daemon/README]] |
 | [[docs/lessons/read-ported-behaviour-from-the-code-before-expecting-it]] | 2026-11-15 | [[docs/daemon/README]] |
+| [[docs/lessons/check-the-desktop-app-as-the-human-starts-it]] | 2026-11-17 | [[docs/app/README]] |
+| [[docs/lessons/claude-code-trusts-a-worktree-through-its-main-repository]] | 2026-11-17 | [[docs/daemon/README]] |
+| [[docs/lessons/a-session-id-is-a-name-in-every-tmux-on-the-machine]] | 2026-11-17 | [[docs/daemon/README]], [[docs/app/README]] |
+| [[docs/lessons/a-command-that-reads-stdin-refuses-an-empty-body]] | 2026-11-17 | [[docs/daemon/README]] |
+| [[docs/lessons/a-freshly-written-executable-starts-slowly-under-load]] | 2026-11-17 | [[docs/app/README]] |

@@ -12,9 +12,8 @@ canonical: true
 
 ## 0. Environment at a glance
 
-- Vault: `<TODO: org/repo of this knowledge base>` (this repo).
+- Vault: `IvanRoslov/hopp` (this repo).
 - Code: Docs and code share this repo. The vault is the root-level `*.md` files and `docs/`; everything else is code. A leaf's `Code:` line links the directory of this repo that holds the code for its facts.
-- <TODO: the contract, guide, or standard this project must follow, if any.>
 
 ## 1. Build & run locally
 

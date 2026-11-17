@@ -1,12 +1,12 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — make app-test on shell-cli (fake daemon, temp HOPP_HOME, throwaway git repositories, two store writers)
+verified: 2026-11-17 — against the code on main (e9468d7): store.ts, service.ts (createTask, uniqueId, the launch and its cleanup), startText.ts
 ---
 
 # Projects, tasks and long-lived agents
 
-The daemon knows sessions, folders and labels; the app adds projects, tasks and long-lived agents on top and maps each onto daemon sessions. This leaf says what the app keeps and what a launch does; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]]. Repositories picked from GitHub: [[docs/app/github]]. Model profiles: [[docs/app/models]].
+The daemon knows sessions, folders and labels; the app adds projects, tasks and long-lived agents on top and maps each onto daemon sessions. This leaf says what the app keeps and what a task's launch does; long-lived agents: [[docs/app/agents]]; a task with a pipeline: [[docs/app/pipelines]]; repositories picked from GitHub: [[docs/app/github]].
 
 ### What the app keeps
 
@@ -24,9 +24,8 @@ The daemon knows sessions, folders and labels; the app adds projects, tasks and 
 
 ### After the launch
 
-9. Stop kills the task's session tree, Resume restores the orchestrator and sends it a message to find where the work stands (a restored agent starts with no conversation; a long-lived agent's Start after a stop is told to read its mailbox), and Finish ends the tree as done and moves the task to Recent; a finished task cannot be resumed, and a running one cannot be removed from the list.
-10. A long-lived agent's name is its session id and its mailbox: creating one registers the mailbox, and starting it restores its session or launches it in its folder with only the hopp and tools layers. Creating or renaming (only while off) refuses, next to the name, a name the daemon would refuse (a hopp session of that id in any state, or a live tmux session outside hopp), a Start refused for such a tmux session says so in the same words, and removing or renaming drops the old mailbox only when it holds no letters, since the daemon cannot move them and removing a mailbox deletes them.
-11. The tool catalog is read with `hopp tools … --json` under the app's `HOPP_HOME`, so the app and the agents see the same tools; the app writes the rules file itself.
-12. Every call from the page is checked in the main process: a malformed call gets an error back and never throws there.
+9. Stop kills the task's session tree, Resume restores the orchestrator and sends it a message to find where the work stands (a restored agent starts with no conversation), and Finish ends the tree as done and moves the task to Recent; a finished task cannot be resumed, and a running one cannot be removed from the list.
+10. The tool catalog is read with `hopp tools … --json` under the app's `HOPP_HOME`, so the app and the agents see the same tools; the app writes the rules file itself.
+11. Every call from the page is checked in the main process: a malformed call gets an error back and never throws there.
 
 Code: [shell](app/src/main/shell), [app](app)
