@@ -9,6 +9,7 @@ export const IPC = {
   daemonStart: 'daemon:start',
   daemonListAsks: 'daemon:list-asks',
   daemonAnswerAsk: 'daemon:answer-ask',
+  daemonDismissAsk: 'daemon:dismiss-ask',
   daemonAnswerQuiz: 'daemon:answer-quiz',
   terminalOpen: 'terminal:open',
   terminalWrite: 'terminal:write',

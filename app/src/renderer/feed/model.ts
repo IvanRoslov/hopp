@@ -130,7 +130,7 @@ export function latestByName(artifacts: Artifact[]): Artifact[] {
 
 // answerLine: the quiet line of an answered or withdrawn ask.
 export function answerLine(a: Ask): string {
-  if (a.status === 'withdrawn') return 'withdrawn';
+  if (a.status === 'withdrawn') return a.reason === 'dismissed' ? 'Dismissed · not relevant' : 'withdrawn';
   const parts = [a.choice, a.answer].filter((x): x is string => !!x && x.trim() !== '');
   return 'You answered: ' + (parts.length ? parts.join(' — ') : '…');
 }

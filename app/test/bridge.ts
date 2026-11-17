@@ -485,6 +485,11 @@ export function fakeBridge(
       Object.assign(a, body);
       return a;
     }),
+    dismissAsk: vi.fn(async (id: number) => {
+      const a = db.asks.find((x) => x.id === id)!;
+      Object.assign(a, { status: 'withdrawn', reason: 'dismissed' });
+      return a;
+    }),
     answerQuiz: vi.fn(async (_id: string, _body: unknown) => ({ status: 'answering' })),
   };
   const terminal = fakeTerminalBridge();

@@ -448,3 +448,10 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .profile-form .form-actions .form-error { margin-right: auto; }
 .profile-form .field input, .profile-form .field textarea { background: var(--bg); }
 @media (max-width: 900px) { .profile-form .pf-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* An open ask: its own-words answer, and closing it as not relevant. */
+.own-answer { margin-top: 8px; }
+.ask-dismiss-row { margin-top: 8px; }
+.entry-actions .btns .sp { flex: 1; }
+.dismiss-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-small); }
+.quiet-dismiss { margin-left: -6px; }

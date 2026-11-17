@@ -403,6 +403,17 @@ export class FakeDaemon {
       this.publish('ask.answered', a.from, { id: a.id, ask_labels: a.labels ?? {} });
       return json(res, 200, a);
     }
+    if (req.method === 'POST' && (m = path.match(/^\/v1\/asks\/(\d+)\/dismiss$/))) {
+      const a = this.asks.find((x) => x.id === Number(m![1]));
+      if (!a) return json(res, 404, { error: { code: 'ask_not_found', message: 'ask not found' } });
+      if (a.status !== 'open') return json(res, 409, { error: { code: 'ask_closed', message: 'the ask is no longer open' } });
+      a.status = 'withdrawn';
+      a.reason = 'dismissed';
+      a.closed_at = Math.max(a.created_at, Math.floor(Date.now() / 1000));
+      this.messages.push({ id: this.messages.length + 1, to: a.from, body: `[hopp] Ask #${a.id} was dismissed by the human as no longer relevant: do not wait for an answer to it; go by what was said since.` });
+      this.publish('ask.withdrawn', a.from, { id: a.id, reason: 'dismissed', ask_labels: a.labels ?? {} });
+      return json(res, 200, a);
+    }
     if (key === 'GET /v1/waiting') {
       const live = this.sessions.filter((s) => s.state === 'spawning' || s.state === 'running');
       return json(res, 200, {

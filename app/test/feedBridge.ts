@@ -55,11 +55,16 @@ export function feedBridge(feed: TaskFeed) {
       Object.assign(x, { status: 'answered', ...body });
       return x;
     }),
+    dismissAsk: vi.fn(async (id: number) => {
+      const x = state.feed.asks.find((k) => k.id === id)!;
+      Object.assign(x, { status: 'withdrawn', reason: 'dismissed' });
+      return x;
+    }),
     artifactText: vi.fn(async (id: number): Promise<Result<string>> => ({ ok: true, value: `text of ${id}` })),
   };
   const state = { feed: structuredClone(feed), postFails: '' as string };
   const bridge = {
-    daemon: { answerAsk: calls.answerAsk },
+    daemon: { answerAsk: calls.answerAsk, dismissAsk: calls.dismissAsk },
     terminal: {},
     shell: {
       taskFeed: calls.taskFeed,

@@ -19,6 +19,8 @@ export interface DaemonBridge {
   startDaemon(): Promise<{ ok: boolean; message: string }>;
   listAsks(opts?: { from?: string; status?: 'open' | 'answered' | 'withdrawn' | 'all' }): Promise<Ask[]>;
   answerAsk(id: number, body: AskAnswer): Promise<Ask>;
+  // Closes an open ask without an answer ("not relevant"); the asker is told.
+  dismissAsk(id: number): Promise<Ask>;
   answerQuiz(sessionId: string, body: QuizAnswer): Promise<{ status: string }>;
 }
 

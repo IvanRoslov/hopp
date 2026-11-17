@@ -1222,3 +1222,29 @@ func TestAnswerWithoutQuestionFails(t *testing.T) {
 		}
 	}
 }
+
+func TestReplyInOwnWordsAndDismiss(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/asks/7", 200, map[string]any{"id": 7, "status": "open", "body": "A or B?", "options": []string{"A", "B"}})
+	f.on("POST /v1/asks/7/answer", 200, map[string]any{"id": 7, "status": "answered"})
+	if _, errOut, code := runCLI(t, f, "reply", "7", "-m", "neither: C"); code != 0 {
+		t.Fatalf("own words: exit %d %s", code, errOut)
+	}
+	if b := f.last(t).Body; b["choice"] != "" || b["answer"] != "neither: C" {
+		t.Errorf("body %v", b)
+	}
+	if _, errOut, code := runCLI(t, f, "reply", "7"); code != 3 || !strings.Contains(errOut, "-m <text>") {
+		t.Errorf("no choice, no text: exit %d %q", code, errOut)
+	}
+	f.on("POST /v1/asks/7/dismiss", 200, map[string]any{"id": 7, "status": "withdrawn", "reason": "dismissed"})
+	f.on("POST /v1/asks/9/dismiss", 200, map[string]any{"id": 9, "status": "withdrawn", "reason": "dismissed"})
+	out, errOut, code := runCLI(t, f, "asks", "dismiss", "#7", "9")
+	if code != 0 || out != "ask 7 dismissed\nask 9 dismissed\n" {
+		t.Fatalf("dismiss: exit %d out %q err %q", code, out, errOut)
+	}
+	for _, args := range [][]string{{"asks", "dismiss"}, {"asks", "dismiss", "x"}} {
+		if _, _, code := runCLI(t, f, args...); code != 3 {
+			t.Errorf("%v: exit %d, want 3", args, code)
+		}
+	}
+}

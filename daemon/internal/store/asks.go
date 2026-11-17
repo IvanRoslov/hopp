@@ -127,7 +127,12 @@ func (s *Store) AnswerAsk(id int64, choice, answer string, now int64) (Ask, erro
 	if a.Status != AskOpen {
 		return Ask{}, ErrAskClosed
 	}
-	if len(a.Options) > 0 {
+	if len(a.Options) > 0 && choice == "" {
+		// None of the options fits: the answer is the text alone.
+		if strings.TrimSpace(answer) == "" {
+			return Ask{}, fmt.Errorf("%w: choose one of %q, or answer with text", ErrAskInvalid, a.Options)
+		}
+	} else if len(a.Options) > 0 {
 		listed := false
 		for _, o := range a.Options {
 			if o == choice {
@@ -147,6 +152,10 @@ func (s *Store) AnswerAsk(id int64, choice, answer string, now int64) (Ask, erro
 	}
 	return s.closeAsk(`status = 'answered', choice = ?, answer = ?, closed_at = ?`, id, choice, answer, now)
 }
+
+// ReasonDismissed is the reason of an ask the human closed without an
+// answer (it stays "withdrawn": closed, no answer).
+const ReasonDismissed = "dismissed"
 
 // WithdrawAsk closes an open ask without an answer.
 func (s *Store) WithdrawAsk(id int64, reason string, now int64) (Ask, error) {

@@ -79,6 +79,7 @@ export function registerIpc(s: Services): void {
     return s.client.listAsks(q);
   });
   ipcMain.handle(IPC.daemonAnswerAsk, (_e, id: unknown, body: unknown) => s.client.answerAsk(int(id), askAnswer(body)));
+  ipcMain.handle(IPC.daemonDismissAsk, (_e, id: unknown) => s.client.dismissAsk(int(id)));
   ipcMain.handle(IPC.daemonAnswerQuiz, (_e, id: unknown, body: unknown) => s.client.answerQuiz(str(id), quizAnswer(body)));
 
   // Each terminal belongs to the page that opened it; its output goes only

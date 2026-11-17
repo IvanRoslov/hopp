@@ -166,6 +166,40 @@ func newAskWithdrawCmd() *cobra.Command {
 }
 
 // newAsksCmd lists asks for the human.
+// newAsksDismissCmd is `hopp asks dismiss <id>...`: the human closes asks
+// that are no longer relevant, without an answer.
+func newAsksDismissCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "dismiss <ask-id>...",
+		Short: "Close asks that are no longer relevant, without an answer (the asker is told)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return &usageError{message: "usage: hopp asks dismiss <ask-id>..."}
+			}
+			ids := make([]string, 0, len(args))
+			for _, a := range args {
+				id := strings.TrimPrefix(a, "#")
+				if _, err := strconv.ParseInt(id, 10, 64); err != nil {
+					return &usageError{message: "an ask id is a number, got " + strconv.Quote(a)}
+				}
+				ids = append(ids, id)
+			}
+			c, _, err := connect(true)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				var a askView
+				if err := c.Post(apiPath("v1", "asks", id, "dismiss"), nil, &a); err != nil {
+					return err
+				}
+				cmd.Printf("ask %d dismissed\n", a.ID)
+			}
+			return nil
+		},
+	}
+}
+
 func newAsksCmd() *cobra.Command {
 	var all bool
 	var labels []string
@@ -211,6 +245,7 @@ func newAsksCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "include answered and withdrawn asks")
 	cmd.Flags().StringArrayVar(&labels, "label", nil, "only asks with label key=value (repeatable)")
+	cmd.AddCommand(newAsksDismissCmd())
 	return cmd
 }
 
@@ -273,7 +308,7 @@ func newReplyCmd() *cobra.Command {
 	var text string
 	cmd := &cobra.Command{
 		Use:   "reply <ask-id> [<choice>]",
-		Short: "Answer an ask (choice by number or exact text, and/or -m text)",
+		Short: "Answer an ask (choice by number or exact text, and/or -m text; -m alone when no option fits)",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := strings.TrimPrefix(args[0], "#")
@@ -295,8 +330,8 @@ func newReplyCmd() *cobra.Command {
 					return err
 				}
 			}
-			if len(a.Options) > 0 && choice == "" {
-				return &usageError{message: fmt.Sprintf("ask %s needs a choice: %s", id, numbered(a.Options))}
+			if len(a.Options) > 0 && choice == "" && strings.TrimSpace(text) == "" {
+				return &usageError{message: fmt.Sprintf("ask %s needs a choice (%s) or your own answer with -m <text>", id, numbered(a.Options))}
 			}
 			if len(a.Options) == 0 && strings.TrimSpace(text) == "" {
 				return &usageError{message: fmt.Sprintf("ask %s has no options: answer with -m <text>", id)}

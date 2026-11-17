@@ -128,6 +128,11 @@ export class DaemonClient {
     return this.call('POST', `/v1/asks/${enc(String(id))}/answer`, body);
   }
 
+  // dismissAsk: the human closes an ask without an answer; the asker is told.
+  dismissAsk(id: number): Promise<Ask> {
+    return this.call('POST', `/v1/asks/${enc(String(id))}/dismiss`, {});
+  }
+
   answerQuiz(sessionId: string, body: QuizAnswer): Promise<{ status: string }> {
     return this.call('POST', `/v1/sessions/${enc(sessionId)}/quiz/answer`, body);
   }

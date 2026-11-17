@@ -132,3 +132,7 @@
 .viewer-frame { flex: 1; min-height: 0; width: 100%; border: 0; border-radius: var(--r-s); background: var(--frame-bg); }
 .viewer-text { flex: 1; min-height: 0; margin: 0; overflow: auto; padding: 14px 16px; background: var(--field); border-radius: var(--r-m); font: var(--fs-mono) / 1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-width: thin; }
 .viewer-meta { flex: none; padding: 12px var(--page-x) var(--term-pad); font-size: var(--fs-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The composer's "Send as the answer to": one line, cut. */
+.as-answer { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; color: var(--muted); font-size: var(--fs-small); cursor: pointer; }
+.as-answer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

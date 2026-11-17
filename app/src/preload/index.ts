@@ -33,6 +33,7 @@ const bridge: HoppBridge = {
     startDaemon: () => ipcRenderer.invoke(IPC.daemonStart),
     listAsks: (opts) => ipcRenderer.invoke(IPC.daemonListAsks, opts),
     answerAsk: (id, body) => ipcRenderer.invoke(IPC.daemonAnswerAsk, id, body),
+    dismissAsk: (id) => ipcRenderer.invoke(IPC.daemonDismissAsk, id),
     answerQuiz: (id, body) => ipcRenderer.invoke(IPC.daemonAnswerQuiz, id, body),
   },
   terminal: {
