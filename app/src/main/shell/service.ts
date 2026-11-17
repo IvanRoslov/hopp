@@ -41,7 +41,16 @@ import { Github } from './github';
 import { importProfileName, PROFILE_NAME_RE, uniqueProfileName } from './profiles';
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
-import { agentText, allowedRepos, orchestratorText, RESUMED_AGENT, RESUMED_ORCHESTRATOR, workerText, type WorkerFile } from './startText';
+import {
+  agentText,
+  allowedRepos,
+  orchestratorText,
+  RESUMED_AGENT,
+  RESUMED_ORCHESTRATOR,
+  triageLessonsBrief as triageBrief,
+  workerText,
+  type WorkerFile,
+} from './startText';
 import type { ShellStore } from './store';
 
 export interface ShellDeps {
@@ -358,18 +367,19 @@ export class ShellService {
         made.folder = true;
       }
 
+      const lessons = await this.projectLessons(project.slug);
       const workerFiles: WorkerFile[] = [];
       for (const w of workers) {
         const file = join(textsDir, `worker-${w.agent}.md`);
         if (!workerFiles.some((f) => f.file === file)) {
-          await writeAtomic(file, workerText({ project, taskId: id, title, toolsPrompt: toolsPrompt.get(w.agent) ?? '' }));
+          await writeAtomic(file, workerText({ project, taskId: id, title, toolsPrompt: toolsPrompt.get(w.agent) ?? '', lessons }));
         }
         workerFiles.push({ profile: w.name, harness: w.agent, file });
       }
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
         toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
-        repoBases, base: taskBase, startedBy,
+        repoBases, base: taskBase, startedBy, lessons,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
@@ -777,22 +787,65 @@ export class ShellService {
     });
   }
 
-  // Lesson kinds: the daemon half is rocket2-f7's (branch lessons-kinds);
-  // until its contract lands these say so instead of pretending.
-  setLessonAbout(_id: number, _about: LessonAbout | null): Promise<Result<null>> {
-    return Promise.resolve(fail('not_ready', 'Sorting lessons needs the daemon half of lesson kinds'));
+  // projectLessons: the project's open lessons about the project, newest
+  // first, for the start texts. A daemon that cannot list them leaves them
+  // out; the launch itself reports a daemon that is down.
+  private async projectLessons(slug: string): Promise<Lesson[]> {
+    try {
+      const list = await this.d.client.listLessons('new', { [LABEL.project]: slug, [LABEL.about]: 'project' });
+      return [...list].sort((a, b) => b.id - a.id);
+    } catch (err) {
+      console.warn(`hopp: the lessons of ${slug} were not read for the start text: ${(err as Error).message}`);
+      return [];
+    }
   }
 
-  setLessonProject(_id: number, _slug: string | null): Promise<Result<null>> {
-    return Promise.resolve(fail('not_ready', 'Sorting lessons needs the daemon half of lesson kinds'));
+  // setLessonAbout sorts a lesson: about hopp, about a project, or unsorted.
+  setLessonAbout(id: number, about: LessonAbout | null): Promise<Result<null>> {
+    return guard(async () => {
+      await this.d.client.setLessonLabels(id, { [LABEL.about]: about ?? '' });
+      return ok(null);
+    });
   }
 
-  lessonToGuardrails(_id: number): Promise<Result<null>> {
-    return Promise.resolve(fail('not_ready', 'Moving a lesson to Guardrails needs the daemon half of lesson kinds'));
+  // setLessonProject names the project a lesson is about, or none.
+  setLessonProject(id: number, slug: string | null): Promise<Result<null>> {
+    return guard(async () => {
+      if (slug !== null && !(await this.d.store.read()).projects.some((p) => p.slug === slug)) {
+        return fail('project_not_found', `No project "${slug}"`);
+      }
+      await this.d.client.setLessonLabels(id, { [LABEL.project]: slug ?? '' });
+      return ok(null);
+    });
+  }
+
+  // lessonToGuardrails appends the lesson's text to its project's Guardrails
+  // as one bullet that names the lesson, and closes the lesson. A lesson
+  // already there is not added twice.
+  lessonToGuardrails(id: number): Promise<Result<null>> {
+    return guard(async () => {
+      const lesson = (await this.d.client.listLessons('all')).find((l) => l.id === id);
+      if (!lesson) return fail('lesson_not_found', `No lesson #${id}`);
+      const slug = lesson.labels?.[LABEL.project] ?? '';
+      if (!slug) return fail('lesson_no_project', `Lesson #${id} is not about a project; move it to one first`);
+      const mark = `(lesson #${id})`;
+      const bullet = '- ' + lesson.body.trim().replace(/\n+/g, '\n  ') + ' ' + mark;
+      const r = await this.d.store
+        .update((st) => {
+          const p = st.projects.find((x) => x.slug === slug);
+          if (!p) throw new Refused(fail('project_not_found', `Lesson #${id} is about "${slug}", which is not a project of the app`));
+          if (!p.guardrails.includes(mark)) p.guardrails = p.guardrails.trimEnd() ? p.guardrails.trimEnd() + '\n' + bullet : bullet;
+          return ok(null);
+        })
+        .catch(refusedResult<null>);
+      if (!r.ok) return r;
+      await this.d.client.closeLesson(id);
+      return ok(null);
+    });
   }
 
   async triageLessonsBrief(slug: string): Promise<string> {
-    return `Work through the open lessons of project ${slug}.`;
+    return triageBrief(slug);
   }
 
   // ---- pipelines -------------------------------------------------------------

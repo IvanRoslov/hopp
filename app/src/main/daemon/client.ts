@@ -203,9 +203,16 @@ export class DaemonClient {
     }
   }
 
-  async listLessons(status: 'new' | 'closed' | 'all'): Promise<Lesson[]> {
-    const r = await this.call<{ lessons: Lesson[] | null }>('GET', '/v1/lessons?status=' + enc(status));
+  async listLessons(status: 'new' | 'closed' | 'all', labels: Record<string, string> = {}): Promise<Lesson[]> {
+    let q = '/v1/lessons?status=' + enc(status);
+    for (const [k, v] of Object.entries(labels)) q += '&label=' + enc(`${k}=${v}`);
+    const r = await this.call<{ lessons: Lesson[] | null }>('GET', q);
     return r.lessons ?? [];
+  }
+
+  // setLessonLabels sets each label; an empty value removes the key.
+  setLessonLabels(id: number, labels: Record<string, string>): Promise<Lesson> {
+    return this.call('PATCH', `/v1/lessons/${enc(String(id))}`, { labels });
   }
 
   closeLesson(id: number): Promise<Lesson> {

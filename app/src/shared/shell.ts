@@ -272,6 +272,8 @@ export const LABEL = {
   kind: 'hopp.kind',
   // On a task's orchestrator: the agent session that started the task.
   startedBy: 'hopp.started_by',
+  // On a lesson: what it is about (LessonAbout); absent is unsorted.
+  about: 'hopp.about',
 } as const;
 
 // Values of hopp.event and hopp.kind.

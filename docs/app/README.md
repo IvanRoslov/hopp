@@ -9,7 +9,7 @@ verified: 2026-11-16 — make app-test on shell-page (30ab8ae); facts 7, 9 and 1
 
 # app
 
-The desktop app is a window onto the daemon: it lists the daemon's sessions, opens one in a real terminal, and shows and answers its questions. Its main process also keeps projects, tasks and long-lived agents and launches their sessions: [[docs/app/shell]]; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]]; what the window shows and how the human works in it: [[docs/app/page]]; repositories picked from GitHub: [[docs/app/github]]; model profiles: [[docs/app/models]]; the commands `hopp project`, `hopp pipeline` and `hopp task` an agent uses from its terminal: [[docs/app/cli]].
+The desktop app is a window onto the daemon: it lists the daemon's sessions, opens one in a real terminal, and shows and answers its questions. Its main process also keeps projects, tasks and long-lived agents and launches their sessions: [[docs/app/shell]]; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]]; what the window shows and how the human works in it: [[docs/app/page]]; repositories picked from GitHub: [[docs/app/github]]; model profiles: [[docs/app/models]]; the commands `hopp project`, `hopp pipeline` and `hopp task` an agent uses from its terminal: [[docs/app/cli]]; lessons about hopp and about each project, and how a project's lessons reach its agents: [[docs/app/lessons]].
 
 ### How it talks to the daemon
 

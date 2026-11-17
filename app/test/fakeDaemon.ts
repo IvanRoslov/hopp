@@ -329,7 +329,23 @@ export class FakeDaemon {
     }
     if (key === 'GET /v1/lessons') {
       const status = url.searchParams.get('status') || 'new';
-      return json(res, 200, { lessons: status === 'all' ? this.lessons : this.lessons.filter((l) => l.status === status) });
+      const want = labelFilter(url);
+      const list = (status === 'all' ? this.lessons : this.lessons.filter((l) => l.status === status)).filter((l) => hasLabels(l.labels ?? {}, want));
+      return json(res, 200, { lessons: list });
+    }
+    if (req.method === 'PATCH' && (m = path.match(/^\/v1\/lessons\/(\d+)$/))) {
+      const l = this.lessons.find((x) => x.id === Number(m![1]));
+      if (!l) return json(res, 404, { error: { code: 'lesson_not_found', message: 'lesson not found' } });
+      const set = (JSON.parse(body || '{}') as { labels?: Record<string, string> }).labels ?? {};
+      if (Object.keys(set).length === 0) return json(res, 400, { error: { code: 'bad_request', message: 'labels must name at least one key' } });
+      const labels = { ...(l.labels ?? {}) };
+      for (const [k, v] of Object.entries(set)) {
+        if (v === '') delete labels[k];
+        else labels[k] = v;
+      }
+      l.labels = labels;
+      this.publish('lesson.labeled', l.from, { id: l.id });
+      return json(res, 200, l);
     }
     if (req.method === 'POST' && (m = path.match(/^\/v1\/lessons\/(\d+)\/close$/))) {
       const l = this.lessons.find((x) => x.id === Number(m![1]));
@@ -337,6 +353,7 @@ export class FakeDaemon {
       if (l.status === 'new') {
         l.status = 'closed';
         l.closed_at = 2;
+        this.publish('lesson.closed', l.from, { id: l.id });
       }
       return json(res, 200, l);
     }

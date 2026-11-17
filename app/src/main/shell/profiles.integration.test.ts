@@ -18,14 +18,16 @@ describe.skipIf(!hasGo)('model profiles against the real daemon', () => {
   let daemon: ChildProcess;
   let svc: ShellService;
   let client: DaemonClient;
+  let bin: string;
+  let env: Record<string, string>;
 
   beforeAll(async () => {
     root = realpathSync(mkdtempSync(join(tmpdir(), 'hpi-')));
     const home = join(root, 'h');
     mkdirSync(join(root, 'u'));
-    const bin = join(root, 'hopp');
+    bin = join(root, 'hopp');
     execFileSync('go', ['build', '-o', bin, './cmd/hopp'], { cwd: resolve(import.meta.dirname, '../../../../daemon'), stdio: 'ignore' });
-    const env = { PATH: '/usr/bin:/bin', HOME: join(root, 'u'), HOPP_HOME: home, HOPP_SESSION_ID: '' };
+    env = { PATH: '/usr/bin:/bin', HOME: join(root, 'u'), HOPP_HOME: home, HOPP_SESSION_ID: '' };
     daemon = spawn(bin, ['daemon', 'run'], { env, stdio: 'ignore' });
     client = new DaemonClient(join(home, 'hopp.sock'));
     for (let i = 0; i < 100; i++) {
@@ -83,5 +85,24 @@ describe.skipIf(!hasGo)('model profiles against the real daemon', () => {
     if (first.ok) for (const p of first.value.added) expect(p.enabled).toBe(false);
     const second = await svc.importModels();
     expect(second.ok && second.value.added).toEqual([]);
+  });
+
+  // In the same daemon (a separate file would build it again).
+  it('lessons: an agent\'s CLI relabel and the app\'s sorting meet in the daemon\'s labels', async () => {
+    const p = await svc.createProject({ name: 'Site', description: '', orchestratorRepo: null, workerRepos: [], guardrails: '' });
+    expect(p.ok).toBe(true);
+    const id = Number(execFileSync(bin, ['lesson', 'crane needs DOCKER_CONFIG', '--label', 'hopp.about=hopp'], { env }).toString().trim());
+    execFileSync(bin, ['lessons', 'label', String(id), 'hopp.about=project', 'hopp.project=site'], { env });
+    const mine = await client.listLessons('new', { 'hopp.project': 'site', 'hopp.about': 'project' });
+    expect(mine.map((l) => l.id)).toEqual([id]);
+    expect(await svc.setLessonAbout(id, null)).toEqual({ ok: true, value: null });
+    expect((await client.listLessons('new', { 'hopp.about': 'project' })).length).toBe(0);
+    expect(await svc.setLessonAbout(id, 'project')).toEqual({ ok: true, value: null });
+    expect(await svc.lessonToGuardrails(id)).toEqual({ ok: true, value: null });
+    expect((await svc.state()).projects[0]!.guardrails).toBe(`- crane needs DOCKER_CONFIG (lesson #${id})`);
+    expect((await client.listLessons('closed')).map((l) => l.id)).toEqual([id]);
+    const full = execFileSync(bin, ['lessons', '--all', '--full', '--label', 'hopp.project=site'], { env }).toString();
+    expect(full).toContain(`#${id}  closed`);
+    expect(full).toContain('hopp.about=project');
   });
 });
