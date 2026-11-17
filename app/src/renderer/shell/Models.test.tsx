@@ -259,3 +259,92 @@ describe('effort on every profile', () => {
     expect(tagOf('claude-opus')).toBeNull();
   });
 });
+
+describe('adding and copying a profile', () => {
+  const catalog = [
+    { agent: 'kimi-code', source: 'kimi', warning: '', models: [{ id: 'kimi-code/kimi-k3-1-pro', name: 'K3.1 Pro', description: '', main: true, efforts: ['low', 'high', 'max'], known: false }] },
+    { agent: 'deepseek', source: 'builtin', warning: '', models: [{ id: 'deepseek-chat', name: 'Chat', description: '', main: true, efforts: [], known: false }] },
+  ];
+  const form = () => screen.getByTestId('profile-form');
+  const pick = (testId: string, option: string) => {
+    fireEvent.click(within(form()).getByTestId(testId));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: option }));
+  };
+  const nameField = () => within(form()).getByLabelText('Name') as HTMLInputElement;
+
+  it('adds a catalog model: its levels, the import name with the effort, on, marked', async () => {
+    const f = await openModels({ catalog });
+    fireEvent.click(screen.getByTestId('add-model'));
+    expect(form().textContent).toContain('A profile is a harness + model + effort that a task or agent is launched with.');
+    pick('pf-harness', 'kimi-code');
+    type(within(form()).getByLabelText('Model'), 'kimi-code/kimi-k3-1-pro');
+    expect(nameField().value).toBe('kimi-k3-1-pro');
+    pick('pf-effort', 'max');
+    fireEvent.click(within(form()).getByTestId('pf-effort'));
+    expect(screen.getAllByRole('menuitemradio').map((o) => o.textContent)).toEqual(['default', 'low', 'high', 'max']);
+    fireEvent.click(within(form()).getByTestId('pf-effort'));
+    expect(nameField().value).toBe('kimi-k3-1-pro-max');
+    type(within(form()).getByLabelText('Description'), 'Трудные места');
+    fireEvent.click(within(form()).getByRole('button', { name: 'Add' }));
+    await flush();
+    expect(f.shell!.addProfile).toHaveBeenCalledWith({ name: undefined, agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', effort: 'max', description: 'Трудные места' });
+    expect(screen.queryByTestId('profile-form')).toBeNull();
+    expect(row('kimi-k3-1-pro-max').className).toContain('fresh');
+    expect((within(row('kimi-k3-1-pro-max')).getByRole('switch') as HTMLElement).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('adds a model id the catalog does not list, with the harness levels', async () => {
+    const f = await openModels({ catalog });
+    fireEvent.click(screen.getByTestId('add-model'));
+    type(within(form()).getByLabelText('Model'), 'claude-opus-5-6-preview');
+    expect(form().textContent).toContain('Not in the catalog: used as written');
+    fireEvent.click(within(form()).getByTestId('pf-effort'));
+    expect(screen.getAllByRole('menuitemradio').map((o) => o.textContent)).toEqual(['default', 'low', 'medium', 'high', 'xhigh', 'max']);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'xhigh' }));
+    type(nameField(), 'opus-preview');
+    fireEvent.click(within(form()).getByRole('button', { name: 'Add' }));
+    await flush();
+    expect(f.shell!.addProfile).toHaveBeenCalledWith(expect.objectContaining({ name: 'opus-preview', agent: 'claude-code', model: 'claude-opus-5-6-preview', effort: 'xhigh' }));
+    expect(row('opus-preview')).toBeTruthy();
+  });
+
+  it('a model without levels says so instead of offering them', async () => {
+    await openModels({ catalog });
+    fireEvent.click(screen.getByTestId('add-model'));
+    pick('pf-harness', 'deepseek');
+    type(within(form()).getByLabelText('Model'), 'deepseek-chat');
+    expect(within(form()).queryByTestId('pf-effort')).toBeNull();
+    expect(form().textContent).toContain('This model has no effort setting.');
+  });
+
+  it('a refusal shows next to its field', async () => {
+    await openModels({ catalog });
+    fireEvent.click(screen.getByTestId('add-model'));
+    type(within(form()).getByLabelText('Model'), 'x');
+    type(nameField(), 'claude-opus');
+    fireEvent.click(within(form()).getByRole('button', { name: 'Add' }));
+    await flush();
+    const field = nameField().closest('.field') as HTMLElement;
+    expect(within(field).getByRole('alert').textContent).toBe('A profile named claude-opus exists');
+    expect(screen.getByTestId('profile-form')).toBeTruthy();
+  });
+
+  it('Copy… keeps harness and model, starts on Effort, and names it after the source', async () => {
+    const profiles = [...PROFILES, makeProfile('kimi-k3-1-pro', { agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', description: 'Воркеры', position: 4 })];
+    const f = await openModels({ catalog, profiles });
+    await menu('kimi-k3-1-pro', 'Copy…');
+    await flush();
+    expect(form().getAttribute('aria-label')).toBe('Copy kimi-k3-1-pro');
+    expect(within(form()).queryByLabelText('Model')).toBeNull();
+    expect(form().textContent).toContain('kimi-code/kimi-k3-1-pro');
+    expect(document.activeElement).toBe(within(form()).getByTestId('pf-effort'));
+    expect(nameField().value).toBe('kimi-k3-1-pro-copy');
+    pick('pf-effort', 'max');
+    expect(nameField().value).toBe('kimi-k3-1-pro-max');
+    expect((within(form()).getByLabelText('Description') as HTMLTextAreaElement).value).toBe('Воркеры');
+    fireEvent.click(within(form()).getByRole('button', { name: 'Copy' }));
+    await flush();
+    expect(f.shell!.copyProfile).toHaveBeenCalledWith('kimi-k3-1-pro', { name: undefined, effort: 'max', description: 'Воркеры' });
+    expect(within(row('kimi-k3-1-pro-max')).getByTestId('effort-tag').textContent).toBe('effort: max');
+  });
+});

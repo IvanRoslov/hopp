@@ -154,3 +154,21 @@ describe('catalog and import', () => {
     expect(d.profiles.filter((p) => p.model === 'claude-opus-5-5')).toHaveLength(1);
   });
 });
+
+describe('names of a profile the human adds or copies', () => {
+  it('newProfileName: the import name, the effort as a suffix, unique', async () => {
+    const { newProfileName } = await import('./profiles');
+    expect(newProfileName('kimi-code', 'kimi-code/kimi-k3-1-pro', '', new Set())).toBe('kimi-k3-1-pro');
+    expect(newProfileName('kimi-code', 'kimi-code/kimi-k3-1-pro', 'max', new Set())).toBe('kimi-k3-1-pro-max');
+    expect(newProfileName('codex', 'gpt-6.2', 'high', new Set(['codex-gpt-6-2-high']))).toBe('codex-gpt-6-2-high-2');
+    expect(newProfileName('claude-code', 'Opus 5.6 Preview', '', new Set())).toBe('opus-5-6-preview');
+  });
+
+  it('copyProfileName: the effort in place of the source one, else -copy', async () => {
+    const { copyProfileName } = await import('./profiles');
+    expect(copyProfileName({ name: 'kimi-k3-1-pro', effort: '' }, 'max', new Set())).toBe('kimi-k3-1-pro-max');
+    expect(copyProfileName({ name: 'kimi-k3-1-pro-max', effort: 'max' }, 'high', new Set())).toBe('kimi-k3-1-pro-high');
+    expect(copyProfileName({ name: 'my-opus', effort: 'high' }, 'max', new Set())).toBe('my-opus-max');
+    expect(copyProfileName({ name: 'kimi-k3-1-pro', effort: '' }, '', new Set(['kimi-k3-1-pro-copy']))).toBe('kimi-k3-1-pro-copy-2');
+  });
+});

@@ -1,9 +1,12 @@
 // A fake HoppBridge for renderer tests: an in-memory daemon plus hooks to
 // push stream states and events, and (with `shell: true` or a seed) an
 // in-memory shell layer that behaves like the main process's.
+import { copyProfileName, newProfileName } from '../src/shared/profileNames';
 import { vi } from 'vitest';
 import type { HoppBridge } from '../src/shared/bridge';
 import type {
+  CopyProfileInput,
+  NewProfileInput,
   HarnessCatalog,
   ImportResult,
   ProfileUpdate,
@@ -24,6 +27,7 @@ import type {
   ToolCatalog,
   ToolRules,
 } from '../src/shared/shell';
+import { HARNESS_EFFORTS } from '../src/shared/shell';
 import { SLUG_PATTERN, slugify } from '../src/shared/slug';
 import { managedRepoFolder } from '../src/shared/repos';
 import type { Ask, DaemonEvent, Session, StreamState } from '../src/shared/types';
@@ -408,7 +412,34 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       if (r.added.length) profilesChanged();
       return ok(structuredClone(r));
     }),
+    // models-add, with the main process's naming and the refusals that
+    // matter to the form (taken name, effort not offered).
+    addProfile: vi.fn(async (input: NewProfileInput) => addFake(input, null)),
+    copyProfile: vi.fn(async (name: string, input: CopyProfileInput) => {
+      const src = profiles.find((p) => p.name === name);
+      if (!src) return fail('profile_not_found', `No profile ${name}`);
+      return addFake({ name: input.name, agent: src.agent, model: src.model, effort: input.effort ?? src.effort, description: input.description ?? src.description }, src);
+    }),
   } satisfies ShellBridge;
+
+  function addFake(input: NewProfileInput, src: ModelProfile | null): Result<ModelProfile> {
+    const taken = new Set(profiles.map((p) => p.name));
+    const model = input.model.trim();
+    if (!model) return fail('model_required', 'Name the model: one from the list or the id the harness takes', 'model');
+    const effort = input.effort ?? '';
+    const listed = (seed.catalog ?? []).find((c) => c.agent === input.agent)?.models.find((m) => m.id === model);
+    const levels = listed ? listed.efforts : (HARNESS_EFFORTS[input.agent] ?? []);
+    if (effort && !levels.includes(effort)) return fail('bad_effort', `Effort ${effort} is not offered for ${model}`, 'effort');
+    const name = input.name?.trim() || (src ? copyProfileName(src, effort, taken) : newProfileName(input.agent, model, effort, taken));
+    if (taken.has(name)) return fail('name_taken', `A profile named ${name} exists`, 'name');
+    const p: ModelProfile = {
+      name, agent: input.agent, model, effort, description: input.description, enabled: input.enabled ?? true,
+      position: profiles.reduce((m, x) => Math.max(m, x.position + 1), 0), isDefault: false,
+    };
+    profiles = [...profiles, p];
+    profilesChanged();
+    return ok(structuredClone(p));
+  }
 
   return {
     shell,

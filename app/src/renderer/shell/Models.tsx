@@ -3,9 +3,10 @@
 // made the default, described, given an effort where its harness takes one,
 // moved, or removed. Import models adds a switched-off profile for every
 // current model the installed harnesses offer that has none yet.
+import { ModelProfileForm, type ProfileFormMode } from './ModelProfileForm';
 import { profileEffortTag } from '../ui/effort';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { HarnessCatalog, ImportResult, ModelProfile, Result, ShellBridge } from '../../shared/shell';
+import type { CatalogModel, HarnessCatalog, ImportResult, ModelProfile, Result, ShellBridge } from '../../shared/shell';
 import { cleanError } from '../errors';
 import { Dropdown } from '../ui/Dropdown';
 import { Switch } from '../ui/Switch';
@@ -22,6 +23,18 @@ export function ModelsTab(props: { shell: ShellBridge; profiles: ModelProfile[] 
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const catalog = useCatalog(shell);
   useEffect(() => catalog.load(), [catalog]);
+  // The add / copy form, and the profile it just made (marked, scrolled to).
+  const [form, setForm] = useState<ProfileFormMode | null>(null);
+  const [made, setMade] = useState<string | null>(null);
+  useEffect(() => {
+    if (!made) return;
+    document.querySelector(`[data-testid="model-row"][data-name="${CSS.escape(made)}"]`)?.scrollIntoView?.({ block: 'center' });
+  }, [made, profiles]);
+  const formBox = useRef<HTMLDivElement>(null);
+  const openForm = (how: ProfileFormMode) => {
+    setForm(how);
+    setTimeout(() => formBox.current?.scrollIntoView?.({ block: 'nearest' }), 0);
+  };
 
   const runImport = async () => {
     setImporting(true);
@@ -48,6 +61,9 @@ export function ModelsTab(props: { shell: ShellBridge; profiles: ModelProfile[] 
     <div data-testid="settings-models">
       <div className="models-head">
         <p className="subtle-note">New tasks and agents offer the profiles that are on. The default is used when a launch names none.</p>
+        <button type="button" className={'c-btn' + (form?.mode === 'add' ? ' on' : '')} onClick={() => (form?.mode === 'add' ? setForm(null) : openForm({ mode: 'add' }))} data-testid="add-model">
+          Add model
+        </button>
         <button type="button" className="c-btn" disabled={importing} onClick={() => void runImport()} data-testid="import-models">
           {importing ? (
             <>
@@ -64,6 +80,23 @@ export function ModelsTab(props: { shell: ShellBridge; profiles: ModelProfile[] 
           setImportError(null);
         }} />
       )}
+      {form && (
+        <div ref={formBox}>
+          <ModelProfileForm
+            key={form.mode === 'copy' ? 'copy:' + form.from.name : 'add'}
+            shell={shell}
+            how={form}
+            profiles={profiles ?? []}
+            modelsOf={catalog.modelsOf}
+            onCancel={() => setForm(null)}
+            onDone={(p) => {
+              setForm(null);
+              setFresh(new Set([p.name]));
+              setMade(p.name);
+            }}
+          />
+        </div>
+      )}
       {props.error ? (
         <p className="subtle-note" role="alert">Could not read the model profiles: {props.error}</p>
       ) : !profiles ? (
@@ -72,8 +105,8 @@ export function ModelsTab(props: { shell: ShellBridge; profiles: ModelProfile[] 
         <p className="subtle-note">No model profiles yet. Import models to add the ones your harnesses offer.</p>
       ) : (
         <>
-          <Group title="On" list={on} shell={shell} fresh={fresh} catalog={catalog} />
-          <Group title="Off" list={off} shell={shell} fresh={fresh} catalog={catalog} />
+          <Group title="On" list={on} shell={shell} fresh={fresh} catalog={catalog} onCopy={(from) => openForm({ mode: 'copy', from })} />
+          <Group title="Off" list={off} shell={shell} fresh={fresh} catalog={catalog} onCopy={(from) => openForm({ mode: 'copy', from })} />
         </>
       )}
     </div>
@@ -115,7 +148,7 @@ function ImportNote(props: { importing: boolean; result: ImportResult | null; er
   );
 }
 
-function Group(props: { title: string; list: ModelProfile[]; shell: ShellBridge; fresh: Set<string>; catalog: CatalogState }) {
+function Group(props: { title: string; list: ModelProfile[]; shell: ShellBridge; fresh: Set<string>; catalog: CatalogState; onCopy: (p: ModelProfile) => void }) {
   if (props.list.length === 0) return null;
   return (
     <section className="models-group" aria-label={`Profiles ${props.title.toLowerCase()}`}>
@@ -131,6 +164,7 @@ function Group(props: { title: string; list: ModelProfile[]; shell: ShellBridge;
           next={props.list[i + 1] ?? null}
           fresh={props.fresh.has(p.name)}
           catalog={props.catalog}
+          onCopy={props.onCopy}
         />
       ))}
     </section>
@@ -144,6 +178,7 @@ function ProfileRow(props: {
   next: ModelProfile | null;
   fresh: boolean;
   catalog: CatalogState;
+  onCopy: (p: ModelProfile) => void;
 }) {
   const { shell, profile: p } = props;
   const [busy, setBusy] = useState(false);
@@ -168,7 +203,10 @@ function ProfileRow(props: {
     }
   };
 
-  const items: MenuItem[] = [{ label: 'Edit…', run: () => setEditing(true) }];
+  const items: MenuItem[] = [
+    { label: 'Edit…', run: () => setEditing(true) },
+    { label: 'Copy…', run: () => props.onCopy(p) },
+  ];
   if (p.enabled && !p.isDefault) items.push({ label: 'Make default', run: () => void run(() => shell.setDefaultProfile(p.name)) });
   if (props.prev) items.push({ label: 'Move up', run: () => void run(() => shell.moveProfile(p.name, props.prev!.position)) });
   if (props.next) items.push({ label: 'Move down', run: () => void run(() => shell.moveProfile(p.name, props.next!.position)) });
@@ -297,6 +335,8 @@ interface CatalogState {
   load: () => void;
   reset: () => void;
   effortsFor: (agent: string, model: string) => string[];
+  // The catalog's models of a harness (empty while unknown).
+  modelsOf: (agent: string) => CatalogModel[];
   // Whether the catalog has been read (until then no row says "default").
   known: boolean;
 }
@@ -319,6 +359,7 @@ function useCatalog(shell: ShellBridge): CatalogState {
         setList(null);
       },
       effortsFor: (agent, model) => list?.find((c) => c.agent === agent)?.models.find((m) => m.id === model)?.efforts ?? [],
+      modelsOf: (agent) => list?.find((c) => c.agent === agent)?.models ?? [],
       known: list !== null,
     }),
     [shell, list],

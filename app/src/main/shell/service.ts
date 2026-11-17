@@ -20,6 +20,8 @@ import type {
   ToolRules,
   Lesson,
   LessonAbout,
+  NewProfileInput,
+  CopyProfileInput,
   Artifact,
   GithubRepo,
   GithubStatus,
@@ -32,13 +34,13 @@ import type {
   SubmissionAnswer,
   TaskFeed,
 } from '../../shared/shell';
-import { ACCEPT, LABEL, RETURN } from '../../shared/shell';
+import { ACCEPT, HARNESS_EFFORTS, HARNESSES, LABEL, RETURN } from '../../shared/shell';
 import { SLUG_PATTERN, slugify } from '../../shared/slug';
 import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
 import { Github } from './github';
-import { importProfileName, PROFILE_NAME_RE, uniqueProfileName } from './profiles';
+import { copyProfileName, importProfileName, newProfileName, PROFILE_NAME_RE, uniqueProfileName } from './profiles';
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
 import {
@@ -1108,6 +1110,62 @@ export class ShellService {
         })),
       );
     });
+  }
+
+  // ---- models-add: a profile the human adds or copies ----
+
+  addProfile(input: NewProfileInput): Promise<Result<ModelProfile>> {
+    return this.profileOp(() => this.createProfile(input, null));
+  }
+
+  copyProfile(name: string, input: CopyProfileInput): Promise<Result<ModelProfile>> {
+    return this.profileOp(async () => {
+      const { profiles } = await this.d.client.listModelProfiles();
+      const src = profiles.find((p) => p.name === name);
+      if (!src) return fail('profile_not_found', `No profile ${name}`);
+      const effort = input.effort ?? src.effort;
+      return this.createProfile(
+        { name: input.name, agent: src.agent, model: src.model, effort, description: input.description ?? src.description },
+        src,
+      );
+    });
+  }
+
+  // createProfile checks input field by field, names it when it has no name
+  // (the import naming, or the copy's), and creates it, on.
+  private async createProfile(input: NewProfileInput, copyOf: ModelProfile | null): Promise<Result<ModelProfile>> {
+    const agent = (input.agent ?? '').trim();
+    if (!(HARNESSES as readonly string[]).includes(agent)) return fail('agent_unknown', `Choose one of: ${HARNESSES.join(', ')}`, 'agent');
+    const model = (input.model ?? '').trim();
+    if (!model) return fail('model_required', 'Name the model: one from the list or the id the harness takes', 'model');
+    if (/\s/.test(model)) return fail('model_invalid', 'A model id has no spaces', 'model');
+    const effort = (input.effort ?? '').trim();
+    if (effort) {
+      const listed = (await this.d.client.modelCatalog()).find((c) => c.agent === agent)?.models?.find((m) => m.id === model);
+      const levels = listed ? (listed.efforts ?? []) : (HARNESS_EFFORTS[agent] ?? []);
+      if (levels.length === 0) return fail('bad_effort', `${model} has no effort setting; leave it at default`, 'effort');
+      if (!levels.includes(effort)) return fail('bad_effort', `Effort ${effort} is not one of ${listed ? model : agent}'s: ${levels.join(', ')}`, 'effort');
+    }
+    const { profiles } = await this.d.client.listModelProfiles();
+    const taken = new Set(profiles.map((p) => p.name));
+    let name = (input.name ?? '').trim();
+    if (name) {
+      if (!PROFILE_NAME_RE.test(name)) return fail('name_invalid', 'Use a-z, 0-9 and dashes, starting with a letter or digit, at most 40 characters', 'name');
+      if (taken.has(name)) return fail('name_taken', `A profile named ${name} exists`, 'name');
+    } else {
+      name = copyOf ? copyProfileName(copyOf, effort, taken) : newProfileName(agent, model, effort, taken);
+    }
+    try {
+      return ok(
+        await this.d.client.createModelProfile({ name, agent, model, effort, description: (input.description ?? '').trim(), enabled: input.enabled ?? true }),
+      );
+    } catch (err) {
+      if (err instanceof DaemonError) {
+        const field = { profile_exists: 'name', bad_effort: 'effort', agent_unavailable: 'agent' }[err.code];
+        if (field) return fail(err.code === 'profile_exists' ? 'name_taken' : err.code, err.message, field);
+      }
+      throw err;
+    }
   }
 
   // Imports run one at a time: two at once would pick the same names.

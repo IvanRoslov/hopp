@@ -37,7 +37,7 @@ describe('shell IPC', () => {
       'removeAgent', 'renameAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
       'listLessons', 'closeLesson', 'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
       'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText', 'githubStatus', 'listGithubRepos', 'addGithubRepo', 'onProfilesChanged', 'setProfileEnabled', 'updateProfile',
-      'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels',
+      'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels', 'addProfile', 'copyProfile',
     ];
     const local = ['onChanged', 'onFeedChanged', 'onProfilesChanged', 'artifactUrl'];
     expect([...SHELL_METHODS].sort()).toEqual(bridgeKeys.filter((k) => !local.includes(k)).sort());

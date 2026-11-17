@@ -220,6 +220,43 @@ export interface ImportResult {
   failed: { agent: string; reason: string }[];
 }
 
+// ---- models-add: a profile the human adds, or copies with another effort ----
+// (one block; addProfile and copyProfile are on the bridge below.)
+
+// The harnesses hopp launches.
+export const HARNESSES = ['claude-code', 'codex', 'kimi-code', 'pi', 'deepseek'] as const;
+
+// The effort levels each harness accepts for a model its catalog does not
+// list (the daemon's agent Efforts(), which also checks them on create).
+export const HARNESS_EFFORTS: Record<string, string[]> = {
+  'claude-code': ['low', 'medium', 'high', 'xhigh', 'max'],
+  codex: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  'kimi-code': ['low', 'high', 'max'],
+  pi: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
+  deepseek: ['low', 'medium', 'high', 'xhigh', 'max'],
+};
+
+export interface NewProfileInput {
+  // Empty: the import naming for agent + model (+ effort), made unique.
+  name?: string;
+  agent: string;
+  // A catalog model id or any id the harness takes.
+  model: string;
+  // '' or absent: the harness's default.
+  effort?: string;
+  description: string;
+  // A profile the human adds is on unless said otherwise.
+  enabled?: boolean;
+}
+
+export interface CopyProfileInput {
+  // Empty: the source's name with the new effort (or "-copy"), made unique.
+  name?: string;
+  // Absent: the source's effort.
+  effort?: string;
+  description?: string;
+}
+
 export interface Tool {
   name: string;
   description: string;
@@ -400,6 +437,11 @@ export interface ShellBridge {
   // A switched-off profile for every current catalog model without one;
   // existing profiles are never changed.
   importModels(): Promise<Result<ImportResult>>;
+  // models-add: a new profile; a refusal names its field (name, agent,
+  // model, effort).
+  addProfile(input: NewProfileInput): Promise<Result<ModelProfile>>;
+  // A new profile with the same harness and model as `name`.
+  copyProfile(name: string, input: CopyProfileInput): Promise<Result<ModelProfile>>;
 
   // Makes the worktree (or folder), composes the start text and launches the
   // orchestrator's session.

@@ -29,7 +29,7 @@ export const SHELL_METHODS = [
   'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief',
   'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'postToTask', 'answerSubmission', 'artifactText',
   'githubStatus', 'listGithubRepos', 'addGithubRepo',
-  'setProfileEnabled', 'updateProfile', 'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels',
+  'setProfileEnabled', 'updateProfile', 'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels', 'addProfile', 'copyProfile',
 ] as const;
 
 export type ShellMethod = (typeof SHELL_METHODS)[number];

@@ -2,7 +2,7 @@
 // page are checked here; a malformed call gets an error back (a Result error
 // for methods that return a Result, a rejected promise for the others) and
 // never throws in the main process.
-import type { LongAgentInput, PipelineInput, PipelineStageInput, ProfileUpdate, ProjectInput, Result, SubmissionAnswer, TaskInput } from '../../shared/shell';
+import type { CopyProfileInput, LongAgentInput, NewProfileInput, PipelineInput, PipelineStageInput, ProfileUpdate, ProjectInput, Result, SubmissionAnswer, TaskInput } from '../../shared/shell';
 import { SHELL_CHANGED, SHELL_METHODS, SHELL_PROFILES_CHANGED, shellChannel, type ShellMethod } from '../../shared/ipc';
 import { errorResult, type ShellService } from './service';
 
@@ -125,6 +125,32 @@ function lessonAbout(v: unknown): 'hopp' | 'project' | null {
   throw new ArgError('about must be hopp, project or null');
 }
 
+// optField: an optional string field of an object argument.
+function optField(o: Record<string, unknown>, k: string, what: string, max = 10_000): string | undefined {
+  return o[k] === undefined ? undefined : str(o[k], what, max);
+}
+
+function newProfileInput(v: unknown): NewProfileInput {
+  if (!v || typeof v !== 'object') throw new ArgError('profile must be an object');
+  const o = v as Record<string, unknown>;
+  if (o['enabled'] !== undefined && typeof o['enabled'] !== 'boolean') throw new ArgError('enabled must be a boolean');
+  return {
+    name: optField(o, 'name', 'name', 200),
+    agent: str(o['agent'], 'agent', 100),
+    model: str(o['model'], 'model', 500),
+    effort: optField(o, 'effort', 'effort', 100),
+    description: optField(o, 'description', 'description') ?? '',
+    enabled: o['enabled'] as boolean | undefined,
+  };
+}
+
+function copyProfileInput(v: unknown): CopyProfileInput {
+  if (v === undefined) return {};
+  if (!v || typeof v !== 'object') throw new ArgError('copy must be an object');
+  const o = v as Record<string, unknown>;
+  return { name: optField(o, 'name', 'name', 200), effort: optField(o, 'effort', 'effort', 100), description: optField(o, 'description', 'description') };
+}
+
 type Handler = (svc: ShellService, args: unknown[]) => Promise<unknown>;
 
 // RESULT_METHODS answer a bad call with a Result error.
@@ -178,6 +204,8 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   moveProfile: { result: true, run: (s, a) => s.moveProfile(str(a[0], 'profile', 200), int(a[1], 'position')) },
   modelCatalog: { result: true, run: (s) => s.modelCatalog() },
   importModels: { result: true, run: (s) => s.importModels() },
+  addProfile: { result: true, run: (s, a) => s.addProfile(newProfileInput(a[0])) },
+  copyProfile: { result: true, run: (s, a) => s.copyProfile(str(a[0], 'profile name', 200), copyProfileInput(a[1])) },
 };
 
 // callShell runs one method with arguments from the page.

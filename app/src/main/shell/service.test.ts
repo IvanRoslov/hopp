@@ -186,6 +186,71 @@ describe('profiles', () => {
   });
 });
 
+describe('adding and copying a profile', () => {
+  beforeEach(() => {
+    d.catalogs = [
+      { agent: 'kimi-code', source: 'kimi', warning: '', models: [{ id: 'kimi-code/kimi-k3-1-pro', name: 'K3.1 Pro', description: '', main: true, efforts: ['low', 'high', 'max'] }] },
+      { agent: 'deepseek', source: 'builtin', warning: '', models: [{ id: 'deepseek-chat', name: 'Chat', description: '', main: true, efforts: [] }] },
+    ];
+  });
+  const refusal = async (input: Parameters<typeof svc.addProfile>[0]) => {
+    const r = await svc.addProfile(input);
+    return r.ok ? null : [r.error.code, r.error.field];
+  };
+
+  it('names a catalog model as an import would, with the effort as a suffix, and switches it on', async () => {
+    let told = 0;
+    svc.onProfilesChanged(() => told++);
+    const r = await svc.addProfile({ agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', effort: 'max', description: 'Трудные места' });
+    expect(r.ok && r.value).toMatchObject({ name: 'kimi-k3-1-pro-max', agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', effort: 'max', enabled: true });
+    expect(d.profiles.find((p) => p.name === 'kimi-k3-1-pro-max')).toMatchObject({ description: 'Трудные места', enabled: true });
+    // The same again gets a free name.
+    const again = await svc.addProfile({ agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', effort: 'max', description: '' });
+    expect(again.ok && again.value.name).toBe('kimi-k3-1-pro-max-2');
+    expect(told).toBe(2);
+  });
+
+  it('takes a model the catalog does not list, with the harness levels', async () => {
+    const r = await svc.addProfile({ agent: 'claude-code', model: 'claude-opus-5-6-preview', effort: 'xhigh', description: '' });
+    expect(r.ok && r.value).toMatchObject({ name: 'claude-opus-5-6-preview-xhigh', model: 'claude-opus-5-6-preview', effort: 'xhigh' });
+    const plain = await svc.addProfile({ name: 'my-opus', agent: 'claude-code', model: 'opus', description: '' });
+    expect(plain.ok && plain.value).toMatchObject({ name: 'my-opus', effort: '' });
+  });
+
+  it('refuses field by field', async () => {
+    expect(await refusal({ agent: 'gemini', model: 'x', description: '' })).toEqual(['agent_unknown', 'agent']);
+    expect(await refusal({ agent: 'codex', model: '  ', description: '' })).toEqual(['model_required', 'model']);
+    expect(await refusal({ agent: 'codex', model: 'gpt 6', description: '' })).toEqual(['model_invalid', 'model']);
+    expect(await refusal({ agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', effort: 'medium', description: '' })).toEqual(['bad_effort', 'effort']);
+    expect(await refusal({ agent: 'deepseek', model: 'deepseek-chat', effort: 'max', description: '' })).toEqual(['bad_effort', 'effort']);
+    expect(await refusal({ agent: 'codex', model: 'gpt-7', effort: 'turbo', description: '' })).toEqual(['bad_effort', 'effort']);
+    expect(await refusal({ name: 'Bad Name', agent: 'codex', model: 'gpt-7', description: '' })).toEqual(['name_invalid', 'name']);
+    expect(await refusal({ name: 'sonnet', agent: 'codex', model: 'gpt-7', description: '' })).toEqual(['name_taken', 'name']);
+    expect(d.profiles.map((p) => p.name)).toEqual(['cheap', 'off', 'sonnet', 'codex']);
+  });
+
+  it("maps the daemon's refusal to the field it is about", async () => {
+    d.override.set('POST /v1/model-profiles', { status: 400, body: { error: { code: 'bad_effort', message: 'effort high is not one of opus' } } });
+    expect(await refusal({ agent: 'claude-code', model: 'opus', effort: 'high', description: '' })).toEqual(['bad_effort', 'effort']);
+  });
+
+  it('copies a profile with another effort: same harness and model, named after the source', async () => {
+    await svc.addProfile({ name: 'kimi-k3-1-pro', agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', description: 'Воркеры' });
+    const r = await svc.copyProfile('kimi-k3-1-pro', { effort: 'max' });
+    expect(r.ok && r.value).toMatchObject({ name: 'kimi-k3-1-pro-max', agent: 'kimi-code', model: 'kimi-code/kimi-k3-1-pro', effort: 'max', description: 'Воркеры', enabled: true });
+    // A copy of the max one at high replaces the effort in the name.
+    const high = await svc.copyProfile('kimi-k3-1-pro-max', { effort: 'high' });
+    expect(high.ok && high.value.name).toBe('kimi-k3-1-pro-high');
+    // The same effort is a "-copy".
+    const same = await svc.copyProfile('kimi-k3-1-pro', {});
+    expect(same.ok && same.value.name).toBe('kimi-k3-1-pro-copy');
+    const bad = await svc.copyProfile('kimi-k3-1-pro', { effort: 'medium' });
+    expect(!bad.ok && [bad.error.code, bad.error.field]).toEqual(['bad_effort', 'effort']);
+    const gone = await svc.copyProfile('nope', {});
+    expect(!gone.ok && gone.error.code).toBe('profile_not_found');
+  });
+});
+
 describe('task launch', () => {
   it('makes a worktree, writes the start texts and launches the orchestrator', async () => {
     const repo = mkRepo('site');
