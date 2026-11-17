@@ -74,6 +74,8 @@ bin/hopp inbox [--mailbox <id>]        # a mailbox's unread messages; inbox next
 
 Inside a session an agent asks with `hopp ask "<text>" [--option <choice>]… [--wait]` and withdraws with `hopp ask withdraw <ask-id>`.
 
+A second copy of the app against the live daemon, with its own store (the human's open app keeps its own): `HOPP_APP_HOME=<folder> npm --prefix app run dev` (or the built app); the daemon, worktrees and artifacts stay in `~/.hopp`.
+
 The tool catalog (files under `~/.hopp/tools`; no daemon needed):
 
 ```bash
