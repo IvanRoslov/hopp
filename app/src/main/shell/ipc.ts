@@ -139,6 +139,7 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   startAgent: { result: true, run: (s, a) => s.startAgent(str(a[0], 'agent name', 200)) },
   stopAgent: { result: true, run: (s, a) => s.stopAgent(str(a[0], 'agent name', 200)) },
   removeAgent: { result: true, run: (s, a) => s.removeAgent(str(a[0], 'agent name', 200)) },
+  renameAgent: { result: true, run: (s, a) => s.renameAgent(str(a[0], 'agent name', 200), str(a[1], 'new name', 200)) },
   agentMail: { result: false, run: (s) => s.agentMail() },
   waiting: { result: false, run: (s) => s.waiting() },
   listTools: { result: false, run: (s) => s.listTools() },

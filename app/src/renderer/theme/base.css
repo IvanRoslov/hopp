@@ -396,3 +396,12 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .base-warning .bw-reason { color: var(--muted); overflow-wrap: anywhere; }
 .base-warning .link-btn { flex: none; }
 .details .base-detail-warning { display: block; font-family: var(--font-ui); color: var(--text); margin-top: 4px; white-space: normal; }
+
+/* Long-lived agent: the quiet Remove, its confirmation, the rename form */
+.status-line .link-btn { margin-left: -4px; }
+.inline-confirm, .agent-error { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inline-confirm > span:first-child { color: var(--text); }
+.details .name-row { display: inline-flex; align-items: center; gap: 10px; }
+.rename-agent { display: grid; gap: 10px; max-width: 360px; }
+.rename-agent .btns { display: flex; gap: 8px; }
+.rename-note { margin: 0; color: var(--text); font-size: var(--fs-small); line-height: 1.5; }

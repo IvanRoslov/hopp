@@ -404,8 +404,14 @@ export interface ShellBridge {
   // Launches the agent's session in its folder (restores it if it ran before).
   startAgent(name: string): Promise<Result<null>>;
   stopAgent(name: string): Promise<Result<null>>;
-  // Refused while the agent's session is running.
+  // Refused while the agent's session is running. Its mailbox goes with it
+  // when it holds no letters; otherwise the mailbox stays.
   removeAgent(name: string): Promise<Result<null>>;
+  // Renames an agent that is off, with the same checks as createAgent. The
+  // new name gets a mailbox; the old mailbox is removed when it holds no
+  // letters and stays, with its letters, otherwise (the daemon cannot move
+  // them).
+  renameAgent(name: string, newName: string): Promise<Result<LongAgent>>;
   // Unread mail per agent name, for agents that are switched off.
   agentMail(): Promise<Record<string, number>>;
 

@@ -186,6 +186,23 @@ export class DaemonClient {
     return this.call('POST', '/v1/mailboxes', { name });
   }
 
+  async removeMailbox(name: string): Promise<void> {
+    await this.call('DELETE', `/v1/mailboxes/${enc(name)}`);
+  }
+
+  // sessionIdHolder: what holds a session id a launch would refuse
+  // ("session" or "tmux"), "" when it is free, or null from a daemon that
+  // predates the question.
+  async sessionIdHolder(id: string): Promise<'session' | 'tmux' | '' | null> {
+    try {
+      const r = await this.call<{ taken_by: string }>('GET', `/v1/session-ids/${enc(id)}`);
+      return r.taken_by === 'session' || r.taken_by === 'tmux' ? r.taken_by : '';
+    } catch (err) {
+      if (err instanceof DaemonError && err.status === 404 && err.code === 'not_found') return null;
+      throw err;
+    }
+  }
+
   async listLessons(status: 'new' | 'closed' | 'all'): Promise<Lesson[]> {
     const r = await this.call<{ lessons: Lesson[] | null }>('GET', '/v1/lessons?status=' + enc(status));
     return r.lessons ?? [];

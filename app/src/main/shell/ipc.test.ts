@@ -34,7 +34,7 @@ describe('shell IPC', () => {
     const bridgeKeys: (keyof ShellBridge)[] = [
       'state', 'onChanged', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
       'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
-      'removeAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
+      'removeAgent', 'renameAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
       'listLessons', 'closeLesson', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
       'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText', 'githubStatus', 'listGithubRepos', 'addGithubRepo', 'onProfilesChanged', 'setProfileEnabled', 'updateProfile',
       'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels',

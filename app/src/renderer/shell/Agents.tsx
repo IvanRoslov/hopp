@@ -148,7 +148,10 @@ export function AgentView(props: {
   const tree = sessionTree(agent.name, props.sessions);
   const [selected, setSelected] = useState(agent.name);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ShellError | null>(null);
+  // The quiet Remove beside Start asks first, in the status line.
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const selectedId = tree.some((s) => s.id === selected) ? selected : agent.name;
   const sel = tree.find((s) => s.id === selectedId);
 
@@ -158,15 +161,25 @@ export function AgentView(props: {
     try {
       const r = await fn();
       if (r.ok) after?.();
-      else setError(r.error.message);
+      else setError(r.error);
     } catch (e) {
-      setError(cleanError(e));
+      setError({ code: 'failed', message: cleanError(e) });
     } finally {
       setBusy(false);
     }
   };
 
   const off = st.kind === 'off';
+  const letters = props.mail === 1 ? '1 letter waits for it' : `${props.mail} letters wait for it`;
+  const removeText =
+    `Remove ${agent.name}? Its folder stays as it is.` +
+    (props.mail > 0 ? ` ${props.mail === 1 ? '1 letter waits' : `${props.mail} letters wait`} in its mailbox, so the mailbox stays.` : '');
+  const remove = () => void act(() => shell.removeAgent(agent.name), () => go({ k: 'newTask' }));
+  const startRename = () => {
+    setError(null);
+    setRenaming(true);
+    go({ k: 'agent', name: agent.name, panel: 'details' });
+  };
   const items: MenuItem[] = [];
   if (!off) {
     items.push({
@@ -176,27 +189,63 @@ export function AgentView(props: {
     });
   } else {
     items.push({ label: 'Start', run: () => void act(() => shell.startAgent(agent.name)) });
-    items.push({
-      label: 'Remove agent',
-      confirm: { text: `Remove ${agent.name}? Its folder stays as it is.`, action: 'Remove' },
-      run: () => void act(() => shell.removeAgent(agent.name), () => go({ k: 'newTask' })),
-    });
+    items.push({ label: 'Rename…', run: startRename });
+    items.push({ label: 'Remove agent', confirm: { text: removeText, action: 'Remove' }, run: remove });
   }
   items.push({ label: 'Agent details', run: () => go({ k: 'agent', name: agent.name, panel: 'details' }) });
 
-  const letters = props.mail === 1 ? '1 letter waits for it' : `${props.mail} letters wait for it`;
   const status = off ? (
-    <>
-      {agent.name} is off{props.mail > 0 ? ` · ${letters}` : ''}
-      <button type="button" className="c-btn" disabled={busy} onClick={() => void act(() => shell.startAgent(agent.name))}>
-        Start
-      </button>
-    </>
+    confirmRemove ? (
+      <span className="inline-confirm" role="alertdialog" aria-label={removeText}>
+        <span>{removeText}</span>
+        <button
+          type="button"
+          className="c-btn primary"
+          disabled={busy}
+          onClick={() => {
+            setConfirmRemove(false);
+            remove();
+          }}
+        >
+          Remove
+        </button>
+        <button type="button" className="c-btn" onClick={() => setConfirmRemove(false)}>
+          Cancel
+        </button>
+      </span>
+    ) : (
+      <>
+        {agent.name} is off{props.mail > 0 ? ` · ${letters}` : ''}
+        <button type="button" className="c-btn" disabled={busy} onClick={() => void act(() => shell.startAgent(agent.name))}>
+          Start
+        </button>
+        <button type="button" className="link-btn" disabled={busy} data-testid="agent-remove" onClick={() => setConfirmRemove(true)}>
+          Remove
+        </button>
+      </>
+    )
   ) : st.kind === 'starting' ? (
     'Starting…'
   ) : sel && sel.activity === 'exited' ? (
     'The agent exited. The terminal shows the shell it left.'
   ) : null;
+
+  // A name a tmux session outside hopp holds: the two ways out sit beside it.
+  const errorLine = error && (
+    <span className="agent-error" role="alert">
+      <span className="form-error">! {error.message}</span>
+      {error.code === 'name_in_tmux' && off && (
+        <>
+          <button type="button" className="c-btn" onClick={startRename}>
+            Rename
+          </button>
+          <button type="button" className="c-btn" onClick={() => setConfirmRemove(true)}>
+            Remove agent
+          </button>
+        </>
+      )}
+    </span>
+  );
 
   return (
     <WorkView
@@ -213,7 +262,7 @@ export function AgentView(props: {
         status || error ? (
           <>
             {status}
-            {error && <span className="form-error" role="alert">! {error}</span>}
+            {!confirmRemove && errorLine}
           </>
         ) : null
       }
@@ -222,7 +271,30 @@ export function AgentView(props: {
       details={
         <dl className="details" data-testid="agent-details">
           <dt>Name</dt>
-          <dd>{agent.name}</dd>
+          <dd>
+            {renaming && off ? (
+              <RenameAgent
+                shell={shell}
+                agent={agent}
+                mail={props.mail}
+                onDone={(to) => {
+                  setRenaming(false);
+                  setError(null);
+                  go({ k: 'agent', name: to, panel: 'details' });
+                }}
+                onCancel={() => setRenaming(false)}
+              />
+            ) : (
+              <span className="name-row">
+                {agent.name}
+                {off && (
+                  <button type="button" className="link-btn" onClick={startRename}>
+                    Rename
+                  </button>
+                )}
+              </span>
+            )}
+          </dd>
           <dt>Model</dt>
           <dd>{agent.profile}</dd>
           <dt>Folder</dt>
@@ -231,5 +303,70 @@ export function AgentView(props: {
       }
       refreshSession={props.refreshSession}
     />
+  );
+}
+
+// RenameAgent: a new name for an agent that is off, checked like a new
+// agent's. Unread mail cannot move with it (the daemon has no such call), so
+// when letters wait the rename says so and asks first.
+function RenameAgent(props: { shell: ShellBridge; agent: LongAgent; mail: number; onDone: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState(props.agent.name);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const to = name.trim();
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await props.shell.renameAgent(props.agent.name, to);
+      if (r.ok) props.onDone(r.value.name);
+      else {
+        setConfirming(false);
+        setError(r.error.message);
+      }
+    } catch (e) {
+      setError(cleanError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const stay = props.mail === 1 ? '1 letter stays' : `${props.mail} letters stay`;
+  return (
+    <form
+      className="rename-agent"
+      data-testid="rename-agent"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!to || to === props.agent.name) return props.onCancel();
+        if (props.mail > 0 && !confirming) setConfirming(true);
+        else void save();
+      }}
+    >
+      <Field
+        label="New name"
+        value={name}
+        autoFocus
+        hint="Also its session id and its mailbox name."
+        error={error ?? undefined}
+        onChange={(e) => {
+          setName(e.target.value);
+          setConfirming(false);
+        }}
+      />
+      {confirming && (
+        <p className="rename-note" role="status">
+          {stay} under the old name {props.agent.name}: hopp cannot move mail, and nothing is deleted. {to} starts with an empty mailbox.
+        </p>
+      )}
+      <div className="btns">
+        <button type="submit" className="c-btn primary" disabled={busy || !to}>
+          {confirming ? 'Rename anyway' : 'Rename'}
+        </button>
+        <button type="button" className="c-btn" onClick={props.onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

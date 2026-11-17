@@ -53,6 +53,29 @@ func (m *Manager) idTaken(id string, live map[string]bool) (bool, error) {
 	return false, nil
 }
 
+// IDHolder says what holds a session id that a launch would refuse:
+// "session" when hopp's store has it in any state, "tmux" when a live tmux
+// session outside the store uses the name, "" when the id is free. It only
+// reads; an invalid id is a validation error.
+func (m *Manager) IDHolder(ctx context.Context, id string) (string, error) {
+	if !validID(id) {
+		return "", validationErr("invalid_id", fmt.Sprintf("id must match ^[a-z0-9-]+$ and be at most %d characters", maxIDLen))
+	}
+	if _, err := m.st.GetSession(id); err == nil {
+		return "session", nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return "", err
+	}
+	live, err := m.liveNames(ctx)
+	if err != nil {
+		return "", err
+	}
+	if live[id] {
+		return "tmux", nil
+	}
+	return "", nil
+}
+
 // reserveID returns an unused id: base, then base-2, base-3, ...
 func (m *Manager) reserveID(ctx context.Context, base string) (string, error) {
 	live, err := m.liveNames(ctx)

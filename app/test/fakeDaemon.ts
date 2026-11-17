@@ -59,6 +59,9 @@ export class FakeDaemon {
   artifacts: (Artifact & { path: string })[] = [];
   messages: { id: number; from?: string; to: string; body: string }[] = [];
   mailboxes: { name: string; unread: number; total: number }[] = [];
+  // Live tmux sessions outside hopp: a launch with one of these ids is
+  // refused as taken, and /v1/session-ids names tmux as the holder.
+  foreignTmux: string[] = [];
   lessons: Lesson[] = [];
   // created records every POST /v1/sessions body, in order.
   created: Record<string, unknown>[] = [];
@@ -180,7 +183,7 @@ export class FakeDaemon {
       this.created.push(b);
       const id = String(b['id'] ?? '');
       if (!id) return json(res, 400, { error: { code: 'bad_request', message: 'the fake needs an id' } });
-      if (this.sessions.some((x) => x.id === id)) {
+      if (this.sessions.some((x) => x.id === id) || this.foreignTmux.includes(id)) {
         return json(res, 409, { error: { code: 'session_exists', message: 'session id is taken: ' + id } });
       }
       const profile = String(b['profile'] ?? '');
@@ -302,6 +305,19 @@ export class FakeDaemon {
       }
     }
     if (key === 'GET /v1/model-catalog') return json(res, 200, { agents: this.catalogs });
+    if (req.method === 'GET' && (m = path.match(/^\/v1\/session-ids\/([^/]+)$/))) {
+      const id = decodeURIComponent(m[1]!);
+      if (!/^[a-z0-9-]{1,63}$/.test(id)) return json(res, 400, { error: { code: 'invalid_id', message: 'invalid id' } });
+      const by = this.sessions.some((x) => x.id === id) ? 'session' : this.foreignTmux.includes(id) ? 'tmux' : '';
+      return json(res, 200, { id, free: by === '', taken_by: by });
+    }
+    if (req.method === 'DELETE' && (m = path.match(/^\/v1\/mailboxes\/([^/]+)$/))) {
+      const name = decodeURIComponent(m[1]!);
+      const i = this.mailboxes.findIndex((b) => b.name === name);
+      if (i < 0) return json(res, 404, { error: { code: 'mailbox_not_found', message: 'mailbox not found: ' + name } });
+      this.mailboxes.splice(i, 1);
+      return json(res, 200, { removed: name });
+    }
     if (key === 'GET /v1/mailboxes') return json(res, 200, { mailboxes: this.mailboxes });
     if (key === 'POST /v1/mailboxes') {
       const name = String((JSON.parse(body || '{}') as { name?: string }).name ?? '');

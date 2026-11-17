@@ -63,6 +63,8 @@ export interface ShellSeed {
   rules?: ToolRules;
   lessons?: Lesson[];
   mail?: Record<string, number>;
+  // Names a live tmux session outside hopp holds: create, rename and start refuse them.
+  foreignTmux?: string[];
   folders?: (string | null)[];
   feeds?: Record<string, TaskFeed>;
   artifactTexts?: Record<number, string>;
@@ -265,18 +267,28 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
     createAgent: vi.fn(async (input: { name: string; profile: string; dir: string }) => {
       if (!SLUG_PATTERN.test(input.name)) return fail('name_invalid', 'Use lowercase letters, digits and dashes.', 'name');
       if (st.agents.some((a) => a.name === input.name)) return fail('name_taken', 'An agent with this name exists.', 'name');
+      if (seed.foreignTmux?.includes(input.name)) return fail('name_in_tmux', tmuxTaken(input.name), 'name');
       if (!input.dir) return fail('dir_required', 'Choose the agent’s folder.', 'dir');
       const a: LongAgent = { ...input, createdAt: clock++ };
       st.agents.push(a);
       changed();
       return ok(a);
     }),
-    startAgent: vi.fn(async (_name: string) => ok(null)),
+    startAgent: vi.fn(async (name: string) => (seed.foreignTmux?.includes(name) ? fail('name_in_tmux', tmuxTaken(name)) : ok(null))),
     stopAgent: vi.fn(async (_name: string) => ok(null)),
     removeAgent: vi.fn(async (name: string) => {
       st.agents = st.agents.filter((a) => a.name !== name);
       changed();
       return ok(null);
+    }),
+    renameAgent: vi.fn(async (name: string, to: string) => {
+      const a = st.agents.find((x) => x.name === name)!;
+      if (!SLUG_PATTERN.test(to)) return fail('name_invalid', 'Use lowercase letters, digits and dashes.', 'name');
+      if (st.agents.some((x) => x.name === to)) return fail('name_taken', 'An agent with this name exists.', 'name');
+      if (seed.foreignTmux?.includes(to)) return fail('name_in_tmux', tmuxTaken(to), 'name');
+      a.name = to;
+      changed();
+      return ok({ ...a });
     }),
     agentMail: vi.fn(async () => seed.mail ?? {}),
     waiting: vi.fn(async () => {
@@ -443,4 +455,8 @@ export function fakeBridge(
       eventCbs.forEach((cb) => cb(e));
     },
   };
+}
+
+function tmuxTaken(name: string): string {
+  return `A tmux session named ${name} already runs outside hopp. Choose another name, or close that session.`;
 }

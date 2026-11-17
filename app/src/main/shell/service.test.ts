@@ -556,6 +556,78 @@ describe('long-lived agents', () => {
     }
   });
 
+  const TMUX_CTO = 'A tmux session named cto already runs outside hopp. Choose another name, or close that session.';
+
+  it('create refuses a name a live tmux session outside hopp holds, before storing anything', async () => {
+    d.foreignTmux = ['cto'];
+    const r = await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
+    expect(!r.ok && r.error).toEqual({ code: 'name_in_tmux', message: TMUX_CTO, field: 'name' });
+    expect((await svc.state()).agents).toEqual([]);
+    expect(d.mailboxes).toEqual([]);
+    expect(d.created).toEqual([]);
+  });
+
+  it('create refuses the id of a hopp session in any state, and says how to free it', async () => {
+    d.sessions.push(makeSession('cto', { state: 'killed' }));
+    const r = await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
+    expect(!r.ok && [r.error.code, r.error.field]).toEqual(['name_taken', 'name']);
+    expect(!r.ok && r.error.message).toContain('hopp rm cto');
+    expect(d.mailboxes).toEqual([]);
+  });
+
+  it('a daemon that cannot answer the id question leaves it to Start', async () => {
+    d.override.set('GET /v1/session-ids/cto', { status: 404, body: { error: { code: 'not_found', message: 'resource not found' } } });
+    expect((await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder })).ok).toBe(true);
+  });
+
+  it('start maps the daemon\'s "session id is taken" to the tmux sentence', async () => {
+    await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
+    d.foreignTmux = ['cto'];
+    const r = await svc.startAgent('cto');
+    expect(!r.ok && r.error).toEqual({ code: 'name_in_tmux', message: TMUX_CTO });
+    expect(d.sessions).toEqual([]);
+  });
+
+  it('remove takes an empty mailbox with it and keeps one that holds letters', async () => {
+    await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
+    await svc.createAgent({ name: 'ops', profile: 'sonnet', dir: folder });
+    d.mailboxes = [{ name: 'cto', unread: 0, total: 0 }, { name: 'ops', unread: 2, total: 3 }];
+    expect((await svc.removeAgent('cto')).ok).toBe(true);
+    expect((await svc.removeAgent('ops')).ok).toBe(true);
+    expect(d.mailboxes.map((b) => b.name)).toEqual(['ops']);
+  });
+
+  it('rename moves an agent that is off to a free name, with the same checks', async () => {
+    await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
+    await svc.createAgent({ name: 'ops', profile: 'sonnet', dir: folder });
+    d.foreignTmux = ['lead'];
+    const refused = async (to: string) => {
+      const r = await svc.renameAgent('cto', to);
+      return !r.ok && [r.error.code, r.error.field];
+    };
+    expect(await refused('Bad')).toEqual(['name_invalid', 'name']);
+    expect(await refused('ops')).toEqual(['name_taken', 'name']);
+    expect(await refused('lead')).toEqual(['name_in_tmux', 'name']);
+    const r = await svc.renameAgent('cto', 'boss');
+    expect(r.ok && r.value).toMatchObject({ name: 'boss', profile: 'sonnet', dir: folder });
+    expect((await svc.state()).agents.map((a) => a.name)).toEqual(['boss', 'ops']);
+    // The empty old mailbox is gone; the new name has one.
+    expect(d.mailboxes.map((b) => b.name).sort()).toEqual(['boss', 'ops']);
+    // Start launches under the new name.
+    expect((await svc.startAgent('boss')).ok).toBe(true);
+    expect(d.created.at(-1)).toMatchObject({ id: 'boss', labels: { 'hopp.agent': 'boss' } });
+  });
+
+  it('rename keeps the old mailbox when it holds letters, and is refused while the agent runs', async () => {
+    await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
+    d.mailboxes = [{ name: 'cto', unread: 2, total: 2 }];
+    expect((await svc.renameAgent('cto', 'boss')).ok).toBe(true);
+    expect(d.mailboxes.map((b) => b.name).sort()).toEqual(['boss', 'cto']);
+    await svc.startAgent('boss');
+    const r = await svc.renameAgent('boss', 'chief');
+    expect(!r.ok && r.error.code).toBe('agent_running');
+  });
+
   it('agentMail counts unread mail of agents that are switched off', async () => {
     await svc.createAgent({ name: 'cto', profile: 'sonnet', dir: folder });
     await svc.createAgent({ name: 'ops', profile: 'sonnet', dir: folder });
