@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { art, ask, feedBridge, feedTask, post } from '../../../test/feedBridge';
 import type { TaskFeed } from '../../shared/shell';
+import { MARK_MS } from './Feed';
 import { PipelineTaskView, type PipelinePanel } from './PipelineTaskView';
 
 afterEach(cleanup);
@@ -258,5 +259,24 @@ describe('markdown in the feed', () => {
     const answer = [...document.querySelectorAll('.entry-answer')].find((a) => a.textContent!.includes('Исправить'))!;
     expect(answer.textContent).toContain('You answered: Return — ');
     expect(answer.querySelector('li strong')!.textContent).toBe('крупнее');
+  });
+});
+
+describe('the question a jump leads to', () => {
+  it('is tinted once, as one layer, and the tint goes after a moment', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const feed = sample();
+      const paid = feed.asks.find((a) => a.labels?.['hopp.kind'] === 'paid')!;
+      await mount({ focusAskId: paid.id }, feed);
+      const block = document.querySelector(`[data-ask="${paid.id}"]`)!;
+      expect(block.className).toContain('marked');
+      act(() => {
+        vi.advanceTimersByTime(MARK_MS);
+      });
+      expect(block.className).not.toContain('marked');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
