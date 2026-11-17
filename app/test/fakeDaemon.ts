@@ -396,6 +396,11 @@ export class FakeDaemon {
       if (!a) return json(res, 404, { error: { code: 'ask_not_found', message: 'ask not found' } });
       if (a.status !== 'open') return json(res, 409, { error: { code: 'ask_closed', message: 'the ask is no longer open' } });
       const b = JSON.parse(body) as { choice?: string; answer?: string };
+      // As the daemon: a choice must be one of the options; text alone is fine.
+      const opts = a.options ?? [];
+      if ((opts.length > 0 && b.choice && !opts.includes(b.choice)) || (!b.choice && !(b.answer ?? '').trim())) {
+        return json(res, 400, { error: { code: 'ask_invalid', message: `invalid answer: choice must be one of ${JSON.stringify(opts)}` } });
+      }
       a.status = 'answered';
       if (b.choice) a.choice = b.choice;
       if (b.answer) a.answer = b.answer;

@@ -60,8 +60,8 @@ describe('shell IPC', () => {
       ['createPipeline', [{ name: 'x', stages: [{ name: 'a', approval: 'yes' }] }]],
       ['updatePipeline', [1, { name: 'x', stages: [] }]],
       ['postToTask', ['t', 5]],
-      ['answerSubmission', [1, { choice: 'Maybe' }]],
-      ['answerSubmission', [1, { choice: 'Return' }]],
+      ['answerSubmission', [1, { choice: 5 }]],
+      ['answerSubmission', [1, { choice: '  ' }]],
       ['artifactText', [-1]],
     ] as [string, unknown[]][]) {
       const r = (await callShell(svc, m, args)) as { ok: boolean; error?: { code: string } };

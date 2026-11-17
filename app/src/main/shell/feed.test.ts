@@ -135,6 +135,12 @@ describe('a task with a pipeline', () => {
     const t = pipelineLayer({ id: 'x', name: 'X', createdAt: 1, updatedAt: 1, stages: [{ id: 'a', name: 'A', does: '', result: '', substages: false, approval: true }] });
     expect(t).not.toContain('hopp.substage=');
   });
+
+  it('a submission has exactly Accept and Return; choices after acceptance are a separate ask', () => {
+    const t = pipelineLayer({ id: 'x', name: 'X', createdAt: 1, updatedAt: 1, stages: [{ id: 'a', name: 'A', does: '', result: '', substages: false, approval: true }] });
+    expect(t).toContain('A submission has exactly the options `--option Accept --option Return`, nothing else: the human accepts with one click.');
+    expect(t).toContain('is a separate ordinary `hopp ask` sent after the stage is accepted');
+  });
 });
 
 describe('the feed', () => {
@@ -207,6 +213,18 @@ describe('the feed', () => {
     expect(d.asks[1]).toMatchObject({ choice: 'Return', answer: 'Fix the title' });
     const again = await svc.answerSubmission(2, { choice: 'Accept' });
     expect(!again.ok && again.error.code).toBe('ask_closed');
+  });
+
+  it('answers a submission with the orchestrator\'s own options, exactly as written', async () => {
+    const opts = ['Accept: открыть PR и влить все три (app, toolkit-fix, vault)', 'Accept: только открыть PR, сливаю сам', 'Accept: оставить ветки как есть', 'Return'];
+    d.asks = [makeAsk(22, 's', { options: opts }), makeAsk(23, 's', { options: opts })];
+    // What Ivan hit: a bare "Accept" is not one of them.
+    const bare = await svc.answerSubmission(22, { choice: 'Accept' });
+    expect(!bare.ok && bare.error.code).toBe('ask_invalid');
+    expect((await svc.answerSubmission(22, { choice: opts[1]! })).ok).toBe(true);
+    expect(d.asks[0]).toMatchObject({ status: 'answered', choice: opts[1] });
+    const noText = await svc.answerSubmission(23, { choice: 'Return' });
+    expect(!noText.ok && noText.error.code).toBe('text_required');
   });
 
   it('names the task of feed events from the item labels, then the session labels', () => {

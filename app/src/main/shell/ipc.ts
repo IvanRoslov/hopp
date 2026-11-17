@@ -100,9 +100,12 @@ function pipelineInput(v: unknown): PipelineInput {
 
 function submissionAnswer(v: unknown): SubmissionAnswer {
   if (!isObj(v)) throw new ArgError('answer must be an object');
-  if (v['choice'] === 'Accept') return { choice: 'Accept' };
-  if (v['choice'] === 'Return') return { choice: 'Return', text: str(v['text'], 'text') };
-  throw new ArgError('choice must be Accept or Return');
+  const choice = str(v['choice'], 'choice', 4096);
+  if (!choice.trim()) throw new ArgError('choice must be one of the ask\'s options');
+  const out: SubmissionAnswer = { choice };
+  const text = optStr(v['text'], 'text');
+  if (text !== undefined) out.text = text;
+  return out;
 }
 
 function profileUpdate(v: unknown): ProfileUpdate {

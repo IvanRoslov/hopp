@@ -349,6 +349,8 @@ export function pipelineLayer(p: Pipeline): string {
     '',
     '   The answer arrives as a message. Accept: the stage is done; start the next one. Return: the answer says what to fix; fix it, post what changed, publish new versions and submit again with a new ask. To take a submission back, `hopp ask withdraw <ask-id>`.',
     '',
+    '   A submission has exactly the options `--option Accept --option Return`, nothing else: the human accepts with one click. A choice about what happens after acceptance (merge, open a PR, keep the branches) is a separate ordinary `hopp ask` sent after the stage is accepted, or you say in the submission\'s text what you will do on Accept.',
+    '',
     '- A stage that waits for approval is never passed without an Accept. Do not start the next stage before it.',
     '- A stage that passes without approval: when it is done, post `hopp post --label hopp.stage=<id> --label hopp.event=stage_done "<summary>"` and go on.',
     '- Before any paid call, ask with `hopp ask "<what it costs and why>" --label hopp.stage=<id> --label hopp.kind=paid --option Go --option Deny` and wait for Go. Never put a paid question into a submission.',

@@ -34,7 +34,8 @@ import type {
   SubmissionAnswer,
   TaskFeed,
 } from '../../shared/shell';
-import { ACCEPT, HARNESS_EFFORTS, HARNESSES, LABEL, RETURN } from '../../shared/shell';
+import { HARNESS_EFFORTS, HARNESSES, LABEL } from '../../shared/shell';
+import { submissionOptionKind } from '../../shared/submission';
 import { SLUG_PATTERN, slugify } from '../../shared/slug';
 import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
@@ -945,14 +946,14 @@ export class ShellService {
     });
   }
 
+  // answerSubmission sends one of the ask's options, exactly as written;
+  // the daemon refuses anything that is not one of them. A return option
+  // needs the text of what to fix.
   answerSubmission(askId: number, answer: SubmissionAnswer): Promise<Result<Ask>> {
     return guard(async () => {
-      if (answer.choice === 'Return') {
-        const text = (answer.text ?? '').trim();
-        if (!text) return fail('text_required', 'Say what should be fixed', 'text');
-        return ok(await this.d.client.answerAsk(askId, { choice: RETURN, answer: text }));
-      }
-      return ok(await this.d.client.answerAsk(askId, { choice: ACCEPT }));
+      const text = (answer.text ?? '').trim();
+      if (submissionOptionKind(answer.choice) === 'return' && !text) return fail('text_required', 'Say what should be fixed', 'text');
+      return ok(await this.d.client.answerAsk(askId, text ? { choice: answer.choice, answer: text } : { choice: answer.choice }));
     });
   }
 

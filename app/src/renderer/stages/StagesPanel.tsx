@@ -2,6 +2,7 @@
 // the artifacts of each substage. A row leads to its place in the feed; a
 // submitted stage leads to its submission block.
 import { Markdown } from '../ui/Markdown';
+import { returnedText } from '../../shared/submission';
 import { useEffect, useState } from 'react';
 import type { Artifact, Pipeline, ShellBridge, StageState, StageStatus } from '../../shared/shell';
 import { LABEL } from '../../shared/shell';
@@ -133,10 +134,10 @@ export function StagesPanel(props: {
                       Submitted · waiting for approval
                     </button>
                   )}
-                  {st.status === 'returned' && st.lastAnswer?.answer && (
+                  {st.status === 'returned' && st.lastAnswer && returnedText(st.lastAnswer) && (
                     <div className="stage-text">
                       Returned:
-                      <Markdown variant="compact" text={st.lastAnswer.answer} />
+                      <Markdown variant="compact" text={returnedText(st.lastAnswer)} />
                     </div>
                   )}
                   <p className="stage-flags">

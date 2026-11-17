@@ -96,4 +96,17 @@ describe('deriveStages', () => {
     // closed after the newer was opened: still submitted
     expect(status([started('spec', 1)], [old, newer])[0]).toBe('submitted');
   });
+
+  it('options of the orchestrator\'s own: every Accept variant accepts, Return returns, anything else returns', () => {
+    const opts = ['Accept: открыть PR и влить все три (app, toolkit-fix, vault)', 'Accept: только открыть PR, сливаю сам', 'Accept: оставить ветки как есть', 'Return'];
+    const p = [started('spec', 1)];
+    for (const c of opts.slice(0, 3)) {
+      expect(status(p, [submit('spec', 2, { options: opts, status: 'answered', choice: c, closed_at: 3 })])[0], c).toBe('accepted');
+    }
+    expect(status(p, [submit('spec', 2, { options: opts, status: 'answered', choice: 'Return', answer: 'x', closed_at: 3 })])[0]).toBe('returned');
+    // Never accepted by default: a text-only answer or a neutral option returns.
+    expect(status(p, [submit('spec', 2, { status: 'answered', choice: '', answer: 'just text', closed_at: 3 })])[0]).toBe('returned');
+    expect(status(p, [submit('spec', 2, { options: ['Merge', 'Wait'], status: 'answered', choice: 'Merge', closed_at: 3 })])[0]).toBe('returned');
+  });
 });
+
