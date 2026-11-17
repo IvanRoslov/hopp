@@ -10,7 +10,7 @@ import { makeRunner } from './shell/exec';
 import { registerShellIpc } from './shell/ipc';
 import { ShellService } from './shell/service';
 import { ShellStore } from './shell/store';
-import { loginShellPath, mergePath } from './shellEnv';
+import { ensureUtf8Locale, loginShellPath, mergePath } from './shellEnv';
 import { resolveExecutable } from './terminal/manager';
 import { TerminalManager } from './terminal/manager';
 import { createWindow } from './window';
@@ -19,6 +19,9 @@ import { createWindow } from './window';
 protocol.registerSchemesAsPrivileged([
   { scheme: ARTIFACT_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
+
+// Before anything is spawned: the terminal, the daemon and git inherit it.
+ensureUtf8Locale(process.env);
 
 const hoppHome = resolveHoppHome(process.env);
 // HOPP_APP_HOME keeps the app's own store (and its single-instance lock) apart

@@ -36,3 +36,15 @@ export function mergePath(current: string | undefined, login: string | undefined
   }
   return out.join(delimiter);
 }
+
+// A GUI app on macOS starts with no locale at all (no LANG, no LC_*). tmux
+// then treats its client as not UTF-8 and draws every non-ASCII character as
+// "_": the harness logo, the prompt mark, arrows. ensureUtf8Locale gives the
+// environment a UTF-8 locale when it has none, and leaves a UTF-8 one alone.
+export function ensureUtf8Locale(env: NodeJS.ProcessEnv): void {
+  const effective = env['LC_ALL'] || env['LC_CTYPE'] || env['LANG'] || '';
+  if (/utf-?8/i.test(effective)) return;
+  if (env['LC_ALL']) env['LC_ALL'] = 'en_US.UTF-8';
+  if (!env['LANG']) env['LANG'] = 'en_US.UTF-8';
+  env['LC_CTYPE'] = 'en_US.UTF-8';
+}

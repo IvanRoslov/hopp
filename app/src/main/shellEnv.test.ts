@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loginShellPath, mergePath } from './shellEnv';
+import { ensureUtf8Locale, loginShellPath, mergePath } from './shellEnv';
 
 let dir: string;
 beforeEach(() => {
@@ -36,5 +36,27 @@ describe('mergePath', () => {
     expect(mergePath('/usr/bin:/bin', '/home/u/.local/bin:/usr/bin')).toBe('/home/u/.local/bin:/usr/bin:/bin');
     expect(mergePath('/usr/bin', undefined)).toBe('/usr/bin');
     expect(mergePath(undefined, '/a')).toBe('/a');
+  });
+});
+
+
+describe('ensureUtf8Locale', () => {
+  const eff = (e: NodeJS.ProcessEnv) => e['LC_ALL'] || e['LC_CTYPE'] || e['LANG'];
+  it('gives an empty environment a UTF-8 locale', () => {
+    const e: NodeJS.ProcessEnv = {};
+    ensureUtf8Locale(e);
+    expect(eff(e)).toBe('en_US.UTF-8');
+    expect(e['LANG']).toBe('en_US.UTF-8');
+  });
+  it('leaves a UTF-8 locale alone', () => {
+    const e: NodeJS.ProcessEnv = { LANG: 'ru_RU.UTF-8' };
+    ensureUtf8Locale(e);
+    expect(e).toEqual({ LANG: 'ru_RU.UTF-8' });
+  });
+  it('overrides a non-UTF-8 locale, LC_ALL included', () => {
+    for (const e of [{ LANG: 'C' }, { LC_ALL: 'C', LANG: 'ru_RU.UTF-8' }, { LC_CTYPE: 'POSIX' }] as NodeJS.ProcessEnv[]) {
+      ensureUtf8Locale(e);
+      expect(eff(e)).toMatch(/UTF-8/);
+    }
   });
 });
