@@ -39,6 +39,9 @@ export interface OrchestratorContext {
   workers: WorkerFile[];
   toolsPrompt: string;
   extraSystemPrompt?: string;
+  // The human's request. It is also the first message; the text repeats it
+  // because a resumed session starts with this text and no conversation.
+  brief?: string;
   // The task's pipeline; null or absent for a task without one.
   pipeline?: Pipeline | null;
 }
@@ -131,21 +134,32 @@ export function orchestratorText(c: OrchestratorContext): string {
     '',
     '   Use only these profiles; the model of a session cannot change after launch. The worker inherits this task\'s labels and folder limits.',
     '',
-    `3. Workers report back to you with \`hopp send\`. Check on them with \`hopp ls --mine\`.`,
+    '3. A worker\'s report arrives in your input as a message, like the human\'s request did. Go on with your own part meanwhile, or wait; do not poll its folder, `git log` or `hopp ls` for it. `hopp ls --mine` shows your workers when you need their state.',
+    '',
+    '4. Once a worker\'s piece is reviewed and in your branch, stop it with `hopp kill <worker session>`; its folder and branch stay.',
     '',
     '## The human',
     '',
     'Ask the human with `hopp ask` when a decision is theirs. Workers never ask the human: they ask you.',
     '',
+    'Write to the human (asks, posts, lessons) in the language of the task\'s brief, whatever language you otherwise use.',
+    '',
     c.pipeline
       ? 'The task follows a pipeline (below): the human accepts it stage by stage in the feed. When the last stage is accepted, post a short summary of the whole task to the feed.'
-      : `When the work is ready, say so with \`hopp ask "${c.title}: ready for review" --option Accept --option Revise\` and wait for the answer. On Revise, continue with what the human asked for.`,
+      : 'When the work is ready, say so with `hopp ask "Ready for review: <what is done and where, in one line>" --option Accept --option Revise` and wait for the answer. On Revise, continue with what the human asked for.',
     '',
     'Record anything that would have made this task go better with `hopp lesson`.',
+    '',
+    '## After a restart',
+    '',
+    'When the human resumes a stopped task you start again with this text and an empty conversation. Before doing anything, find where the work stands: your branch (`git log`, `git status`), your workers (`hopp ls --mine`) and what was said (`hopp messages $HOPP_SESSION_ID`). Then continue from there; do not redo what is done.',
   ].join('\n');
+  const brief = (c.brief ?? '').trim();
+  const task = brief ? '## The task\n\n' + brief : undefined;
   return join([
     hoppLayer(),
     role,
+    task,
     projectLayer(c.project, true, c.worktreesDir),
     c.pipeline ? pipelineLayer(c.pipeline) : undefined,
     toolsLayer(c.toolsPrompt),

@@ -34,10 +34,10 @@ You want to run work through the hopp desktop app for the first time: create a p
    - Press the arrow button or ⌘↩. The task appears under **Work** and opens, reading *starting* until the daemon lists its session; the terminal then attaches.
 4. **Find its files.** With a repository: the worktree is `$HOPP_HOME/worktrees/<project>/<task id>` on branch `hopp/<task id>`. Without one: `$HOPP_HOME/work/<project>/<task id>`. The orchestrator's and workers' start texts are in `$HOPP_HOME/shell/tasks/<task id>/`. `···` → **Task details** shows the folder and the branch.
 5. **Work with it.** The terminal on the right is the orchestrator's own tmux session: type into it as into any terminal. The session picker above it switches to any worker of the task, with each session's state in words. Closing the window or quitting the app never stops a session.
-6. **Answer questions.** Everything waiting for you is listed at the top of the left column under **Waiting for you**, with the task under each question. Click a row: the task opens with the **Questions** column on the session that asked. Answer with the buttons, or type an answer when there are none. When the orchestrator thinks the work is ready it asks "<title>: ready for review" with **Accept** and **Revise**.
+6. **Answer questions.** Everything waiting for you is listed at the top of the left column under **Waiting for you**, with the task under each question. Click a row: the task opens with the **Questions** column on the session that asked. Answer with the buttons, or type an answer when there are none. When the orchestrator thinks the work is ready it asks "Ready for review: …" (what is done and where) with **Accept** and **Revise**, in the language of your brief.
 7. **Stop, resume, finish.** In `···`:
    - **Stop task** asks first and names how many child sessions stop with it;
-   - **Resume** restarts a stopped orchestrator;
+   - **Resume** restarts a stopped orchestrator with a fresh conversation; it reads its branch, workers and messages to find where the work stands;
    - **Finish task** stops everything and moves the task to **Recent** (the worktree and branch stay);
    - **Remove from list** appears once the orchestrator's session no longer runs.
 8. **A task with a pipeline.** Pick a **Pipeline** in New task (three starters come with the app: Development, Landing page, Promo video; edit them under **Pipelines**). Its stages show before you launch.

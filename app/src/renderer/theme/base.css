@@ -216,8 +216,11 @@ button.set-row:hover .nm { text-decoration: underline; text-decoration-color: va
 .term-bar { flex: none; display: flex; align-items: center; gap: 8px; margin-bottom: 14px; min-height: var(--control-h); }
 .term-box { flex: 1; min-height: 0; position: relative; background: var(--term); border-radius: var(--r-m); overflow: hidden; }
 .term-box .term-empty { padding: 16px 18px; }
-.term-box .terminal { position: absolute; inset: 16px 18px; }
-.term-box .terminal .xterm { height: 100%; }
+/* Our box around xterm. Not `.terminal`: xterm gives its own root that class,
+   and an inset meant for the box would apply twice (the fit then counts columns
+   the human never sees). No padding here either: the fit reads this box's width. */
+.term-box .term-host { position: absolute; inset: 16px 18px; }
+.term-box .term-host .xterm { height: 100%; }
 .term-box .xterm-viewport { scrollbar-width: thin; scrollbar-color: var(--tile-ink) transparent; background-color: var(--term) !important; }
 .term-box .xterm .xterm-screen, .term-box .xterm { background-color: var(--term); }
 .term-empty { color: var(--muted); font-size: var(--fs-small); }

@@ -9,7 +9,7 @@
 .legacy .frame-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .legacy .frame-header { height: var(--header-height); flex: none; display: flex; align-items: center; gap: var(--gap); padding: 0 var(--gap); border-bottom: 1px solid var(--border); }
 .legacy .frame-right-body { flex: 1; min-height: 0; position: relative; }
-.legacy .terminal { position: absolute; inset: 0; padding: var(--gap); background: var(--bg); }
+.legacy .term-host { position: absolute; inset: var(--gap); background: var(--bg); }
 .legacy .muted { color: var(--fg-muted); }
 .legacy .sessions-head { display: flex; justify-content: space-between; align-items: center; padding: var(--gap); color: var(--fg-muted); }
 .legacy .sessions-head label { display: flex; align-items: center; gap: 4px; }
