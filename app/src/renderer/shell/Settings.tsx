@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LessonsTab } from './Lessons';
 import { ModelsTab } from './Models';
 import { RepoLabel } from './repos';
 import type { Lesson, ModelProfile, ShellBridge, ShellState, Tool, ToolCatalog, ToolRules } from '../../shared/shell';
 import { cleanError } from '../errors';
-import { Dropdown } from '../ui/Dropdown';
 import { PlusIcon } from '../ui/icons';
 import { Switch } from '../ui/Switch';
 import { Tabs } from '../ui/Tabs';
 import type { Go, SettingsTab } from './route';
 
-const TABS: { id: SettingsTab; label: string }[] = [
+const tabs = (openLessons: number): { id: SettingsTab; label: string }[] => [
   { id: 'projects', label: 'Projects' },
   { id: 'models', label: 'Models' },
   { id: 'tools', label: 'Tools' },
-  { id: 'lessons', label: 'Lessons' },
+  { id: 'lessons', label: openLessons > 0 ? `Lessons · ${openLessons}` : 'Lessons' },
 ];
 
 function when(sec: number): string {
@@ -28,7 +28,11 @@ export function Settings(props: {
   profilesError: string | null;
   tab: SettingsTab;
   go: Go;
+  lessons: Lesson[] | null;
+  lessonsError: string | null;
+  reloadLessons: () => void;
 }) {
+  const open = (props.lessons ?? []).filter((l) => l.status === 'new').length;
   return (
     <>
       <div className="top">
@@ -37,7 +41,7 @@ export function Settings(props: {
       {/* The tabs stay put; only the tab's content scrolls under them. */}
       <div className="settings-head">
         <div className="settings-head-col">
-          <Tabs tabs={TABS} value={props.tab} onChange={(t) => props.go({ k: 'settings', tab: t })} />
+          <Tabs tabs={tabs(open)} value={props.tab} onChange={(t) => props.go({ k: 'settings', tab: t })} />
         </div>
       </div>
       <div className="page settings-page">
@@ -45,7 +49,9 @@ export function Settings(props: {
           {props.tab === 'projects' && <ProjectsTab state={props.state} go={props.go} />}
           {props.tab === 'models' && <ModelsTab shell={props.shell} profiles={props.profiles} error={props.profilesError} />}
           {props.tab === 'tools' && <ToolsTab shell={props.shell} />}
-          {props.tab === 'lessons' && <LessonsTab shell={props.shell} state={props.state} />}
+          {props.tab === 'lessons' && (
+            <LessonsTab shell={props.shell} state={props.state} lessons={props.lessons} error={props.lessonsError} reload={props.reloadLessons} go={props.go} />
+          )}
         </div>
       </div>
     </>
@@ -199,63 +205,3 @@ function ToolsTab(props: { shell: ShellBridge }) {
   );
 }
 
-function LessonsTab(props: { shell: ShellBridge; state: ShellState }) {
-  const [filter, setFilter] = useState<'new' | 'all'>('new');
-  const [lessons, setLessons] = useState<Lesson[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(() => {
-    props.shell.listLessons(filter).then(setLessons, (e) => setError(cleanError(e)));
-  }, [props.shell, filter]);
-  useEffect(load, [load]);
-
-  const taskTitle = (l: Lesson) => {
-    const id = l.labels?.['hopp.task'];
-    return id ? props.state.tasks.find((t) => t.id === id)?.title ?? id : null;
-  };
-
-  return (
-    <div data-testid="settings-lessons">
-      <Dropdown
-        label={filter === 'new' ? 'new' : 'all'}
-        testId="lesson-filter"
-        options={[
-          { value: 'new', label: 'new' },
-          { value: 'all', label: 'all' },
-        ]}
-        value={filter}
-        onChange={(v) => setFilter(v as 'new' | 'all')}
-      />
-      {error && <p className="subtle-note" role="alert">! {error}</p>}
-      <div className="lesson-list">
-        {!lessons && !error && <p className="loading-note">Loading…</p>}
-        {lessons?.length === 0 && <p className="subtle-note">{filter === 'new' ? 'No new lessons.' : 'No lessons yet.'}</p>}
-        {lessons?.map((l) => (
-          <div key={l.id} className="lesson" data-testid={`lesson-${l.id}`}>
-            <div className="body selectable">{l.body}</div>
-            <div className="meta">{[taskTitle(l), l.from, when(l.created_at)].filter(Boolean).join(' · ')}</div>
-            <div className="btns">
-              <span className="status-word">{l.status === 'new' ? 'new' : 'done'}</span>
-              {l.status === 'new' && (
-                <button
-                  type="button"
-                  className="c-btn"
-                  onClick={async () => {
-                    try {
-                      const r = await props.shell.closeLesson(l.id);
-                      if (!r.ok) setError(r.error.message);
-                    } catch (e) {
-                      setError(cleanError(e));
-                    }
-                    load();
-                  }}
-                >
-                  Mark as done
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}

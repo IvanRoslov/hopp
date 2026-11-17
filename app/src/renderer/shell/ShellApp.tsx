@@ -3,12 +3,14 @@ import type { HoppBridge } from '../../shared/bridge';
 import type { DaemonBridge } from '../../shared/bridge';
 import { hopp } from '../bridge';
 import { GithubProvider } from './repos';
-import { useAgentMail, useProfiles, useShellState, useWaiting } from '../data/hooks';
+import { useAgentMail, useLessons, useProfiles, useShellState, useWaiting } from '../data/hooks';
 import { waitingCount, waitingRows } from '../model/shellModel';
 import { useSessions } from '../sessions/useSessions';
 import { applyTheme, initialTheme, onSystemTheme, saveTheme, storedTheme, type Theme } from '../ui/theme';
 import { Workspace } from '../Workspace';
 import { AgentView, NewAgent } from './Agents';
+import { ProjectLessonsNote } from './Lessons';
+import { openLessonsOf } from '../model/lessons';
 import { NewTask } from './NewTask';
 import { Pipelines } from './Pipelines';
 import { ProjectForm } from './ProjectForm';
@@ -71,6 +73,8 @@ function Window(props: { bridge: HoppBridge }) {
   const { stream, sessions, error: sessionsError, refresh } = useSessions(bridge.daemon);
   const { waiting } = useWaiting(bridge.shell, bridge.daemon, stream, ready);
   const mail = useAgentMail(bridge.shell, bridge.daemon, stream, ready);
+  const lessons = useLessons(bridge.shell, bridge.daemon, stream, ready);
+  const openLessons = (lessons.lessons ?? []).filter((l) => l.status === 'new').length;
   const { profiles, error: profilesError } = useProfiles(bridge.shell);
   const [route, setRoute] = useState<Route>({ k: 'newTask' });
   const [theme, setTheme] = useState<Theme>(initialTheme);
@@ -203,6 +207,7 @@ function Window(props: { bridge: HoppBridge }) {
           onDone={() => setRoute({ k: 'settings', tab: 'projects' })}
           onCancel={() => setRoute({ k: 'settings', tab: 'projects' })}
           onRemoved={() => setRoute({ k: 'settings', tab: 'projects' })}
+          lessonsNote={<ProjectLessonsNote project={p} count={openLessonsOf(lessons.lessons, p.slug)} go={setRoute} />}
         />
       ) : (
         <div className="empty-center">This project was removed.</div>
@@ -210,18 +215,31 @@ function Window(props: { bridge: HoppBridge }) {
       break;
     }
     case 'settings':
-      view = <Settings shell={bridge.shell} state={state} profiles={profiles} profilesError={profilesError} tab={route.tab} go={setRoute} />;
+      view = (
+        <Settings
+          shell={bridge.shell}
+          state={state}
+          profiles={profiles}
+          profilesError={profilesError}
+          tab={route.tab}
+          go={setRoute}
+          lessons={lessons.lessons}
+          lessonsError={lessons.error}
+          reloadLessons={lessons.reload}
+        />
+      );
       break;
     default:
       view = (
         <NewTask
-          key={route.project ?? ''}
+          key={(route.project ?? '') + ':' + (route.brief ?? '')}
           shell={bridge.shell}
           projects={state.projects}
           pipelines={state.pipelines}
           profiles={profiles}
           profilesError={profilesError}
           initialProject={route.project}
+          initialBrief={route.brief}
           onCreated={(t) => setRoute({ k: 'task', id: t.id })}
         />
       );
@@ -235,6 +253,7 @@ function Window(props: { bridge: HoppBridge }) {
         waitingRows={rows}
         waitingByOwner={counts}
         mail={mail}
+        openLessons={openLessons}
         route={route}
         go={setRoute}
         onTheme={toggleTheme}

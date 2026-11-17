@@ -46,13 +46,14 @@ export function NewTask(props: {
   profiles: ModelProfile[] | null;
   profilesError: string | null;
   initialProject?: string;
+  initialBrief?: string;
   onCreated: (t: Task) => void;
 }) {
   const enabled = useMemo(() => (props.profiles ?? []).filter((p) => p.enabled), [props.profiles]);
   const last = useMemo(readLast, []);
   const firstProject = props.projects.find((p) => p.slug === props.initialProject) ?? props.projects.find((p) => p.slug === last.project) ?? props.projects[0];
 
-  const [brief, setBrief] = useState('');
+  const [brief, setBrief] = useState(props.initialBrief ?? '');
   const [project, setProject] = useState(firstProject?.slug ?? '');
   const [orchestrator, setOrchestrator] = useState('');
   const [workers, setWorkers] = useState<string[] | null>(null);

@@ -244,6 +244,9 @@ export interface ToolRules {
   modifiedAt: number;
 }
 
+// What a lesson is about (its `hopp.about` label); absent is unsorted.
+export type LessonAbout = 'hopp' | 'project';
+
 export interface Lesson {
   id: number;
   from: string;
@@ -435,6 +438,15 @@ export interface ShellBridge {
 
   listLessons(status: 'new' | 'closed' | 'all'): Promise<Lesson[]>;
   closeLesson(id: number): Promise<Result<null>>;
+  // Sorts a lesson: about hopp, about a project, or back to unsorted (null).
+  setLessonAbout(id: number, about: LessonAbout | null): Promise<Result<null>>;
+  // The project a project lesson is about (its `hopp.project`), or none.
+  setLessonProject(id: number, slug: string | null): Promise<Result<null>>;
+  // Appends the lesson's text to its project's Guardrails as a bullet and
+  // closes it.
+  lessonToGuardrails(id: number): Promise<Result<null>>;
+  // The brief of a task that works through a project's open lessons.
+  triageLessonsBrief(projectSlug: string): Promise<string>;
 
   // Pipelines (kept by the app; in state().pipelines).
   createPipeline(input: PipelineInput): Promise<Result<Pipeline>>;

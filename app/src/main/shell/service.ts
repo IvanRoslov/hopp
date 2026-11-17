@@ -19,6 +19,7 @@ import type {
   ToolCatalog,
   ToolRules,
   Lesson,
+  LessonAbout,
   Artifact,
   GithubRepo,
   GithubStatus,
@@ -774,6 +775,24 @@ export class ShellService {
       await this.d.client.closeLesson(id);
       return ok(null);
     });
+  }
+
+  // Lesson kinds: the daemon half is rocket2-f7's (branch lessons-kinds);
+  // until its contract lands these say so instead of pretending.
+  setLessonAbout(_id: number, _about: LessonAbout | null): Promise<Result<null>> {
+    return Promise.resolve(fail('not_ready', 'Sorting lessons needs the daemon half of lesson kinds'));
+  }
+
+  setLessonProject(_id: number, _slug: string | null): Promise<Result<null>> {
+    return Promise.resolve(fail('not_ready', 'Sorting lessons needs the daemon half of lesson kinds'));
+  }
+
+  lessonToGuardrails(_id: number): Promise<Result<null>> {
+    return Promise.resolve(fail('not_ready', 'Moving a lesson to Guardrails needs the daemon half of lesson kinds'));
+  }
+
+  async triageLessonsBrief(slug: string): Promise<string> {
+    return `Work through the open lessons of project ${slug}.`;
   }
 
   // ---- pipelines -------------------------------------------------------------
