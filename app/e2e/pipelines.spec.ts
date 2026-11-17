@@ -98,7 +98,8 @@ test('a pipeline task from the editor to an accepted stage', async () => {
     await block.getByLabel('What should be fixed?').fill('Also cover the terminal colors.');
     await block.getByRole('button', { name: 'Return' }).click();
     await expect.poll(() => w.d.asks.find((a) => a.id === 101)).toMatchObject({ status: 'answered', choice: 'Return', answer: 'Also cover the terminal colors.' });
-    await expect(page.getByText(/Analysis is ready — You answered: Return — Also cover the terminal colors\./)).toBeVisible();
+    // The answered question, then the answer line, the text of what to fix as markdown.
+    await expect(page.locator('.entry-quiet').filter({ hasText: 'Analysis is ready' }).locator('.entry-answer')).toHaveText('You answered: Return — Also cover the terminal colors.');
 
     // Fixed, submitted again with version 2, accepted.
     artifact(2);

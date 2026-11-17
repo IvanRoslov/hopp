@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Markdown } from '../ui/Markdown';
 import type { ModelProfile, Pipeline, Project, ShellBridge, ShellError, Task, TaskInput } from '../../shared/shell';
 import { slugify } from '../../shared/slug';
 import { cleanError } from '../errors';
@@ -259,7 +260,9 @@ function StageText(props: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <div className={'ds' + (long && !open ? ' folded' : '')}>{props.text}</div>
+      <div className={'ds' + (long && !open ? ' folded' : '')}>
+        <Markdown variant="compact" text={props.text} />
+      </div>
       {long && (
         <button type="button" className="link-btn" onClick={() => setOpen((o) => !o)}>
           {open ? 'Show less' : 'Show all'}

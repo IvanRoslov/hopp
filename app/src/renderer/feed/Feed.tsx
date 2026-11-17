@@ -9,7 +9,8 @@ import { ArtifactTile } from '../artifacts/Tile';
 import { cleanError } from '../errors';
 import { Dropdown } from '../ui/Dropdown';
 import { UpIcon } from '../ui/icons';
-import { answerLine, askKind, author, clock, feedEntries, findArtifact, stageTag, type Entry } from './model';
+import { Markdown, type MarkdownLinks } from '../ui/Markdown';
+import { answerLine, askKind, author, clock, feedEntries, findArtifact, resolveArtifactRef, stageTag, type Entry } from './model';
 
 export interface FeedProps {
   bridge: HoppBridge;
@@ -111,11 +112,18 @@ export function Feed(props: FeedProps) {
 
 function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) {
   const { entry: e, task } = props;
+  // A link or image naming another artifact of the task opens it.
+  const links: MarkdownLinks = {
+    artifact: (ref) => {
+      const x = resolveArtifactRef(props.feed.artifacts, ref);
+      return x ? { url: props.bridge.shell.artifactUrl(x.id), open: () => props.onOpenArtifact(x) } : null;
+    },
+  };
   if (e.kind === 'brief') {
     return (
       <article className="entry">
         <Meta who="You" ts={e.ts} tag="" />
-        <div className="entry-body selectable">{e.body}</div>
+        <Markdown variant="compact" className="entry-body selectable" text={e.body} />
       </article>
     );
   }
@@ -125,7 +133,7 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
     return (
       <article className="entry" data-stage={p.labels['hopp.stage'] ?? undefined}>
         <Meta who={author(p.from, task)} ts={p.created_at} tag={tag} />
-        <div className="entry-body selectable">{p.body}</div>
+        <Markdown variant="compact" className="entry-body selectable" text={p.body} links={links} />
         <Attachments refs={p.attachments} {...props} />
       </article>
     );
@@ -139,7 +147,17 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
       <article className="entry quiet" data-ask={a.id} data-stage={a.labels?.['hopp.stage'] ?? undefined}>
         <Meta who={author(a.from, task)} ts={a.created_at} tag={tag} />
         <div className="entry-quiet selectable">
-          {a.body} — {answerLine(a)}
+          <Markdown variant="compact" text={a.body} links={links} />
+          <div className="entry-answer">
+            {a.status !== 'withdrawn' && a.answer?.trim() ? (
+              <>
+                {'You answered: ' + (a.choice?.trim() ? a.choice + ' — ' : '')}
+                <Markdown variant="compact" text={a.answer} links={links} />
+              </>
+            ) : (
+              answerLine(a)
+            )}
+          </div>
         </div>
       </article>
     );
@@ -147,7 +165,7 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
   return (
     <article className={'entry open' + (marked ? ' marked' : '')} data-ask={a.id} data-stage={a.labels?.['hopp.stage'] ?? undefined} data-testid={`ask-${a.id}`}>
       <Meta who={author(a.from, task)} ts={a.created_at} tag={tag} />
-      <div className="entry-body selectable">{a.body}</div>
+      <Markdown variant="compact" className="entry-body selectable" text={a.body} links={links} />
       <Attachments refs={a.attachments ?? []} {...props} />
       {kind === 'submission' ? (
         <SubmissionBlock ask={a} {...props} />

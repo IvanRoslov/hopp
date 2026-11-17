@@ -310,8 +310,9 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .pl-chain { font-size: var(--fs-small); color: var(--muted); padding: 4px 8px 12px; line-height: 1.6; }
 .pl-preview-stage { padding: 12px 0 12px; border-bottom: 1px solid var(--line); }
 .pl-preview-stage .nm { font-size: var(--fs-name); }
-.pl-preview-stage .ds { font-size: var(--fs-small); color: var(--muted); margin-top: 2px; white-space: pre-wrap; }
-.pl-preview-stage .ds.folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.pl-preview-stage .ds { font-size: var(--fs-small); color: var(--muted); margin-top: 2px; }
+.pl-preview-stage .ds .md { font-size: inherit; color: inherit; }
+.pl-preview-stage .ds.folded { max-height: 4.8em; overflow: hidden; }
 .pl-preview-stage .link-btn { margin: 2px 0 0 -6px; }
 .add-stage { margin-top: 18px; }
 .term-attaching { position: absolute; left: 0; top: 0; color: var(--term-note); font: var(--fs-mono) / 1.6 var(--font-mono); pointer-events: none; }
