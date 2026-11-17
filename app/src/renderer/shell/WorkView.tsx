@@ -212,6 +212,12 @@ export function TerminalArea(props: {
 
   // A new session or a fresh attach starts with an open terminal.
   useEffect(() => setClosed(false), [selectedId, nonce]);
+  // A session that stops unmounts its terminal; when it runs again (Resume,
+  // Start) the terminal mounts and attaches afresh, so the old "closed" goes.
+  // A detach from a session that keeps running still waits for Reattach.
+  useEffect(() => {
+    if (!props.attachable) setClosed(false);
+  }, [props.attachable]);
 
   const options = props.tree.map((s) => ({ value: s.id, label: `${s.id} · ${sessionWord(s)}`, dim: !(s.state === 'running' || s.state === 'spawning') }));
   return (

@@ -24,7 +24,7 @@ The daemon knows sessions, folders and labels; the app adds projects, tasks and 
 
 ### After the launch
 
-9. Stop kills the task's session tree, Resume restores the orchestrator, and Finish ends the tree as done and moves the task to Recent; a finished task cannot be resumed, and a running one cannot be removed from the list.
+9. Stop kills the task's session tree, Resume restores the orchestrator and sends it a message to find where the work stands (a restored agent starts with no conversation; a long-lived agent's Start after a stop is told to read its mailbox), and Finish ends the tree as done and moves the task to Recent; a finished task cannot be resumed, and a running one cannot be removed from the list.
 10. A long-lived agent's name is its session id and its mailbox: creating one registers the mailbox, starting it restores its session if it ran before or launches it in its folder with only the hopp and tools layers. No code depends on an agent's name.
 11. The tool catalog is read with `hopp tools … --json` under the app's `HOPP_HOME`, so the app and the agents see the same tools; the app writes the rules file itself.
 12. Every call from the page is checked in the main process: a malformed call gets an error back and never throws there.

@@ -256,3 +256,10 @@ export function pipelineLayer(p: Pipeline): string {
   );
   return lines.join('\n');
 }
+
+// The first message after a restore: the agent starts again with its start
+// text and an empty conversation (no harness restores it).
+export const RESUMED_ORCHESTRATOR =
+  'You were restarted and your earlier conversation is gone. Follow "After a restart" in your instructions: find where the work stands (your branch, `hopp ls --mine`, `hopp messages $HOPP_SESSION_ID`), then continue the task. Do not redo what is done.';
+export const RESUMED_AGENT =
+  'Your session was restarted and your earlier conversation is gone. Read what waits for you with `hopp inbox`, see what was said with `hopp messages $HOPP_SESSION_ID`, then carry on.';

@@ -32,7 +32,7 @@ import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/cli
 import { RunError, type Runner } from './exec';
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
-import { agentText, allowedRepos, orchestratorText, workerText, type WorkerFile } from './startText';
+import { agentText, allowedRepos, orchestratorText, RESUMED_AGENT, RESUMED_ORCHESTRATOR, workerText, type WorkerFile } from './startText';
 import type { ShellStore } from './store';
 
 export interface ShellDeps {
@@ -100,12 +100,18 @@ async function writeAtomic(path: string, text: string): Promise<void> {
   }
 }
 
-// taskTitle: the given title, else the brief's first line cut to 60.
+// taskTitle: the given title, else the brief's first line, cut to 60
+// characters at a word boundary with an ellipsis when it is longer.
 export function taskTitle(input: Pick<TaskInput, 'title' | 'brief'>): string {
   const t = (input.title ?? '').trim();
   if (t) return t.split('\n')[0]!.slice(0, 200);
-  const first = (input.brief ?? '').trim().split('\n')[0]!.trim();
-  return [...first].slice(0, TITLE_MAX).join('').trim();
+  const first = [...(input.brief ?? '').trim().split('\n')[0]!.trim()];
+  if (first.length <= TITLE_MAX) return first.join('');
+  // Room for the ellipsis; back up to the last space if there is one.
+  const head = first.slice(0, TITLE_MAX - 1).join('');
+  const space = head.lastIndexOf(' ');
+  const cut = space > 0 ? head.slice(0, space) : head;
+  return cut.replace(/[\s,;:.\-–—]+$/u, '') + '…';
 }
 
 // uniqueId returns base, or base-2, base-3, … : the first that taken()
@@ -436,8 +442,19 @@ export class ShellService {
       if (!s) return fail('session_missing', `The task's session ${t.sessionId} is gone from the daemon`);
       if (LIVE.has(s.state)) return ok(null);
       await this.d.client.restoreSession(t.sessionId);
-      return ok(null);
+      return this.tellRestarted(t.sessionId, RESUMED_ORCHESTRATOR);
     });
+  }
+
+  // tellRestarted: a restore relaunches the agent with its start text but no
+  // first message and no conversation, so it would sit at an empty prompt.
+  private async tellRestarted(session: string, body: string): Promise<Result<null>> {
+    try {
+      await this.d.client.sendMessage({ to: session, body });
+    } catch (err) {
+      return fail('resume_message', `${session} restarted, but telling it to continue failed: ${err instanceof Error ? err.message : String(err)}. Write to it in its terminal.`);
+    }
+    return ok(null);
   }
 
   finishTask(id: string): Promise<Result<null>> {
@@ -511,7 +528,7 @@ export class ShellService {
           return fail('agent_done', `The session "${name}" ended as done and cannot be restored; remove its record with \`hopp rm ${name}\` to start it fresh`);
         }
         await this.d.client.restoreSession(name);
-        return ok(null);
+        return this.tellRestarted(name, RESUMED_AGENT);
       }
       const prof = (await this.listProfiles()).find((p) => p.name === a.profile);
       if (!prof || !prof.enabled) return fail('profile_unknown', `The agent's profile "${a.profile}" is not enabled`);

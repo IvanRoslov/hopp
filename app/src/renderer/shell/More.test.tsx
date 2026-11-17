@@ -177,6 +177,29 @@ describe('day-one fixes', () => {
     expect(screen.queryByRole('button', { name: 'Reattach' })).toBeNull();
   });
 
+  // Live run, 2026-11-17: after Stop then Resume the pane said "Terminal
+  // closed. Reattach" although the session ran again.
+  it('attaches by itself when the session runs again', async () => {
+    const f = task();
+    await mount(f);
+    fireEvent.click(screen.getByTestId('task-row'));
+    expect(ends.mounts).toBe(1);
+    const setState = async (state: 'killed' | 'running') => {
+      f.db.sessions = [makeSession('orc', { state })];
+      act(() => f.emit('session.state_changed', 'orc'));
+      await flush();
+    };
+    act(() => ends.cbs.get('orc')!());
+    await setState('killed');
+    await setState('running');
+    expect(ends.mounts).toBe(2);
+    expect(screen.queryByRole('button', { name: 'Reattach' })).toBeNull();
+    // A detach while the session keeps running still waits for the human.
+    act(() => ends.cbs.get('orc')!());
+    expect(screen.getByRole('button', { name: 'Reattach' })).toBeTruthy();
+    expect(ends.mounts).toBe(2);
+  });
+
   it('"Sent" ends when the daemon cannot confirm the answer, or after a while', async () => {
     const q = { asked_at: 1, questions: [{ question: 'Run?', header: '', multi_select: false, options: [{ label: 'Yes' }] }] };
     const f = fakeBridge({ sessions: [makeSession('orc', { question: q })], shell: { state: { ...base, tasks: [makeTask('t', 'p', { sessionId: 'orc' })] } } });

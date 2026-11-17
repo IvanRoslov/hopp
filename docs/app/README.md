@@ -24,7 +24,7 @@ The desktop app is a window onto the daemon: it lists the daemon's sessions, ope
 6. Closing a terminal, switching sessions, closing the window or quitting the app hangs up that client, so tmux detaches it and the session keeps running.
 7. The terminal changes size only when its own box does (the window, a column opening or closing, or the human dragging a column's width); a question arriving or the list updating never resizes it.
 8. While another tmux client of a different size is attached, the window takes tmux's `window-size` rule (by default `latest`: the size of the client that was used last), and the larger client shows dots in the area the window does not cover.
-9. When the session ends or the human detaches, the terminal prints one line saying it closed and does not reconnect by itself; a Reattach button opens it again while the session runs.
+9. When the session ends or the human detaches, the terminal prints one line saying it closed; after a detach a Reattach button opens it again while the session runs, and a session that runs again (Resume, Start) attaches by itself.
 
 ### Questions, and running it
 

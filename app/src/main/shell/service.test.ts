@@ -413,7 +413,14 @@ describe('task launch', () => {
   });
 
   it('title and id helpers', async () => {
-    expect(taskTitle({ brief: '  ' + 'a'.repeat(70) + '\nmore' })).toBe('a'.repeat(60));
+    // One word longer than the limit is cut, with an ellipsis.
+    expect(taskTitle({ brief: '  ' + 'a'.repeat(70) + '\nmore' })).toBe('a'.repeat(59) + '…');
+    // Live run: "… commit them on your bra" — cut at a word boundary instead.
+    expect(taskTitle({ brief: 'Add two files to this repository and commit them on your branch.\nmore' }))
+      .toBe('Add two files to this repository and commit them on your…');
+    // A first line that fits stays as it is.
+    expect(taskTitle({ brief: 'a'.repeat(60) })).toBe('a'.repeat(60));
+    expect(taskTitle({ brief: 'Fix the header, then the footer' })).toBe('Fix the header, then the footer');
     expect(taskTitle({ title: ' Given ', brief: 'x' })).toBe('Given');
     const long = 'x'.repeat(45);
     expect(await uniqueId(long, (c) => c === 'x'.repeat(40))).toBe('x'.repeat(38) + '-2');
@@ -440,9 +447,15 @@ describe('task lifecycle', () => {
     expect(d.sessions.map((s) => [s.id, s.state])).toEqual([['fix-the-header', 'killed'], ['w1', 'killed']]);
     expect(await svc.resumeTask('fix-the-header')).toEqual({ ok: true, value: null });
     expect(d.sessions.find((s) => s.id === 'fix-the-header')!.state).toBe('running');
+    // A restore starts the agent with no conversation: it is told to pick up.
+    const told = d.messages.filter((m) => m.to === 'fix-the-header');
+    expect(told).toHaveLength(1);
+    expect(told[0]!.body).toContain('After a restart');
+    expect(told[0]!.from).toBeUndefined();
     // resuming a running task changes nothing
     expect((await svc.resumeTask('fix-the-header')).ok).toBe(true);
     expect(d.requests.filter((r) => r.url.endsWith('/restore'))).toHaveLength(1);
+    expect(d.messages.filter((m) => m.to === 'fix-the-header')).toHaveLength(1);
   });
 
   it('finish stops everything as done and moves the task to Recent, keeping its folder', async () => {
@@ -506,6 +519,10 @@ describe('long-lived agents', () => {
     expect((await svc.startAgent('cto')).ok).toBe(true);
     expect(d.sessions[0]!.state).toBe('running');
     expect(d.created).toHaveLength(1);
+    // The restored agent is told its conversation is gone and where its mail is.
+    const told = d.messages.filter((m) => m.to === 'cto');
+    expect(told).toHaveLength(1);
+    expect(told[0]!.body).toContain('hopp inbox');
   });
 
   it('an agent whose session ended done says how to start fresh', async () => {

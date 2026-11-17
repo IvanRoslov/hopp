@@ -27,7 +27,7 @@ You want to run work through the hopp desktop app for the first time: create a p
      - **Guardrails** — text every orchestrator of this project gets at start (for example "no paid actions without my go").
    - An error appears next to the field it is about; nothing you typed is lost.
 3. **Launch a task.** In **New task**:
-   - write **What needs to be done?** (the first line becomes the title);
+   - write **What needs to be done?** (the first line becomes the title, cut at a word with "…" past 60 characters);
    - pick **Project**, **Orchestrator** (an enabled model profile; it cannot be changed after launch) and **Workers** (the profiles the orchestrator may launch workers with);
    - **Pipeline** stays **No pipeline** for a plain task;
    - **More** holds a **Title**, a **Session name** (the orchestrator's session id) and an **Extra system prompt**.
@@ -37,7 +37,7 @@ You want to run work through the hopp desktop app for the first time: create a p
 6. **Answer questions.** Everything waiting for you is listed at the top of the left column under **Waiting for you**, with the task under each question. Click a row: the task opens with the **Questions** column on the session that asked. Answer with the buttons, or type an answer when there are none. When the orchestrator thinks the work is ready it asks "Ready for review: …" (what is done and where) with **Accept** and **Revise**, in the language of your brief.
 7. **Stop, resume, finish.** In `···`:
    - **Stop task** asks first and names how many child sessions stop with it;
-   - **Resume** restarts a stopped orchestrator with a fresh conversation; it reads its branch, workers and messages to find where the work stands;
+   - **Resume** restarts a stopped orchestrator with a fresh conversation and tells it to read its branch, workers and messages to find where the work stands; the terminal attaches again by itself;
    - **Finish task** stops everything and moves the task to **Recent** (the worktree and branch stay);
    - **Remove from list** appears once the orchestrator's session no longer runs.
 8. **A task with a pipeline.** Pick a **Pipeline** in New task (three starters come with the app: Development, Landing page, Promo video; edit them under **Pipelines**). Its stages show before you launch.
