@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ensureUtf8Locale, loginShellPath, mergePath } from './shellEnv';
+import { ensureUtf8Locale, loginShellPath, mergePath, readPathCache, writePathCache } from './shellEnv';
 
 let dir: string;
 beforeEach(() => {
@@ -58,5 +58,21 @@ describe('ensureUtf8Locale', () => {
       ensureUtf8Locale(e);
       expect(eff(e)).toMatch(/UTF-8/);
     }
+  });
+});
+
+describe('the remembered PATH', () => {
+  it('round-trips, creating its folder', () => {
+    const f = join(dir, 'deep', 'login-path');
+    expect(readPathCache(f)).toBeUndefined();
+    writePathCache(f, '/a/bin:/b/bin');
+    expect(readPathCache(f)).toBe('/a/bin:/b/bin');
+  });
+  it('ignores an empty or multi-line file', () => {
+    const f = join(dir, 'login-path');
+    writeFileSync(f, '\n');
+    expect(readPathCache(f)).toBeUndefined();
+    writeFileSync(f, '/a\n/b\n');
+    expect(readPathCache(f)).toBeUndefined();
   });
 });

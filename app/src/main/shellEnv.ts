@@ -3,13 +3,15 @@
 // commands it runs, need the PATH the user's own shell has, so the app reads
 // it from a login shell once at startup.
 import { execFile } from 'node:child_process';
-import { delimiter } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { delimiter, dirname } from 'node:path';
 
 const MARK = '__HOPP_PATH__';
 
 // loginShellPath runs the user's shell as an interactive login shell and
-// returns its PATH; undefined when the shell fails or takes too long.
-export function loginShellPath(shell: string, timeoutMs = 3000): Promise<string | undefined> {
+// returns its PATH; undefined when the shell fails or takes too long. A
+// shell with a heavy profile can need ten seconds and more, hence the bound.
+export function loginShellPath(shell: string, timeoutMs = 30_000): Promise<string | undefined> {
   return new Promise((resolve) => {
     try {
       execFile(
@@ -47,4 +49,25 @@ export function ensureUtf8Locale(env: NodeJS.ProcessEnv): void {
   if (env['LC_ALL']) env['LC_ALL'] = 'en_US.UTF-8';
   if (!env['LANG']) env['LANG'] = 'en_US.UTF-8';
   env['LC_CTYPE'] = 'en_US.UTF-8';
+}
+
+// The login shell can be slow, so its PATH is remembered between runs: the
+// next start uses the remembered one at once and refreshes it in the
+// background. readPathCache returns undefined when nothing usable is stored.
+export function readPathCache(file: string): string | undefined {
+  try {
+    const v = readFileSync(file, 'utf8').trim();
+    return v && !v.includes('\n') ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writePathCache(file: string, path: string): void {
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, path + '\n');
+  } catch {
+    // a cache that cannot be written only costs the next start its wait
+  }
 }

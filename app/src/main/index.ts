@@ -10,7 +10,7 @@ import { makeRunner } from './shell/exec';
 import { registerShellIpc } from './shell/ipc';
 import { ShellService } from './shell/service';
 import { ShellStore } from './shell/store';
-import { ensureUtf8Locale, loginShellPath, mergePath } from './shellEnv';
+import { ensureUtf8Locale, loginShellPath, mergePath, readPathCache, writePathCache } from './shellEnv';
 import { resolveExecutable } from './terminal/manager';
 import { TerminalManager } from './terminal/manager';
 import { createWindow } from './window';
@@ -50,9 +50,17 @@ const client = new DaemonClient(socketPath);
 // The PATH of the user's login shell, read once in the background. Starting
 // the daemon and opening a terminal wait for it, so both see the same tools
 // the user's own terminal does; the window does not wait.
-const envReady = loginShellPath(process.env['SHELL'] || '/bin/zsh').then((p) => {
+const pathCache = join(appHome, 'login-path');
+const cachedPath = readPathCache(pathCache);
+if (cachedPath) process.env['PATH'] = mergePath(process.env['PATH'], cachedPath);
+const freshPath = loginShellPath(process.env['SHELL'] || '/bin/zsh').then((p) => {
+  if (!p) return;
   process.env['PATH'] = mergePath(process.env['PATH'], p);
+  writePathCache(pathCache, p);
 });
+// With a remembered PATH nothing waits for the shell; without one (the first
+// start) the daemon and the terminal wait until the shell has answered.
+const envReady: Promise<void> = cachedPath ? Promise.resolve() : freshPath;
 
 const terminals = new TerminalManager({
   attachCommand: async (id) => {
