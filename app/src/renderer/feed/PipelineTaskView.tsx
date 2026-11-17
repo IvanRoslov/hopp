@@ -149,6 +149,7 @@ export function PipelineTaskView(props: PipelineTaskViewProps) {
           error={error}
           reload={() => void reload()}
           stageFilter={feedStage}
+          stages={states}
           onStageFilter={setFeedStage}
           onOpenArtifact={openArtifact}
           onAllArtifacts={(stageId) => {

@@ -3,7 +3,7 @@
 // orchestrator. Answered questions are quiet lines; open ones are blocks.
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { HoppBridge } from '../../shared/bridge';
-import type { Artifact, Task, TaskFeed } from '../../shared/shell';
+import type { Artifact, StageState, Task, TaskFeed } from '../../shared/shell';
 import type { Ask } from '../../shared/types';
 import { ArtifactTile } from '../artifacts/Tile';
 import { cleanError } from '../errors';
@@ -23,6 +23,8 @@ export interface FeedProps {
   onOpenArtifact: (a: Artifact) => void;
   onAllArtifacts: (stageId: string) => void;
   status?: React.ReactNode;
+  // The stages as derived from the feed; they name substages.
+  stages?: StageState[];
   // Scroll to this ask's block and mark it.
   focusAskId?: number;
   // Scroll to the first entry of this stage (set by the stages panel).
@@ -119,7 +121,7 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
   }
   if (e.kind === 'post') {
     const p = e.post;
-    const tag = stageTag(p, task.pipeline);
+    const tag = stageTag(p, task.pipeline, props.stages);
     return (
       <article className="entry" data-stage={p.labels['hopp.stage'] ?? undefined}>
         <Meta who={author(p.from, task)} ts={p.created_at} tag={tag} />
@@ -130,7 +132,7 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
   }
   const a = e.ask;
   const kind = askKind(a);
-  const tag = stageTag(a, task.pipeline);
+  const tag = stageTag(a, task.pipeline, props.stages);
   const marked = props.focused === a.id;
   if (a.status !== 'open') {
     return (

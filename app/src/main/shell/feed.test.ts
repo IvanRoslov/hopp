@@ -118,6 +118,9 @@ describe('a task with a pipeline', () => {
     expect(sp).toContain('hopp artifact publish <file> --name <name> --label hopp.stage=<id>');
     expect(sp).toContain('--label hopp.kind=submission --option Accept --option Return --attach <name>@<version>');
     expect(sp).toContain('hopp.substage=<slug>');
+    // Live run: "its two labels" was read as "on the declaring post only".
+    expect(sp).not.toContain('its two labels');
+    expect(sp).toContain('put `--label hopp.substage=<slug>` and `--label "hopp.substage_title=<title>"` on every post and artifact of that substage');
     expect(sp).not.toContain('ready for review" --option Accept --option Revise');
     expect(sp.indexOf('# Pipeline')).toBeLessThan(sp.indexOf('## Tools'));
   });

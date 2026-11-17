@@ -11,8 +11,25 @@ export function ArtifactThumb(props: { shell: ShellBridge; artifact: Artifact })
   // A file that does not load (moved, unreadable) shows the calm placeholder,
   // never the browser's broken-image mark.
   const [failed, setFailed] = useState(false);
+  // A vector, or a picture smaller than its tile, is drawn whole: cropping it
+  // to fill the tile cuts an icon in half.
+  const svg = a.mime === 'image/svg+xml' || /\.svg$/i.test(a.filename);
+  const [small, setSmall] = useState(false);
   if (kind === 'image' && !failed) {
-    return <img className="af-thumb" src={props.shell.artifactUrl(a.id)} alt="" draggable={false} loading="lazy" onError={() => setFailed(true)} />;
+    return (
+      <img
+        className={'af-thumb' + (svg ? ' af-whole af-vector' : small ? ' af-whole' : '')}
+        src={props.shell.artifactUrl(a.id)}
+        alt=""
+        draggable={false}
+        loading="lazy"
+        onLoad={(e) => {
+          const i = e.currentTarget;
+          setSmall(i.naturalWidth > 0 && i.naturalWidth <= i.clientWidth && i.naturalHeight <= i.clientHeight);
+        }}
+        onError={() => setFailed(true)}
+      />
+    );
   }
   if (kind === 'video' && !failed) {
     return (

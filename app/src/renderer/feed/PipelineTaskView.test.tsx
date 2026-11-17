@@ -62,7 +62,8 @@ describe('PipelineTaskView feed', () => {
     await mount();
     expect(screen.getByText('Make a promo video from the brief.')).toBeTruthy();
     expect(screen.getAllByText('Orchestrator').length).toBeGreaterThan(0);
-    expect(screen.getByText('Scenes · Scene 2', { selector: '.entry-meta span' })).toBeTruthy();
+    // The post declares the substage's title; the ask with the slug alone shows it too.
+    expect(screen.getAllByText('Scenes · Scene 2', { selector: '.entry-meta span' })).toHaveLength(2);
     expect(screen.getAllByTestId('artifact-tile-scene-2@2').length).toBeGreaterThan(0);
     expect(screen.getByText(/How warm\? — You answered: Warmer/)).toBeTruthy();
     expect(screen.getByText(/Script is ready — You answered: Accept/)).toBeTruthy();

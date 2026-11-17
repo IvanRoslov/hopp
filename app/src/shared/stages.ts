@@ -36,8 +36,15 @@ export function deriveStages(pipeline: Pipeline, posts: Post[], asks: Ask[]): St
 
   const noteSubstage = (st: StageState, l: Record<string, string>) => {
     const slug = l[LABEL.substage];
-    if (!slug || st.substages.some((x) => x.slug === slug)) return;
-    st.substages.push({ slug, title: l[LABEL.substageTitle] || slug });
+    if (!slug) return;
+    const title = l[LABEL.substageTitle];
+    const known = st.substages.find((x) => x.slug === slug);
+    // The first title seen names it, even when it came after the first post.
+    if (known) {
+      if (title && known.title === slug) known.title = title;
+      return;
+    }
+    st.substages.push({ slug, title: title || slug });
   };
   const start = (st: StageState) => {
     if (st.status === 'not_started' || st.status === 'returned') st.status = 'started';

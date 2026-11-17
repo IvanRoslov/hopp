@@ -1,6 +1,6 @@
 // The feed's pure model: what entries a task's feed shows, in what order,
 // with which author and stage tag. No React here.
-import { KIND_PAID, KIND_SUBMISSION, LABEL, type Artifact, type Pipeline, type Post, type Task, type TaskFeed } from '../../shared/shell';
+import { KIND_PAID, KIND_SUBMISSION, LABEL, type Artifact, type Pipeline, type Post, type StageState, type Task, type TaskFeed } from '../../shared/shell';
 import type { Ask } from '../../shared/types';
 
 export type Entry =
@@ -43,12 +43,16 @@ export function author(from: string, task: Task): string {
   return from;
 }
 
-// stageTag: "Stage" or "Stage · Substage" for the labels of an item.
-export function stageTag(x: { labels: Record<string, string> | null }, pipeline: Pipeline | null): string {
+// stageTag: "Stage" or "Stage · Substage" for the labels of an item. The
+// substage's title is the one the stage's substages know (the first title
+// seen for that slug), since an agent may label only one post with it.
+export function stageTag(x: { labels: Record<string, string> | null }, pipeline: Pipeline | null, stages: StageState[] = []): string {
   const l = labelsOf(x);
   const st = pipeline?.stages.find((s) => s.id === l[LABEL.stage]);
   if (!st) return '';
-  const sub = l[LABEL.substage] ? l[LABEL.substageTitle] || l[LABEL.substage] : '';
+  const slug = l[LABEL.substage];
+  const known = slug ? stages.find((s) => s.stageId === st.id)?.substages.find((s) => s.slug === slug)?.title : undefined;
+  const sub = slug ? (known && known !== slug ? known : l[LABEL.substageTitle] || known || slug) : '';
   return sub ? `${st.name} · ${sub}` : st.name;
 }
 

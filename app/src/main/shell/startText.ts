@@ -235,9 +235,11 @@ export function pipelineLayer(p: Pipeline): string {
   );
   if (anySub) {
     lines.push(
-      '4. Substages, only in stages that may have them: declare each one before you work on it, then put its two labels on its posts and artifacts:',
+      '4. Substages, only in stages that may have them: declare each one before you work on it:',
       '',
       '   hopp post --label hopp.stage=<id> --label hopp.substage=<slug> --label "hopp.substage_title=<title>" --label hopp.event=stage_started "<what this substage is>"',
+      '',
+      '   Then put `--label hopp.substage=<slug>` and `--label "hopp.substage_title=<title>"` on every post and artifact of that substage, beside its `hopp.stage` label.',
       '',
       '   A stage with substages is still submitted once, as a whole.',
       '',

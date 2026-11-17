@@ -16,6 +16,11 @@ describe('feed model', () => {
     expect(stageTag(post('x', { 'hopp.stage': 'scenes', 'hopp.substage': 's2', 'hopp.substage_title': 'Scene 2' }), t.pipeline)).toBe('Scenes · Scene 2');
     expect(stageTag(post('x', { 'hopp.stage': 'scenes', 'hopp.substage': 's2' }), t.pipeline)).toBe('Scenes · s2');
     expect(stageTag(post('x', { 'hopp.stage': 'ghost' }), t.pipeline)).toBe('');
+    // Live run: the title was only on the declaring post; later posts carry
+    // the slug alone and take the title the stage's substages know.
+    const stages = [{ stageId: 'scenes', status: 'started' as const, substages: [{ slug: 'icon', title: 'Иконка' }], submission: null, lastAnswer: null }];
+    expect(stageTag(post('x', { 'hopp.stage': 'scenes', 'hopp.substage': 'icon' }), t.pipeline, stages)).toBe('Scenes · Иконка');
+    expect(stageTag(post('x', { 'hopp.stage': 'scenes', 'hopp.substage': 'other' }), t.pipeline, stages)).toBe('Scenes · other');
   });
   it('reads artifact references and kinds', () => {
     expect(parseRef('scene-2@3')).toEqual({ name: 'scene-2', version: 3 });

@@ -17,7 +17,7 @@ What the human sees and does in the app's window. What the main process keeps an
 
 ### Forms
 
-5. New task offers only enabled model profiles, remembers the last project and profiles, starts with "No pipeline" every time, shows a chosen pipeline's stages before launch, and starts with ⌘↩ or the arrow button. Every form shows an error next to the field it names and ignores a second submit while the first runs.
+5. New task offers only enabled model profiles, remembers the last project and profiles, starts with "No pipeline" every time, shows a chosen pipeline's stages before launch (a long stage text folded to three lines with Show all), and starts with ⌘↩ or the arrow button. Every form shows an error next to the field it names and ignores a second submit while the first runs.
 6. The project form fills the slug from the name until the human edits it, and opens "Advanced" by itself when an error belongs there.
 
 ### A task, an agent
@@ -29,7 +29,7 @@ What the human sees and does in the app's window. What the main process keeps an
 ### Settings and looks
 
 10. Settings has Projects (edit, add), Models (the daemon's profiles, read only), Tools (the preferences text with its save time, each tool with an on/off switch, a paid mark, its USAGE on click, broken tools by name) and Lessons (new or all, mark as done).
-11. The look is the accepted prototype's, in English, dark or light: the theme follows the system until the human picks one, then stays. Artifact files that do not load show a placeholder, never a broken image.
+11. The look is the accepted prototype's, in English, dark or light: the theme follows the system until the human picks one, then stays. Artifact files that do not load show a placeholder, never a broken image; an SVG or a picture smaller than its tile is shown whole, not cropped.
 12. `make app-pack` builds an unsigned `hopp.app` for this Mac under `app/dist/`, with the app icon, node-pty unpacked from the archive and one instance at a time; it is not signed or installed anywhere.
 
 Code: [renderer](app/src/renderer), [packaging script](app/scripts)

@@ -197,7 +197,7 @@ export function NewTask(props: {
               {pipeline.stages.map((st) => (
                 <div key={st.id} className="pl-preview-stage">
                   <div className="nm">{st.name}</div>
-                  {st.does && <div className="ds">{st.does}</div>}
+                  {st.does && <StageText text={st.does} />}
                   <div className="cb-row">
                     <Checkbox readOnly label="may have substages" checked={st.substages} />
                     <Checkbox readOnly label="wait for approval" checked={st.approval} />
@@ -236,6 +236,24 @@ export function NewTask(props: {
           )}
         </form>
       </div>
+    </>
+  );
+}
+
+// A stage's text in the preview: a long one is folded to a few lines, so
+// the form stays a form; Show all opens it.
+const LONG_TEXT = 240;
+function StageText(props: { text: string }) {
+  const long = props.text.length > LONG_TEXT || props.text.split('\n').length > 3;
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className={'ds' + (long && !open ? ' folded' : '')}>{props.text}</div>
+      {long && (
+        <button type="button" className="link-btn" onClick={() => setOpen((o) => !o)}>
+          {open ? 'Show less' : 'Show all'}
+        </button>
+      )}
     </>
   );
 }

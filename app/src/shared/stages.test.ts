@@ -72,6 +72,10 @@ describe('deriveStages', () => {
       post(4, { 'hopp.stage': 'build', 'hopp.substage': 'scene-1', 'hopp.substage_title': 'Scene 1' }),
     ];
     expect(deriveStages(pipeline, p, [])[1]!.substages).toEqual([{ slug: 'scene-1', title: 'Scene 1' }, { slug: 'scene-2', title: 'scene-2' }]);
+    // A title that comes after the first post of the substage still names it.
+    const later = [...p, post(5, { 'hopp.stage': 'build', 'hopp.substage': 'scene-2', 'hopp.substage_title': 'Scene 2' }),
+      post(6, { 'hopp.stage': 'build', 'hopp.substage': 'scene-2', 'hopp.substage_title': 'Other' })];
+    expect(deriveStages(pipeline, later, [])[1]!.substages[1]).toEqual({ slug: 'scene-2', title: 'Scene 2' });
   });
 
   it('ignores items of unknown stages and other asks, and a plain ask starts its stage', () => {

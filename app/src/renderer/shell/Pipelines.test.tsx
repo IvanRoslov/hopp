@@ -131,4 +131,23 @@ describe('pipeline picker in New task', () => {
     await flush();
     expect(f.shell!.createTask).toHaveBeenCalledWith(expect.objectContaining({ pipelineId: 'pv', brief: 'A 30 s promo' }));
   });
+
+  // Ivan's own pipelines have stage texts of 2000 characters over many lines;
+  // the preview showed them whole and the form became a long sheet.
+  it('folds a long stage text to a few lines, with Show all', async () => {
+    const long = 'Понять, чего хочет человек.\n' + '- Шаг с пояснением, достаточно длинный.\n'.repeat(12);
+    const f = seed([{ ...dev, stages: [stage('d1', 'Analyse', { does: long }), stage('d2', 'Short')] }]);
+    await mount(f);
+    fireEvent.click(screen.getByTestId('pick-pipeline'));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Development' }));
+    const preview = screen.getByTestId('pipeline-preview');
+    const [first, second] = Array.from(preview.querySelectorAll('.pl-preview-stage .ds'));
+    expect(first!.classList.contains('folded')).toBe(true);
+    expect(second!.classList.contains('folded')).toBe(false);
+    expect(within(preview).getAllByRole('button', { name: 'Show all' })).toHaveLength(1);
+    fireEvent.click(within(preview).getByRole('button', { name: 'Show all' }));
+    expect(first!.classList.contains('folded')).toBe(false);
+    fireEvent.click(within(preview).getByRole('button', { name: 'Show less' }));
+    expect(first!.classList.contains('folded')).toBe(true);
+  });
 });
