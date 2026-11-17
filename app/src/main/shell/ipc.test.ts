@@ -35,7 +35,7 @@ describe('shell IPC', () => {
       'state', 'onChanged', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
       'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
       'removeAgent', 'renameAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
-      'listLessons', 'closeLesson', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
+      'listLessons', 'closeLesson', 'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
       'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText', 'githubStatus', 'listGithubRepos', 'addGithubRepo', 'onProfilesChanged', 'setProfileEnabled', 'updateProfile',
       'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels',
     ];

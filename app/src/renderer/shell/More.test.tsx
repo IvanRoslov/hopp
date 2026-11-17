@@ -128,24 +128,6 @@ describe('settings', () => {
     expect(screen.getByTestId('tool-broken-bad').textContent).toContain('Broken: no TOOL.json');
   });
 
-  it('Lessons: new ones, then all; mark as done', async () => {
-    const lesson = (id: number, status: 'new' | 'closed') => ({ id, from: 'w1', labels: { 'hopp.task': 't' }, body: 'Lesson ' + id, status, created_at: 1_800_000_000, closed_at: 0 });
-    const f = fakeBridge({ shell: { state: { ...base, tasks: [makeTask('t', 'p', { title: 'Ship it' })] }, lessons: [lesson(1, 'new'), lesson(2, 'closed')] } });
-    await mount(f);
-    fireEvent.click(screen.getByText('Settings'));
-    fireEvent.click(screen.getByRole('tab', { name: 'Lessons' }));
-    await flush();
-    expect(screen.getByTestId('lesson-1').textContent).toContain('Ship it · w1');
-    expect(screen.queryByTestId('lesson-2')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Mark as done' }));
-    await flush();
-    expect(f.shell!.closeLesson).toHaveBeenCalledWith(1);
-    expect(screen.getByText('No new lessons.')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('lesson-filter'));
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'all' }));
-    await flush();
-    expect(screen.getByTestId('lesson-2')).toBeTruthy();
-  });
 });
 
 describe('day-one fixes', () => {

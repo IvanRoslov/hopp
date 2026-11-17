@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -157,5 +158,43 @@ func TestLessonsClose(t *testing.T) {
 	}
 	if _, _, code := runCLI(t, f, "lessons", "close", "9"); code == 0 {
 		t.Errorf("unknown lesson: exit 0")
+	}
+}
+
+func TestLessonsLabelSetsAndRemoves(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("PATCH /v1/lessons/12", 200, map[string]any{"id": 12, "labels": map[string]string{"hopp.about": "hopp"}, "body": "x", "status": "new"})
+	out, errOut, code := runCLI(t, f, "lessons", "label", "#12", "hopp.about=hopp", "hopp.project=")
+	if code != 0 || out != "12\n" {
+		t.Fatalf("exit %d out %q err %q", code, out, errOut)
+	}
+	want := map[string]any{"hopp.about": "hopp", "hopp.project": ""}
+	if got := f.last(t).Body["labels"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("labels sent = %v, want %v", got, want)
+	}
+	for _, args := range [][]string{{"lessons", "label", "12"}, {"lessons", "label", "x", "a=b"}, {"lessons", "label", "12", "novalue"}, {"lessons", "label", "12", "=v"}} {
+		if _, _, code := runCLI(t, f, args...); code != 3 {
+			t.Errorf("%v: exit %d, want 3", args, code)
+		}
+	}
+}
+
+func TestLessonsFullPrintsLabelsAndWholeText(t *testing.T) {
+	f := newFakeAPI(t)
+	f.on("GET /v1/lessons", 200, map[string]any{"lessons": []map[string]any{
+		{"id": 3, "from": "w1", "labels": map[string]string{"hopp.project": "site", "hopp.about": "project"}, "body": "line one\nline two\n", "status": "new", "created_at": 1},
+		{"id": 4, "from": "", "labels": map[string]string{}, "body": "second", "status": "new", "created_at": 1},
+	}})
+	out, errOut, code := runCLI(t, f, "lessons", "--full", "--label", "hopp.project=site", "--label", "hopp.about=project")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, want := range []string{"#3  new  from w1", "  hopp.about=project\n  hopp.project=site\nline one\nline two\n\n#4  new  from -", "second\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	if q := f.last(t).Query; !strings.Contains(q, "label=hopp.project%3Dsite") || !strings.Contains(q, "label=hopp.about%3Dproject") {
+		t.Errorf("query = %q", q)
 	}
 }

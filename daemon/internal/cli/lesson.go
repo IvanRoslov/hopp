@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -84,13 +85,16 @@ func noteText(cmd *cobra.Command, args []string, file, noun string) (string, err
 // newLessonsCmd is `hopp lessons`: list lessons (new ones unless --all or
 // --closed), and `hopp lessons close <id>...`.
 func newLessonsCmd() *cobra.Command {
-	var all, closed bool
+	var all, closed, full bool
 	var labels []string
 	var from string
 	cmd := &cobra.Command{
 		Use:   "lessons",
 		Short: "List lessons (new ones unless --all or --closed)",
-		Args:  cobra.NoArgs,
+		Long: "Lists lessons, one line each, or whole with --full (labels and the full text). Filter with --label\n" +
+			"(repeatable, all must match), --from and the status flags. `hopp lessons close <id>...` closes\n" +
+			"lessons; `hopp lessons label <id> k=v...` changes their labels.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if all && closed {
 				return &usageError{message: "--all and --closed exclude each other"}
@@ -132,6 +136,25 @@ func newLessonsCmd() *cobra.Command {
 			if err := json.Unmarshal(raw, &resp); err != nil {
 				return err
 			}
+			if full {
+				w := cmd.OutOrStdout()
+				for i, l := range resp.Lessons {
+					if i > 0 {
+						fmt.Fprintln(w)
+					}
+					fmt.Fprintf(w, "#%d  %s  from %s  %s ago\n", l.ID, l.Status, dash(l.From), age(l.CreatedAt))
+					keys := make([]string, 0, len(l.Labels))
+					for k := range l.Labels {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						fmt.Fprintf(w, "  %s=%s\n", k, l.Labels[k])
+					}
+					fmt.Fprintln(w, strings.TrimRight(l.Body, "\n"))
+				}
+				return nil
+			}
 			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
 			fmt.Fprintln(tw, "ID\tAGE\tFROM\tLESSON")
 			for _, l := range resp.Lessons {
@@ -145,7 +168,9 @@ func newLessonsCmd() *cobra.Command {
 	f.BoolVar(&closed, "closed", false, "only closed lessons")
 	f.StringArrayVar(&labels, "label", nil, "only lessons with label key=value (repeatable)")
 	f.StringVar(&from, "from", "", "only lessons from this session")
+	f.BoolVar(&full, "full", false, "print each lesson whole: its labels and full text")
 	cmd.AddCommand(newLessonsCloseCmd())
+	cmd.AddCommand(newLessonsLabelCmd())
 	return cmd
 }
 
@@ -174,6 +199,45 @@ func newLessonsCloseCmd() *cobra.Command {
 				}
 				cmd.Println(l.ID)
 			}
+			return nil
+		},
+	}
+}
+
+// newLessonsLabelCmd is `hopp lessons label <id> k=v...`: set labels on a
+// lesson; `k=` removes k.
+func newLessonsLabelCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "label <id> <key>=<value>...",
+		Short: "Change a lesson's labels (key= removes the key)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 2 {
+				return &usageError{message: "usage: hopp lessons label <id> <key>=<value>... (key= removes the key)"}
+			}
+			id := strings.TrimPrefix(args[0], "#")
+			if _, err := strconv.ParseInt(id, 10, 64); err != nil {
+				return &usageError{message: "a lesson id is a number, got " + strconv.Quote(args[0])}
+			}
+			set := map[string]string{}
+			for _, a := range args[1:] {
+				k, v, ok := strings.Cut(a, "=")
+				if !ok || strings.TrimSpace(k) == "" {
+					return &usageError{message: fmt.Sprintf("a label is key=value (key= removes it), got %q", a)}
+				}
+				set[k] = v
+			}
+			c, _, err := connect(true)
+			if err != nil {
+				return err
+			}
+			var l lessonView
+			if err := c.Patch(apiPath("v1", "lessons", id), map[string]any{"labels": set}, &l); err != nil {
+				return err
+			}
+			if flags.JSON {
+				return printJSON(cmd, l)
+			}
+			cmd.Println(l.ID)
 			return nil
 		},
 	}

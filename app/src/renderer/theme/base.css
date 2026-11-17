@@ -417,3 +417,23 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .rename-agent .btns { display: flex; gap: 8px; }
 .rename-note { margin: 0; color: var(--text); font-size: var(--fs-small); line-height: 1.5; }
 .popover .row .t .tag, .menu .row .t .tag { margin-left: 8px; vertical-align: 1px; }
+
+/* Lessons tab */
+.lessons-tools { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+.lessons-closed { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-small); cursor: pointer; }
+.lesson-group { margin-top: 28px; }
+.lesson-group h2 { font-size: var(--fs-body); font-weight: 600; margin: 0 0 6px; display: flex; align-items: baseline; gap: 8px; }
+.lesson-group .count { color: var(--muted); font-weight: 400; font-size: var(--fs-small); }
+.lesson-group > .subtle-note { margin: 0 0 8px; }
+.lesson-project { margin-top: 18px; }
+.lesson-project-head { display: flex; align-items: baseline; gap: 8px; }
+.lesson-project-head h3 { font-size: var(--fs-name); font-weight: 500; margin: 0; }
+.lesson-project-head .sp { flex: 1; }
+.lesson .md { font-size: var(--fs-body); }
+.lesson .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.lesson .meta .link-btn { padding: 0; font-size: inherit; }
+.lesson .lesson-id { font-family: var(--font-mono); color: var(--faint); }
+.lesson .btns { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lesson.closed .md { color: var(--muted); }
+.lesson .inline-confirm { margin-top: 10px; }
+.lesson .form-error { margin: 8px 0 0; }

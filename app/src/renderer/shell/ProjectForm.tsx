@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { Project, ProjectInput, ShellBridge, ShellError } from '../../shared/shell';
 import { slugify } from '../../shared/slug';
 import { cleanError } from '../errors';
@@ -15,6 +15,8 @@ export function ProjectForm(props: {
   onDone: (p: Project) => void;
   onCancel?: () => void;
   onRemoved?: () => void;
+  // For an existing project: its open lessons, with a link to them.
+  lessonsNote?: ReactNode;
 }) {
   const e = props.edit;
   const [name, setName] = useState(e?.name ?? '');
@@ -109,6 +111,7 @@ export function ProjectForm(props: {
           }}
         >
           <h1>{title}</h1>
+          {props.edit && props.lessonsNote}
           <div className="fields">
             <Field
               label="Name"

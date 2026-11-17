@@ -26,6 +26,7 @@ export const SHELL_METHODS = [
   'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask',
   'createAgent', 'startAgent', 'stopAgent', 'removeAgent', 'renameAgent', 'agentMail', 'waiting',
   'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules', 'listLessons', 'closeLesson',
+  'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief',
   'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'postToTask', 'answerSubmission', 'artifactText',
   'githubStatus', 'listGithubRepos', 'addGithubRepo',
   'setProfileEnabled', 'updateProfile', 'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels',

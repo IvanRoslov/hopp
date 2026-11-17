@@ -120,3 +120,48 @@ func TestLessonAddedEventIsPublished(t *testing.T) {
 	}
 	t.Errorf("no lesson.added event among %d events", len(evs))
 }
+
+func TestLessonLabelsChangeAndEvents(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "s1", "labels": map[string]string{"team": "a", "kind": "x"}})
+	l := addLesson(t, e, map[string]any{"from": "s1", "body": "x"})
+	var out lessonOut
+	path := fmt.Sprintf("/v1/lessons/%d", l.ID)
+	if code := e.call(t, "PATCH", path, map[string]any{"labels": map[string]string{"about": "project", "kind": ""}}, &out); code != http.StatusOK {
+		t.Fatalf("PATCH: %d", code)
+	}
+	if want := map[string]string{"team": "a", "about": "project"}; !reflect.DeepEqual(out.Labels, want) {
+		t.Errorf("labels = %v, want %v", out.Labels, want)
+	}
+	if got := listLessonIDs(t, e, "?label=about=project"); !reflect.DeepEqual(got, []int64{l.ID}) {
+		t.Errorf("filter by the new label = %v", got)
+	}
+	// Back again: the round trip leaves the labels as they were.
+	out = lessonOut{} // decoding into a used map would merge into it
+	e.call(t, "PATCH", path, map[string]any{"labels": map[string]string{"about": "", "kind": "x"}}, &out)
+	if want := map[string]string{"team": "a", "kind": "x"}; !reflect.DeepEqual(out.Labels, want) {
+		t.Errorf("round trip labels = %v, want %v", out.Labels, want)
+	}
+	for _, body := range []map[string]any{{"labels": map[string]string{}}, {"labels": map[string]string{" ": "v"}}} {
+		if code, ecode := sessErrCode(t, e, "PATCH", path, body); code != http.StatusBadRequest || ecode != "bad_request" {
+			t.Errorf("%v: %d %q", body, code, ecode)
+		}
+	}
+	if code, ecode := sessErrCode(t, e, "PATCH", "/v1/lessons/999", map[string]any{"labels": map[string]string{"a": "b"}}); code != http.StatusNotFound || ecode != "lesson_not_found" {
+		t.Errorf("unknown: %d %q", code, ecode)
+	}
+	// Closing twice announces once.
+	e.call(t, "POST", path+"/close", nil, nil)
+	e.call(t, "POST", path+"/close", nil, nil)
+	evs, err := e.st.ListEvents(0, 0, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := map[string]int{}
+	for _, ev := range evs {
+		n[ev.Type]++
+	}
+	if n["lesson.labeled"] != 2 || n["lesson.closed"] != 1 {
+		t.Errorf("events = %v, want 2 lesson.labeled and 1 lesson.closed", n)
+	}
+}

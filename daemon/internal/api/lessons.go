@@ -101,10 +101,14 @@ func registerLessonRoutes(mux *http.ServeMux, d Deps) {
 
 	mux.HandleFunc("POST /v1/lessons/{id}/close", func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		var before store.Lesson
 		if err == nil {
-			err = d.Store.CloseLesson(id)
+			before, err = d.Store.GetLesson(id)
 		} else {
 			err = store.ErrNotFound
+		}
+		if err == nil {
+			err = d.Store.CloseLesson(id)
 		}
 		if errors.Is(err, store.ErrNotFound) {
 			writeErr(w, http.StatusNotFound, "lesson_not_found", "lesson not found: "+r.PathValue("id"))
@@ -118,6 +122,49 @@ func registerLessonRoutes(mux *http.ServeMux, d Deps) {
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
 			return
+		}
+		if d.Bus != nil && before.Status != store.LessonClosed {
+			d.Bus.Publish("lesson.closed", l.FromSession, map[string]any{"id": l.ID})
+		}
+		writeJSON(w, http.StatusOK, toLessonResponse(l))
+	})
+
+	// PATCH changes labels: {"labels": {"k": "v", "gone": ""}}; an empty
+	// value removes the key. The daemon gives labels no meaning.
+	mux.HandleFunc("PATCH /v1/lessons/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, "lesson_not_found", "lesson not found: "+r.PathValue("id"))
+			return
+		}
+		var req struct {
+			Labels map[string]string `json:"labels"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+		if len(req.Labels) == 0 {
+			writeErr(w, http.StatusBadRequest, "bad_request", "labels must name at least one key")
+			return
+		}
+		for k := range req.Labels {
+			if strings.TrimSpace(k) == "" {
+				writeErr(w, http.StatusBadRequest, "bad_request", "a label key must not be empty")
+				return
+			}
+		}
+		l, err := d.Store.SetLessonLabels(id, req.Labels)
+		if errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "lesson_not_found", "lesson not found: "+r.PathValue("id"))
+			return
+		}
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal_error", err.Error())
+			return
+		}
+		if d.Bus != nil {
+			d.Bus.Publish("lesson.labeled", l.FromSession, map[string]any{"id": l.ID})
 		}
 		writeJSON(w, http.StatusOK, toLessonResponse(l))
 	})

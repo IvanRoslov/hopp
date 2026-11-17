@@ -81,9 +81,10 @@ test('settings: a tool switched off, preferences saved, a lesson done', async ()
     await expect.poll(() => read(join(w.home, 'tools', 'rules.md'))).toBe('Video: use local tools.\n');
     await expect(page.getByText(/^Saved /)).toBeVisible();
 
-    await page.getByRole('tab', { name: 'Lessons' }).click().catch(async () => page.getByRole('button', { name: 'Lessons' }).click());
+    await page.getByRole('tab', { name: /^Lessons/ }).click();
     await expect(page.getByText('The orchestrator needed a screenshot tool.')).toBeVisible();
-    await page.getByRole('button', { name: 'Mark as done' }).click();
+    // An unsorted lesson (no hopp.about yet) closes from its row.
+    await page.getByTestId('lesson-1').getByRole('button', { name: 'Close' }).click();
     await expect.poll(() => w.d.lessons[0]!.status).toBe('closed');
   } finally {
     await w.dispose();

@@ -120,6 +120,11 @@ function lessonStatus(v: unknown): 'new' | 'closed' | 'all' {
   throw new ArgError('status must be new, closed or all');
 }
 
+function lessonAbout(v: unknown): 'hopp' | 'project' | null {
+  if (v === 'hopp' || v === 'project' || v === null) return v;
+  throw new ArgError('about must be hopp, project or null');
+}
+
 type Handler = (svc: ShellService, args: unknown[]) => Promise<unknown>;
 
 // RESULT_METHODS answer a bad call with a Result error.
@@ -149,6 +154,10 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   setToolRules: { result: true, run: (s, a) => s.setToolRules(str(a[0], 'rules', 1_000_000)) },
   listLessons: { result: false, run: (s, a) => s.listLessons(lessonStatus(a[0])) },
   closeLesson: { result: true, run: (s, a) => s.closeLesson(int(a[0], 'lesson id')) },
+  setLessonAbout: { result: true, run: (s, a) => s.setLessonAbout(int(a[0], 'lesson id'), lessonAbout(a[1])) },
+  setLessonProject: { result: true, run: (s, a) => s.setLessonProject(int(a[0], 'lesson id'), a[1] === null ? null : str(a[1], 'project slug', 200)) },
+  lessonToGuardrails: { result: true, run: (s, a) => s.lessonToGuardrails(int(a[0], 'lesson id')) },
+  triageLessonsBrief: { result: false, run: (s, a) => s.triageLessonsBrief(str(a[0], 'project slug', 200)) },
   createPipeline: { result: true, run: (s, a) => s.createPipeline(pipelineInput(a[0])) },
   updatePipeline: { result: true, run: (s, a) => s.updatePipeline(str(a[0], 'pipeline id', 200), pipelineInput(a[1])) },
   removePipeline: { result: true, run: (s, a) => s.removePipeline(str(a[0], 'pipeline id', 200)) },

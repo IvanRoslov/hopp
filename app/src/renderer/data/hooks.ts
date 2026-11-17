@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonBridge } from '../../shared/bridge';
-import type { HarnessCatalog, ModelProfile, ShellBridge, ShellState } from '../../shared/shell';
+import type { HarnessCatalog, Lesson, ModelProfile, ShellBridge, ShellState } from '../../shared/shell';
 import type { StreamState, Waiting } from '../../shared/types';
 import { cleanError } from '../errors';
 
@@ -155,4 +155,37 @@ export function useModelCatalog(shell: ShellBridge) {
     (agent: string, model: string): string[] | null => (list ? list.find((c) => c.agent === agent)?.models.find((m) => m.id === model)?.efforts ?? [] : null),
     [list],
   );
+}
+
+// useLessons: every lesson (open and closed), for the Lessons tab and the
+// open counts. The daemon announces a new lesson (lesson.added) and, once it
+// does, any other lesson change (lesson.*); a close or relabel made by an
+// agent through an older daemon announces nothing, so the list is also read
+// again when the window comes back to the front.
+export function useLessons(shell: ShellBridge, daemon: DaemonBridge, stream: StreamState, enabled: boolean) {
+  const [lessons, setLessons] = useState<Lesson[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+  const load = useCallback(() => {
+    if (!enabled) return;
+    const n = ++seq.current;
+    shell.listLessons('all').then(
+      (l) => {
+        if (n !== seq.current) return;
+        setLessons(l);
+        setError(null);
+      },
+      (e) => n === seq.current && setError(cleanError(e)),
+    );
+  }, [shell, enabled]);
+  const soon = useDebounced(load, 150);
+  useEffect(() => {
+    if (stream === 'open') load();
+  }, [stream, load]);
+  useEffect(() => daemon.onEvent((e) => e.type.startsWith('lesson.') && soon()), [daemon, soon]);
+  useEffect(() => {
+    window.addEventListener('focus', load);
+    return () => window.removeEventListener('focus', load);
+  }, [load]);
+  return { lessons, error, reload: load };
 }

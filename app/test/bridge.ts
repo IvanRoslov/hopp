@@ -314,6 +314,37 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       lessons = lessons.map((l) => (l.id === id ? { ...l, status: 'closed' as const, closed_at: 2 } : l));
       return ok(null);
     }),
+    // Lesson kinds, as the contract says: labels hopp.about / hopp.project.
+    setLessonAbout: vi.fn(async (id: number, about: 'hopp' | 'project' | null) => {
+      lessons = lessons.map((l) => {
+        if (l.id !== id) return l;
+        const labels = { ...l.labels };
+        if (about) labels['hopp.about'] = about;
+        else delete labels['hopp.about'];
+        return { ...l, labels };
+      });
+      return ok(null);
+    }),
+    setLessonProject: vi.fn(async (id: number, slug: string | null) => {
+      lessons = lessons.map((l) => {
+        if (l.id !== id) return l;
+        const labels = { ...l.labels };
+        if (slug) labels['hopp.project'] = slug;
+        else delete labels['hopp.project'];
+        return { ...l, labels };
+      });
+      return ok(null);
+    }),
+    lessonToGuardrails: vi.fn(async (id: number) => {
+      const l = lessons.find((x) => x.id === id);
+      const p = st.projects.find((x) => x.slug === l?.labels['hopp.project']);
+      if (!l || !p) return fail('lesson_no_project', 'The lesson is not about a project');
+      p.guardrails = (p.guardrails ? p.guardrails.replace(/\n*$/, '\n') : '') + '- ' + l.body.trim() + '\n';
+      lessons = lessons.map((x) => (x.id === id ? { ...x, status: 'closed' as const, closed_at: 2 } : x));
+      changed();
+      return ok(null);
+    }),
+    triageLessonsBrief: vi.fn(async (slug: string) => `Разбери открытые уроки проекта ${slug}: hopp lessons --project ${slug}.`),
     // GitHub: off by default in page tests (stubs added with the contract).
     githubStatus: vi.fn(async () => ({ ...ghStatus })),
     listGithubRepos: vi.fn(async (q: string) => {

@@ -77,6 +77,8 @@ export function Side(props: {
   waitingRows: WaitingRow[];
   waitingByOwner: Map<string, number>;
   mail: Record<string, number>;
+  // Open lessons, counted beside Settings (they live in its Lessons tab).
+  openLessons?: number;
   route: Route;
   go: Go;
   onTheme: () => void;
@@ -192,6 +194,11 @@ export function Side(props: {
           <button type="button" className={'row quiet' + (route.k === 'settings' ? ' sel' : '')} onClick={() => go({ k: 'settings', tab: 'projects' })}>
             <span className="ic"><SlidersIcon /></span>
             <span className="t">Settings</span>
+            {(props.openLessons ?? 0) > 0 && (
+              <span className="mark off" title={props.openLessons === 1 ? '1 open lesson' : `${props.openLessons} open lessons`} aria-label={`${props.openLessons} open lessons`} data-testid="side-lessons">
+                {props.openLessons}
+              </span>
+            )}
           </button>
           <button type="button" className="c-btn icon" aria-label="Switch theme" title="Switch theme" onClick={props.onTheme}>
             <ThemeIcon />

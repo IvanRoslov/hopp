@@ -115,6 +115,39 @@ func (s *Store) CloseLesson(id int64) error {
 	return err
 }
 
+// SetLessonLabels changes a lesson's labels: each key in set gets its value,
+// and a key whose value is empty is removed. It returns the lesson as it is
+// now; ErrNotFound when unknown.
+func (s *Store) SetLessonLabels(id int64, set map[string]string) (Lesson, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Lesson{}, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+	l, err := scanLesson(tx.QueryRow(`SELECT `+lessonColumns+` FROM lessons WHERE id = ?`, id))
+	if err != nil {
+		return Lesson{}, err
+	}
+	for k, v := range set {
+		if v == "" {
+			delete(l.Labels, k)
+		} else {
+			l.Labels[k] = v
+		}
+	}
+	raw, err := json.Marshal(nonNilMap(l.Labels))
+	if err != nil {
+		return Lesson{}, err
+	}
+	if _, err := tx.Exec(`UPDATE lessons SET labels = ? WHERE id = ?`, string(raw), id); err != nil {
+		return Lesson{}, fmt.Errorf("label lesson: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Lesson{}, fmt.Errorf("commit: %w", err)
+	}
+	return l, nil
+}
+
 func scanLesson(row interface{ Scan(...any) error }) (Lesson, error) {
 	var l Lesson
 	var labels string
