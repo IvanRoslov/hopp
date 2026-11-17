@@ -38,7 +38,7 @@ export function makeProject(slug: string, over: Partial<Project> = {}): Project 
 export function makeTask(id: string, projectSlug: string, over: Partial<Task> = {}): Task {
   return {
     id, projectSlug, title: id, brief: 'Do ' + id, sessionId: id, dir: '/tmp/work/' + id, branch: null,
-    orchestratorProfile: 'claude-opus', workerProfiles: [], pipeline: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0, ...over,
+    orchestratorProfile: 'claude-opus', workerProfiles: [], pipeline: null, base: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0, ...over,
   };
 }
 
@@ -241,7 +241,7 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
         id, projectSlug: input.projectSlug, title, brief: input.brief, sessionId: id, dir: '/tmp/work/' + id, branch: null,
         orchestratorProfile: input.orchestratorProfile, workerProfiles: input.workerProfiles,
         pipeline: input.pipelineId ? structuredClone(st.pipelines.find((p) => p.id === input.pipelineId) ?? null) : null,
-        status: 'active', hidden: false,
+        base: null, status: 'active', hidden: false,
         createdAt: clock++, finishedAt: 0,
       };
       st.tasks.push(task);

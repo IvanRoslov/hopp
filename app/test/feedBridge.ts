@@ -17,7 +17,7 @@ export const PIPELINE: Pipeline = {
 export function feedTask(over: Partial<Task> = {}): Task {
   return {
     id: 'promo', projectSlug: 'site', title: 'Promo video', brief: 'Make a promo video from the brief.', sessionId: 'promo', dir: '/w/promo',
-    branch: null, orchestratorProfile: 'p', workerProfiles: ['p'], pipeline: PIPELINE, status: 'active', hidden: false, createdAt: 100, finishedAt: 0, ...over,
+    branch: null, orchestratorProfile: 'p', workerProfiles: ['p'], pipeline: PIPELINE, base: null, status: 'active', hidden: false, createdAt: 100, finishedAt: 0, ...over,
   };
 }
 

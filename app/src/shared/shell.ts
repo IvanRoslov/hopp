@@ -86,6 +86,20 @@ export interface PipelineInput {
 
 export type TaskStatus = 'active' | 'finished';
 
+// TaskBase: the commit a task's worktree started from.
+export interface TaskBase {
+  // origin/<default branch> for a clone picked from GitHub; for a folder,
+  // "HEAD (<branch>)".
+  ref: string;
+  commit: string;
+  // Unix seconds of that commit.
+  committedAt: number;
+  // Whether the clone was fetched right before (false for a folder).
+  fetched: boolean;
+  // Why the fetch failed, so the start may be behind GitHub; empty otherwise.
+  warning: string;
+}
+
 export interface Task {
   id: string;
   projectSlug: string;
@@ -104,6 +118,9 @@ export interface Task {
   // A copy of the pipeline taken at launch; null for a task without one.
   // Later edits of the pipeline do not change it.
   pipeline: Pipeline | null;
+  // What the task's worktree started from; null for a folder without git
+  // (and for tasks stored before this was recorded).
+  base: TaskBase | null;
   status: TaskStatus;
   // Removed from the list by the human; kept in the store.
   hidden: boolean;

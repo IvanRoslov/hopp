@@ -369,7 +369,7 @@ export class ShellService {
     const task: Task = {
       id, projectSlug: project.slug, title, brief, sessionId: id, dir,
       branch: project.orchestratorRepo ? 'hopp/' + id : null,
-      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline,
+      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline, base: null,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
     const record = () =>
