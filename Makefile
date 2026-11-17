@@ -68,9 +68,12 @@ app-build:
 app-pack:
 	cd app && npm run build && node scripts/pack.mjs
 
-# Builds the bundle and puts it in /Applications/hopp.app, replacing the copy
-# there. A running hopp.app is asked to quit first; the daemon is not touched.
-app-install-mac: app-pack
+# Builds bin/hopp (the hopp CLI: its dispatch runs `hopp task` and the app's
+# other commands; a hopp from before it says "unknown command"), then the
+# bundle, and puts it in /Applications/hopp.app, replacing the copy there. A
+# running hopp.app is asked to quit first; the daemon is not touched (its
+# binary changes only for new processes; no restart is needed).
+app-install-mac: build app-pack
 	-test -d /Applications/hopp.app && pgrep -f /Applications/hopp.app/Contents/MacOS >/dev/null && osascript -e 'tell application "/Applications/hopp.app" to quit' && sleep 2
 	rm -rf /Applications/hopp.app
 	ditto app/dist/hopp-darwin-arm64/hopp.app /Applications/hopp.app
@@ -80,6 +83,6 @@ app-install-mac: app-pack
 # The app's commands (hopp project, hopp pipeline, hopp task) from this
 # checkout, without packing: $HOPP_HOME/bin/hopp-* run app/out/cli with the
 # checkout's Electron as Node. `make app-install-mac` installs the packed ones.
-app-cli:
+app-cli: build
 	cd app && npm run build:cli
 	node app/scripts/install-cli.mjs dev

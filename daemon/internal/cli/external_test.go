@@ -113,7 +113,7 @@ func TestExternalMissingSaysHowToInstall(t *testing.T) {
 		t.Fatalf("handled=%v code=%d calls=%v", handled, code, *calls)
 	}
 	msg := stderr.String()
-	for _, want := range []string{`unknown command "task"`, "hopp-task", bin, "make app-install-mac"} {
+	for _, want := range []string{`unknown command "task"`, "hopp-task", bin, "start the hopp app once", "make app-install-mac"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message lacks %q:\n%s", want, msg)
 		}
@@ -157,5 +157,32 @@ func TestHelpListsExternalCommands(t *testing.T) {
 	}
 	if strings.Contains(ext, "hopp-ls") || strings.Contains(ext, "  ls ") {
 		t.Errorf("a built-in is listed as external:\n%s", ext)
+	}
+}
+
+func TestDoctorListsExternalCommandsAndFlagsBrokenOnes(t *testing.T) {
+	f := newFakeAPI(t) // first: it sets a HOPP_HOME of its own
+	bin, pathDir := externalEnv(t)
+	target := writeProgram(t, t.TempDir(), "runtime", 0o755)
+	ok := filepath.Join(bin, "hopp-task")
+	os.MkdirAll(bin, 0o755)
+	os.WriteFile(ok, []byte("#!/bin/sh\nexec '"+target+"' task \"$@\"\n"), 0o755)
+	broken := filepath.Join(pathDir, "hopp-project")
+	os.WriteFile(broken, []byte("#!/bin/sh\nexec '/nonexistent/app/hopp' '/nonexistent/app/bundle.cjs' project \"$@\"\n"), 0o755)
+	out, _, _ := runCLI(t, f, "doctor")
+	if !strings.Contains(out, "external:task: "+ok) {
+		t.Errorf("no ok line for hopp-task:\n%s", out)
+	}
+	if !strings.Contains(out, "external:project: "+broken+" runs /nonexistent/app/hopp, /nonexistent/app/bundle.cjs, which does not exist") {
+		t.Errorf("no warning for the broken hopp-project:\n%s", out)
+	}
+}
+
+func TestDoctorSaysWhenThereAreNoExternalCommands(t *testing.T) {
+	f := newFakeAPI(t)
+	bin, _ := externalEnv(t)
+	out, _, _ := runCLI(t, f, "doctor")
+	if !strings.Contains(out, "external: no hopp-<name> commands in "+bin+" or on PATH") {
+		t.Errorf("doctor output:\n%s", out)
 	}
 }

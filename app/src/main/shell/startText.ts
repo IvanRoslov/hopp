@@ -11,7 +11,7 @@ export function hoppLayer(): string {
     '',
     'hopp runs AI agents in tmux sessions and carries messages between them. Your session id is in $HOPP_SESSION_ID; the session that launched you, if any, is in $HOPP_PARENT_ID. Use the `hopp` command:',
     '',
-    '- `hopp send <session> "<text>"` sends a message to another session; for long or markdown text use `hopp send <session> --file <path>` (`--file -` reads stdin). Messages to you arrive in your input.',
+    '- `hopp send <session> "<text>"` sends a message to another session; for multi-line or markdown text write it to a file first and use `hopp send <session> --file <path>` (`--file -` reads stdin only when something is piped in; an empty text is refused, never sent). Messages to you arrive in your input.',
     '- `hopp ls --mine` lists the sessions you launched; `hopp ls` lists every running session.',
     '- `hopp ask "<question>" [--option <choice>]... [--wait]` asks the human; the answer comes back as a message (and as the output of `--wait`).',
     '- `hopp lesson "<text>"` records what would have made this work better: a missing tool, a confusing instruction, a step that should be automatic. Write one whenever you notice something; the human reads them.',

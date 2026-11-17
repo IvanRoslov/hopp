@@ -30,7 +30,7 @@ func newPostCmd() *cobra.Command {
 		Use:   "post [text]",
 		Short: "Post a note to the human that waits for no answer",
 		Long: "Stores a post and prints its id. The text comes from the argument, from -f/--file, or from stdin\n" +
-			"when neither is given and stdin is not a terminal. The post is from $HOPP_SESSION_ID unless --from\n" +
+			"(\"-\" as the argument or the file, or neither given with something piped in); empty text is refused. The post is from $HOPP_SESSION_ID unless --from\n" +
 			"names another session; --from \"\" makes it the human's own note. A post from a session carries that\n" +
 			"session's labels; --label adds or overrides labels. --attach names a file path, a URL or an\n" +
 			"artifact (name@version), stored as given.",

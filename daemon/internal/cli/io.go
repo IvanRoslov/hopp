@@ -92,3 +92,61 @@ func readTextInput(cmd *cobra.Command, path string) (string, error) {
 	}
 	return string(data), nil
 }
+
+// stdinIsTerminal reports whether r is a terminal, i.e. nothing is piped
+// in. Tests swap it.
+var stdinIsTerminal = func(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// readBody takes the text of a message, post, ask or lesson from exactly one
+// source: the argument (arg, when hasArg), --file, or stdin. "-" as the
+// argument or as --file means stdin. With no source, fallbackStdin reads a
+// stdin that is piped in; otherwise it is a usage error. Every way of ending
+// up with no text (a terminal on stdin, an empty pipe, a heredoc the shell
+// did not pass on, a text of only spaces) is refused, never sent empty. The
+// text is returned verbatim. noun names it in the errors.
+func readBody(cmd *cobra.Command, arg string, hasArg bool, file, noun string, fallbackStdin bool) (string, error) {
+	if hasArg && file != "" {
+		return "", &usageError{message: "give the " + noun + " text as an argument or with --file, not both (for a pipe or a heredoc use --file - and no text argument)"}
+	}
+	fromStdin := (hasArg && arg == stdinMarker) || file == stdinMarker || (!hasArg && file == "" && fallbackStdin)
+	var body string
+	switch {
+	case fromStdin:
+		in := cmd.InOrStdin()
+		if stdinIsTerminal(in) {
+			if !hasArg && file == "" {
+				return "", &usageError{message: "no " + noun + " text: give it as an argument, with --file <path>, or on stdin"}
+			}
+			return "", &usageError{message: "\"-\" reads the " + noun + " text from stdin, but nothing is piped in; write the text to a file and use --file <path>"}
+		}
+		b, err := io.ReadAll(in)
+		if err != nil {
+			return "", fmt.Errorf("read stdin: %w", err)
+		}
+		body = string(b)
+		if strings.TrimSpace(body) == "" {
+			return "", &usageError{message: "no " + noun + " text arrived on stdin (a heredoc or pipe your shell did not pass on?); write the text to a file and use --file <path>"}
+		}
+	case file != "":
+		b, err := os.ReadFile(file)
+		if err != nil {
+			return "", err
+		}
+		body = string(b)
+	case hasArg:
+		body = arg
+	default:
+		return "", &usageError{message: "no " + noun + " text: give it as an argument, with --file <path>, or with --file - and a pipe"}
+	}
+	if strings.TrimSpace(body) == "" {
+		return "", &usageError{message: "the " + noun + " text is empty"}
+	}
+	return body, nil
+}

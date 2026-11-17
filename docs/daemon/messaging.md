@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (1ddc9bd) and the live checks of 2026-11-15 on all five harnesses against ~/.hopp
+verified: 2026-11-15 — against the code on main (1ddc9bd) and the live checks of 2026-11-15 on all five harnesses against ~/.hopp; fact 7's text sources by go test on lessons-1
 ---
 
 # Messages between sessions
@@ -14,7 +14,7 @@ A message goes from a session, a human or the daemon to one live session. This l
 4. The socket route delivers only to the exact Claude Code process hopp launched in that pane (its registry entry, pane and process ancestry must match), so a Claude Code started by a human or by rocket in the same folder never receives a hopp message.
 5. A message counts as `delivered` only when the recipient's own journal shows it arrived; `accepted` means the agent has the text and that proof is still awaited. A message that may have been written is never written again, even across a daemon restart: without proof by its deadline it fails `delivery_unconfirmed`.
 6. Typing into a pane waits while the composer holds a human's unsent text that hopp recognises, and Kimi Code's draft is never overwritten. The check knows only Claude Code's and Kimi Code's composers, so a draft typed in Codex is erased when a message is delivered there (inherited from rocket).
-7. A message longer than `large_message_threshold` (2048 bytes) or 20 lines is written to `<dir>/.hopp/inbox/msg-<id>.md`, and the agent gets a short pointer to that file instead of the text.
+7. The text of `hopp send` is its argument, a file (`--file <path>`) or stdin (`-` as the text, or `--file -`), and stdin is read only when something is piped in; two sources at once, a terminal or an empty pipe on stdin, and a blank text are refused (exit 3), never sent. A message longer than `large_message_threshold` (2048 bytes) or 20 lines is written to `<dir>/.hopp/inbox/msg-<id>.md`, and the agent gets a short pointer to that file instead of the text.
 8. A message still queued after `queue_timeout` (30 minutes) fails with reason `timeout`.
 9. A Claude Code or DeepSeek session launched without a first message has no journal until its first turn; hopp still delivers to it and proves delivery from the journal that first turn creates at the path Claude Code's registry names.
 10. While a message waits on the Claude Code route, the reason is written on the message (`hopp messages` shows `queued (<reason>)`, `hopp send --wait` prints it) and logged once per change.

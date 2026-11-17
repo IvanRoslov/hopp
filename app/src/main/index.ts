@@ -5,6 +5,7 @@ import { ARTIFACT_SCHEME, artifactIdOf, SHELL_FEED_CHANGED } from '../shared/ipc
 import { DaemonClient, resolveHoppHome, resolveSocketPath } from './daemon/client';
 import { startDaemon } from './daemon/start';
 import { EventStream } from './daemon/stream';
+import { installCommands, installLine } from './cliInstall';
 import { registerIpc } from './ipc';
 import { makeRunner } from './shell/exec';
 import { registerShellIpc } from './shell/ipc';
@@ -132,6 +133,13 @@ app.whenReady().then(() => {
     const task = shellService.feedTaskOf(e);
     if (task) send(SHELL_FEED_CHANGED, task);
   });
+  // The commands `hopp project|pipeline|task`, refreshed at every start so
+  // they run this app; never a reason not to start.
+  const bundle = app.isPackaged ? join(process.resourcesPath, 'hopp-shell.cjs') : join(app.getAppPath(), 'out', 'cli', 'hopp-shell.cjs');
+  installCommands(join(hoppHome, 'bin'), process.execPath, bundle).then(
+    (r) => console.log(installLine(r)),
+    (err) => console.warn(`hopp: the commands hopp project, pipeline and task were not installed: ${(err as Error).message}`),
+  );
   void shellService.seedPipelines().catch((err) => console.error('hopp: could not add the starter pipelines:', err));
   // Only files inside $HOPP_HOME/artifacts are served; anything else is 404.
   protocol.handle(ARTIFACT_SCHEME, async (req) => {

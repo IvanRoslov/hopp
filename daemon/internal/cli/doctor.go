@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/IvanRoslov/hopp/internal/agent"
 	_ "github.com/IvanRoslov/hopp/internal/agent/adapters" // the five harness adapters, for their Available checks
@@ -47,10 +48,10 @@ func (r checkResult) String() string {
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check tmux, the state directory, the daemon and the harnesses",
+		Short: "Check tmux, the state directory, the daemon, the harnesses and the external commands",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			results := runDoctorChecks()
+			results := runDoctorChecks(cmd.Root())
 			if printDoctorResults(cmd.OutOrStdout(), results) {
 				return &doctorFailedError{}
 			}
@@ -76,9 +77,9 @@ func printDoctorResults(w io.Writer, results []checkResult) (anyFail bool) {
 }
 
 // runDoctorChecks runs every doctor check in a stable order: tmux, the
-// state directory, the daemon (asked, never started), then each registered
-// adapter by name.
-func runDoctorChecks() []checkResult {
+// state directory, the daemon (asked, never started), each registered
+// adapter by name, then the external commands.
+func runDoctorChecks(root *cobra.Command) []checkResult {
 	results := []checkResult{checkTmux(), checkStateDir()}
 
 	c, _, err := connect(false)
@@ -96,7 +97,48 @@ func runDoctorChecks() []checkResult {
 		}
 	}
 
-	return append(results, checkAgents()...)
+	results = append(results, checkAgents()...)
+	return append(results, checkExternal(root)...)
+}
+
+// quotedPath: an absolute path in single or double quotes in a script.
+var quotedPath = regexp.MustCompile(`['"](/[^'"]+)['"]`)
+
+// checkExternal lists the external commands (hopp-<name> programs, see
+// external.go) and flags a script that names a file which does not exist,
+// such as a program that was moved or removed after the script was written.
+func checkExternal(root *cobra.Command) []checkResult {
+	ext := externalCommands(root)
+	if len(ext) == 0 {
+		where := "PATH"
+		if b := externalBin(); b != "" {
+			where = b + " or on PATH"
+		}
+		return []checkResult{{statusWarn, "external", "no hopp-<name> commands in " + where}}
+	}
+	names := make([]string, 0, len(ext))
+	for n := range ext {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	out := make([]checkResult, 0, len(names))
+	for _, n := range names {
+		path := ext[n]
+		var missing []string
+		if b, err := os.ReadFile(path); err == nil && strings.HasPrefix(string(b), "#!") {
+			for _, m := range quotedPath.FindAllStringSubmatch(string(b), -1) {
+				if _, err := os.Stat(m[1]); err != nil {
+					missing = append(missing, m[1])
+				}
+			}
+		}
+		if len(missing) > 0 {
+			out = append(out, checkResult{statusWarn, "external:" + n, path + " runs " + strings.Join(missing, ", ") + ", which does not exist"})
+			continue
+		}
+		out = append(out, checkResult{statusOK, "external:" + n, path})
+	}
+	return out
 }
 
 func checkTmux() checkResult {

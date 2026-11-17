@@ -24,6 +24,9 @@ describe('hoppLayer', () => {
   it('names the commands every session uses', () => {
     const t = hoppLayer();
     for (const w of ['hopp send', 'hopp ask', 'hopp lesson', 'hopp tools', '$HOPP_SESSION_ID', '$HOPP_PARENT_ID']) expect(t).toContain(w);
+    // Multi-line text goes through a file; stdin only when piped (lesson #3).
+    expect(t).toContain('write it to a file first and use `hopp send <session> --file <path>`');
+    expect(t).toContain('`--file -` reads stdin only when something is piped in');
   });
 });
 

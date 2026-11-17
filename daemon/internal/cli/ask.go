@@ -32,15 +32,24 @@ type askView struct {
 // newAskCmd is `hopp ask "<text>"`: a session asks the human for a decision.
 func newAskCmd() *cobra.Command {
 	var options, labels, attach []string
-	var from string
+	var from, file string
 	var wait bool
 	cmd := &cobra.Command{
-		Use:   "ask <text>",
+		Use:   "ask (<text> | - | --file <path>)",
 		Short: "Ask the human for a decision (from inside a session)",
 		Long: "Creates a decision request and prints its id. --option offers choices; --label adds free key=value\n" +
-			"context; --attach names files or URLs; --wait blocks until it is answered (exit 1 when withdrawn).",
-		Args: cobra.ExactArgs(1),
+			"context; --attach names files or URLs; --wait blocks until it is answered (exit 1 when withdrawn).\n" +
+			"The question is the argument, a file (--file <path>), or stdin (\"-\" or --file -, only when piped in).",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			arg := ""
+			if len(args) == 1 {
+				arg = args[0]
+			}
+			text, err := readBody(cmd, arg, len(args) == 1, file, "question", false)
+			if err != nil {
+				return err
+			}
 			if from == "" {
 				from = os.Getenv("HOPP_SESSION_ID")
 			}
@@ -55,7 +64,7 @@ func newAskCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := map[string]any{"from": from, "body": args[0], "options": options, "labels": lbl, "attachments": attach}
+			body := map[string]any{"from": from, "body": text, "options": options, "labels": lbl, "attachments": attach}
 			var a askView
 			if err := c.Post("/v1/asks", body, &a); err != nil {
 				return err
@@ -77,6 +86,7 @@ func newAskCmd() *cobra.Command {
 	f.StringArrayVar(&options, "option", nil, "a choice to offer (repeatable)")
 	f.StringArrayVar(&labels, "label", nil, "free context key=value (repeatable)")
 	f.StringArrayVar(&attach, "attach", nil, "a file path or URL to show with the ask (repeatable)")
+	f.StringVar(&file, "file", "", "read the question from this file ('-' reads stdin)")
 	f.StringVar(&from, "from", "", "asking session (default: $HOPP_SESSION_ID)")
 	f.BoolVar(&wait, "wait", false, "block until the ask is answered or withdrawn")
 	cmd.AddCommand(newAskWithdrawCmd())

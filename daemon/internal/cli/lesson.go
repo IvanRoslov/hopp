@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -33,7 +32,7 @@ func newLessonCmd() *cobra.Command {
 		Use:   "lesson [text]",
 		Short: "Record a lesson: a note on what would make the harness better",
 		Long: "Stores a lesson and prints its id. The text comes from the argument, from -f/--file, or from stdin\n" +
-			"when neither is given and stdin is not a terminal. Inside a session the lesson carries that\n" +
+			"(\"-\" as the argument or the file, or neither given with something piped in); empty text is refused. Inside a session the lesson carries that\n" +
 			"session's id and labels; --label adds or overrides labels.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -72,39 +71,14 @@ func newLessonCmd() *cobra.Command {
 	return cmd
 }
 
-// noteText takes the text of a lesson or a post from exactly one source: the
-// argument, the file, or a stdin that is not a terminal. noun names the note
-// in the errors.
+// noteText takes the text of a lesson or a post: the argument, the file,
+// or a stdin that is piped in (see readBody).
 func noteText(cmd *cobra.Command, args []string, file, noun string) (string, error) {
-	var body string
-	switch {
-	case len(args) == 1 && file != "":
-		return "", &usageError{message: "give the text as an argument or with --file, not both"}
-	case len(args) == 1:
-		body = args[0]
-	case file != "":
-		b, err := os.ReadFile(file)
-		if err != nil {
-			return "", err
-		}
-		body = string(b)
-	default:
-		in := cmd.InOrStdin()
-		if f, ok := in.(*os.File); ok {
-			if info, err := f.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
-				return "", &usageError{message: "no " + noun + " text: give it as an argument, with --file, or on stdin"}
-			}
-		}
-		b, err := io.ReadAll(in)
-		if err != nil {
-			return "", fmt.Errorf("read stdin: %w", err)
-		}
-		body = string(b)
+	arg := ""
+	if len(args) == 1 {
+		arg = args[0]
 	}
-	if strings.TrimSpace(body) == "" {
-		return "", &usageError{message: "the " + noun + " text is empty"}
-	}
-	return body, nil
+	return readBody(cmd, arg, len(args) == 1, file, noun, true)
 }
 
 // newLessonsCmd is `hopp lessons`: list lessons (new ones unless --all or

@@ -1,4 +1,5 @@
-// Installs the app's commands into $HOPP_HOME/bin (~/.hopp/bin by default):
+// Installs the app's commands into $HOPP_HOME/bin (~/.hopp/bin by default);
+// the app also does this itself at every start:
 // hopp-project, hopp-pipeline and hopp-task, small scripts that run the
 // app's CLI bundle with the Node inside Electron (ELECTRON_RUN_AS_NODE), so
 // no system Node is needed. `hopp task …` finds them there.
@@ -42,7 +43,8 @@ const q = (s) => `'${s.replaceAll("'", `'\\''`)}'`;
 for (const noun of NOUNS) {
   const body = [
     '#!/bin/sh',
-    `# hopp ${noun}: a command of the hopp desktop app, installed by scripts/install-cli.mjs (${mode}).`,
+    // Byte for byte what the app writes at its start (src/main/cliInstall.ts).
+    `# hopp ${noun}: a command of the hopp desktop app, written by the app at its start (and by scripts/install-cli.mjs).`,
     `ELECTRON_RUN_AS_NODE=1 exec ${q(t.runtime)} ${q(t.script)} ${noun} "$@"`,
     '',
   ].join('\n');

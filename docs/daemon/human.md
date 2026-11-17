@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-16 — fact 6 against the code on branch asks-labels and go test ./...; fact 7 against the code on branch daemon-posts and go test ./... (Plan 9); the rest against main (0453c7f) and the live checks of 2026-11-15 against ~/.hopp
+verified: 2026-11-16 — fact 6 against the code on branch asks-labels and go test ./...; fact 7 against the code on branch daemon-posts and go test ./... (Plan 9); the rest against main (0453c7f) and the live checks of 2026-11-15 against ~/.hopp; the text sources by go test on lessons-1
 ---
 
 # What the human sees and decides
@@ -21,7 +21,7 @@ The human reads what an agent said, answers the question an agent's screen waits
 
 ### Decision requests
 
-6. A session asks the human with `hopp ask "<text>"`: one stored request with optional choices (`--option`), labels and attachments, which stays `open` until it is answered or withdrawn. An ask keeps the labels its session had when it was asked, overlaid with any `--label` given, so `hopp asks --label k=v` finds a session's asks by the session's labels; the daemon stores and filters the labels but never acts on them.
+6. A session asks the human with `hopp ask "<text>"` (or the question from `--file <path>`, or stdin with `-`; a blank question is refused): one stored request with optional choices (`--option`), labels and attachments, which stays `open` until it is answered or withdrawn. An ask keeps the labels its session had when it was asked, overlaid with any `--label` given, so `hopp asks --label k=v` finds a session's asks by the session's labels; the daemon stores and filters the labels but never acts on them.
 7. The human answers with `hopp reply <ask-id> [<choice>] [-m <text>]`, the choice by its number or its exact text; a choice may carry text too, such as what to fix with a "Return", and both are stored and sent. `hopp asks --all --label k=v` lists answered and withdrawn asks as well, so their history can be rebuilt. An ask is answered at most once: of two answers only the first is taken, and a later one is refused with `ask_closed`.
 8. The answer returns to the asker twice: `hopp ask --wait` prints it, and the asking session gets one `[hopp] Answer to ask #<id>: …` system message, or its mailbox holds it while the session is not running. An asker that has ended with no mailbox gets nothing; the answer stays on the ask.
 9. When the asking session ends, its open asks become `withdrawn` with reason `session_ended`, so nobody answers a question that can no longer be received. The asker may also withdraw an ask itself.

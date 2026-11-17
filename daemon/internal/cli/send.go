@@ -13,67 +13,29 @@ import (
 // Overridden in tests to keep them fast.
 var pollInterval = 2 * time.Second
 
-// buildSendBody extracts the message body from args and/or filePath.
-//
-// Argument-shape (XOR) validation — no args, wrong arg count, or both a
-// positional body and --file supplied — is the caller's (RunE's)
-// responsibility so that all usage violations map to exit code 3
-// consistently. buildSendBody assumes it is called with a valid shape and
-// only reads the body from whichever source was given, then checks it is
-// non-empty.
-//
-// The body is read through readTextInput, so --file also accepts "-",
-// meaning "read the body from stdin".
-func buildSendBody(cmd *cobra.Command, args []string, filePath string) (string, error) {
-	var body string
-	var err error
-
-	if filePath != "" {
-		body, err = readTextInput(cmd, filePath)
-		if err != nil {
-			return "", err
-		}
-	} else if len(args) == 2 {
-		body = args[1]
-	}
-
-	if body == "" {
-		return "", fmt.Errorf("body must not be empty")
-	}
-
-	return body, nil
-}
-
 func newSendCmd() *cobra.Command {
 	var filePath string
 	var wait bool
 
 	cmd := &cobra.Command{
-		Use:   "send <session> [<text>]",
+		Use:   "send <session> [<text> | -]",
 		Short: "Send a message to a session",
+		Long: "Sends the text to a session. The text is the argument, a file (--file <path>), or stdin (\"-\" as the\n" +
+			"text, or --file -). For a long or markdown text write it to a file and use --file <path>: the shell\n" +
+			"never touches it. stdin is read only when something is piped in; an empty text is refused.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Validate argument count
 			if len(args) < 1 || len(args) > 2 {
-				return &usageError{message: "usage: hopp send <session> [<text>] [--file <path>] [--wait]"}
+				return &usageError{message: "usage: hopp send <session> (<text> | - | --file <path> | --file -) [--wait]"}
 			}
-
-			// If --file is provided, args should be [session] only
-			if filePath != "" && len(args) != 1 {
-				return &usageError{message: "usage: hopp send <session> [<text>] [--file <path>] [--wait]"}
-			}
-
-			// If neither --file nor a positional body is given, there is no
-			// message body at all — usage violation.
-			if filePath == "" && len(args) == 1 {
-				return &usageError{message: "usage: hopp send <session> [<text>] [--file <path>] [--wait]"}
-			}
-
 			sessionID := args[0]
-
-			// Build message body
-			body, err := buildSendBody(cmd, args, filePath)
+			arg := ""
+			if len(args) == 2 {
+				arg = args[1]
+			}
+			// One source: the text, or "-"/--file - for stdin, or a file.
+			body, err := readBody(cmd, arg, len(args) == 2, filePath, "message", false)
 			if err != nil {
-				return fmt.Errorf("invalid message: %v", err)
+				return err
 			}
 
 			// Connect to daemon

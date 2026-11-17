@@ -124,7 +124,7 @@ func runExternal(root *cobra.Command, args []string, stderr io.Writer) (code int
 			where = b + " or on PATH"
 		}
 		fmt.Fprintf(stderr, "hopp: unknown command %q: no program hopp-%s in %s.\n", word, word, where)
-		fmt.Fprintf(stderr, "Commands of the hopp desktop app are installed there by `make app-install-mac` (or `make app-cli` in a checkout of hopp); `hopp --help` lists hopp's own commands and the external ones it finds.\n")
+		fmt.Fprintf(stderr, "Commands of the hopp desktop app are installed there when the app starts: start the hopp app once (or run `make app-install-mac`, or `make app-cli` in a checkout of hopp). `hopp --help` lists hopp's own commands and the external ones it finds; `hopp doctor` checks them.\n")
 		return 3, true
 	}
 	env := os.Environ()
