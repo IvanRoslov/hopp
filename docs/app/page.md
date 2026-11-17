@@ -23,7 +23,7 @@ What the human sees and does in the app's window. What the main process keeps an
 ### A task, an agent
 
 7. A task without a pipeline has a header with its title, `Questions · N` for the selected session and the `···` menu (Stop, which names the number of child sessions and asks first; Resume; Finish; Remove from list, offered once the orchestrator's session no longer runs; Task details), a session picker that names each session's state, and the terminal of the chosen session. A terminal the human detached offers Reattach; a session that runs again after Resume attaches by itself. Task details say what the worktree started from (`origin/main · 9d10cd1 · 5 minutes ago`, or `HEAD (<branch>)` for a folder); when the clone could not be fetched first, the task screen says so, with the reason, until dismissed for that task.
-8. A long-lived agent that is off says so with the number of letters waiting for it and a Start button; running, it has the same terminal and questions as a task.
+8. A long-lived agent that is off says so with the number of letters waiting for it, a Start button and a quiet Remove that asks first; running, it has the same terminal and questions as a task. A Start refused for a tmux session outside hopp offers Rename (in Agent details) and Remove agent beside the reason, and a rename with letters waiting says first that they stay under the old name.
 9. The questions (or details) column and the left column can be dragged to new widths, or moved with the arrow keys, and the widths are remembered; the terminal resizes only on that drag or when a column opens or closes.
 
 ### Settings and looks

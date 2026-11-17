@@ -549,24 +549,56 @@ export class ShellService {
 
   // ---- long-lived agents ----------------------------------------------------
 
+  // checkAgentName: the reasons a name cannot be an agent's, field "name".
+  // Besides the store, it asks the daemon whether a launch with this id
+  // would be refused (a hopp session of that id in any state, or a live tmux
+  // session of that name outside hopp); a daemon that cannot answer leaves
+  // that to Start.
+  private async checkAgentName(name: string, st: ShellState): Promise<Result<null>> {
+    if (!name || !SLUG_PATTERN.test(name) || name.length > MAX_SLUG) {
+      return fail('name_invalid', `The name must start with a letter and use only a-z, 0-9 and dashes, at most ${MAX_SLUG} characters`, 'name');
+    }
+    if (st.agents.some((a) => a.name === name)) return fail('name_taken', `An agent named "${name}" exists`, 'name');
+    if (st.tasks.some((t) => t.sessionId === name)) return fail('name_taken', `"${name}" is the session of a task`, 'name');
+    const holder = await this.d.client.sessionIdHolder(name);
+    if (holder === 'tmux') return fail('name_in_tmux', tmuxTaken(name), 'name');
+    if (holder === 'session') {
+      return fail('name_taken', `hopp has a session named "${name}" from before. Choose another name, or remove that session with \`hopp rm ${name}\`.`, 'name');
+    }
+    return ok(null);
+  }
+
+  // dropEmptyMailbox removes a mailbox that holds no letters; one with
+  // letters stays, since removing it would delete them.
+  private async dropEmptyMailbox(name: string): Promise<void> {
+    const box = (await this.d.client.listMailboxes()).find((b) => b.name === name);
+    if (!box || box.total > 0) return;
+    try {
+      await this.d.client.removeMailbox(name);
+    } catch (err) {
+      if (!(err instanceof DaemonError && err.code === 'mailbox_not_found')) throw err;
+    }
+  }
+
+  private async addAgentMailbox(name: string): Promise<void> {
+    try {
+      await this.d.client.addMailbox(name);
+    } catch (err) {
+      if (!(err instanceof DaemonError && err.code === 'mailbox_exists')) throw err;
+    }
+  }
+
   createAgent(input: LongAgentInput): Promise<Result<LongAgent>> {
     return guard(async () => {
       const name = (input.name ?? '').trim();
-      if (!name || !SLUG_PATTERN.test(name) || name.length > MAX_SLUG) {
-        return fail('name_invalid', `The name must start with a letter and use only a-z, 0-9 and dashes, at most ${MAX_SLUG} characters`, 'name');
-      }
       const st = await this.d.store.read();
-      if (st.agents.some((a) => a.name === name)) return fail('name_taken', `An agent named "${name}" exists`, 'name');
-      if (st.tasks.some((t) => t.sessionId === name)) return fail('name_taken', `"${name}" is the session of a task`, 'name');
+      const bad = await this.checkAgentName(name, st);
+      if (!bad.ok) return bad;
       const profiles = await this.listProfiles();
       if (!profiles.some((p) => p.enabled && p.name === input.profile)) return fail('profile_unknown', 'Choose an enabled profile', 'profile');
       const dir = expandHome((input.dir ?? '').trim());
       if (!dir || !isAbsolute(dir) || !(await isDir(dir))) return fail('folder_missing', 'Choose an existing folder', 'dir');
-      try {
-        await this.d.client.addMailbox(name);
-      } catch (err) {
-        if (!(err instanceof DaemonError && err.code === 'mailbox_exists')) throw err;
-      }
+      await this.addAgentMailbox(name);
       const agent: LongAgent = { name, profile: input.profile, dir, createdAt: this.now() };
       return this.d.store.update((s) => {
         if (s.agents.some((a) => a.name === name)) throw new Refused(fail('name_taken', `An agent named "${name}" exists`, 'name'));
@@ -591,10 +623,17 @@ export class ShellService {
       }
       const prof = (await this.listProfiles()).find((p) => p.name === a.profile);
       if (!prof || !prof.enabled) return fail('profile_unknown', `The agent's profile "${a.profile}" is not enabled`);
-      await this.d.client.createSession({
-        dir: a.dir, id: name, profile: a.profile, labels: { 'hopp.agent': name },
-        system_prompt: agentText({ toolsPrompt: await this.toolsPromptFor(prof.agent) }),
-      });
+      try {
+        await this.d.client.createSession({
+          dir: a.dir, id: name, profile: a.profile, labels: { 'hopp.agent': name },
+          system_prompt: agentText({ toolsPrompt: await this.toolsPromptFor(prof.agent) }),
+        });
+      } catch (err) {
+        // hopp has no session of this id (checked above), so the daemon
+        // refused it for a live tmux session of that name outside hopp.
+        if (err instanceof DaemonError && err.code === 'session_exists') return fail('name_in_tmux', tmuxTaken(name));
+        throw err;
+      }
       return ok(null);
     });
   }
@@ -618,7 +657,32 @@ export class ShellService {
       await this.d.store.update((st) => {
         st.agents = st.agents.filter((x) => x.name !== name);
       });
+      await this.dropEmptyMailbox(name);
       return ok(null);
+    });
+  }
+
+  renameAgent(name: string, newName: string): Promise<Result<LongAgent>> {
+    return guard(async () => {
+      const st = await this.d.store.read();
+      const a = st.agents.find((x) => x.name === name);
+      if (!a) return fail('agent_not_found', `No agent "${name}"`);
+      const to = (newName ?? '').trim();
+      if (to === name) return ok(a);
+      const s = await this.sessionOrNull(name);
+      if (s && LIVE.has(s.state)) return fail('agent_running', 'Stop the agent before renaming it');
+      const bad = await this.checkAgentName(to, st);
+      if (!bad.ok) return bad;
+      await this.addAgentMailbox(to);
+      const r = await this.d.store.update((x) => {
+        if (x.agents.some((k) => k.name === to)) throw new Refused(fail('name_taken', `An agent named "${to}" exists`, 'name'));
+        const k = x.agents.find((y) => y.name === name);
+        if (!k) throw new Refused(fail('agent_not_found', `No agent "${name}"`));
+        k.name = to;
+        return ok({ ...k });
+      }).catch(refusedResult<LongAgent>);
+      if (r.ok) await this.dropEmptyMailbox(name);
+      return r;
     });
   }
 
@@ -1001,6 +1065,12 @@ export class ShellService {
 
 // Refused carries a refusal out of a store update, so the update writes
 // nothing and the caller still gets the Result.
+// tmuxTaken: what the human reads when a live tmux session outside hopp
+// holds the agent's name.
+function tmuxTaken(name: string): string {
+  return `A tmux session named ${name} already runs outside hopp. Choose another name, or close that session.`;
+}
+
 class Refused<T> extends Error {
   constructor(readonly result: Result<T>) {
     super('refused');

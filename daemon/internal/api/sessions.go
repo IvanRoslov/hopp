@@ -203,6 +203,18 @@ func registerSessionRoutes(mux *http.ServeMux, d Deps) {
 		writeSession(w, d, id)
 	})
 
+	// GET /v1/session-ids/{id} answers, without launching anything, whether a
+	// launch with this id would be refused as taken and by what.
+	mux.HandleFunc("GET /v1/session-ids/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		holder, err := d.Manager.IDHolder(r.Context(), id)
+		if err != nil {
+			writeManagerErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "free": holder == "", "taken_by": holder})
+	})
+
 	mux.HandleFunc("GET /v1/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
 		argv, err := d.Manager.AttachCommand(r.PathValue("id"))
 		if err != nil {

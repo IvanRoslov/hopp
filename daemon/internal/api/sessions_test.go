@@ -399,3 +399,33 @@ func TestDeleteSession(t *testing.T) {
 		t.Fatalf("unknown = %d, want 404", code)
 	}
 }
+
+func TestSessionIDHolder(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "s1"})
+	e.rt.SetLive("cto", map[string]string{})
+	for _, c := range []struct {
+		id, by string
+		free   bool
+	}{{"s1", "session", false}, {"cto", "tmux", false}, {"fresh", "", true}} {
+		var out struct {
+			ID      string `json:"id"`
+			Free    bool   `json:"free"`
+			TakenBy string `json:"taken_by"`
+		}
+		if code := e.call(t, "GET", "/v1/session-ids/"+c.id, nil, &out); code != http.StatusOK {
+			t.Fatalf("%s: status %d", c.id, code)
+		}
+		if out.ID != c.id || out.Free != c.free || out.TakenBy != c.by {
+			t.Errorf("%s: %+v", c.id, out)
+		}
+	}
+	code, ecode := sessErrCode(t, e, "GET", "/v1/session-ids/Bad_Name", nil)
+	if code != http.StatusBadRequest || ecode != "invalid_id" {
+		t.Errorf("invalid: status %d code %q", code, ecode)
+	}
+	// Asking launches nothing.
+	if len(e.rt.Created) != 1 {
+		t.Errorf("created %d sessions", len(e.rt.Created))
+	}
+}
