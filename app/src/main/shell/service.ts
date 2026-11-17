@@ -36,6 +36,7 @@ import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
 import { Github } from './github';
+import { importProfileName, PROFILE_NAME_RE, uniqueProfileName } from './profiles';
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
 import { agentText, allowedRepos, orchestratorText, RESUMED_AGENT, RESUMED_ORCHESTRATOR, workerText, type WorkerFile } from './startText';
@@ -206,8 +207,9 @@ export class ShellService {
   // ---- profiles -----------------------------------------------------------
 
   async listProfiles(): Promise<ModelProfile[]> {
-    const { profiles } = await this.d.client.listModelProfiles();
-    return [...profiles.filter((p) => p.enabled), ...profiles.filter((p) => !p.enabled)];
+    const { profiles, default: def } = await this.d.client.listModelProfiles();
+    const all = profiles.map((p) => ({ ...p, isDefault: p.name === def }));
+    return [...all.filter((p) => p.enabled), ...all.filter((p) => !p.enabled)];
   }
 
   // ---- tasks --------------------------------------------------------------
@@ -820,39 +822,156 @@ export class ShellService {
     return guard(() => this.github.add(fullName));
   }
 
-  // ---- model profiles (being implemented) -----------------------------------
+  // ---- model profiles ----------------------------------------------------------
 
   onProfilesChanged(cb: () => void): () => void {
     this.profileListeners.add(cb);
     return () => this.profileListeners.delete(cb);
   }
 
-  async setProfileEnabled(_name: string, _enabled: boolean): Promise<Result<ModelProfile>> {
-    return fail('not_implemented', 'not implemented yet');
+  private profilesChanged(): void {
+    for (const cb of this.profileListeners) {
+      try {
+        cb();
+      } catch {
+        // a listener's failure is not ours
+      }
+    }
   }
 
-  async updateProfile(_name: string, _update: ProfileUpdate): Promise<Result<ModelProfile>> {
-    return fail('not_implemented', 'not implemented yet');
+  // A profile change: run it, tell listeners when it worked.
+  private profileOp<T>(fn: () => Promise<Result<T>>): Promise<Result<T>> {
+    return guard(async () => {
+      const r = await fn();
+      if (r.ok) this.profilesChanged();
+      return r;
+    });
   }
 
-  async setDefaultProfile(_name: string): Promise<Result<null>> {
-    return fail('not_implemented', 'not implemented yet');
+  setProfileEnabled(name: string, enabled: boolean): Promise<Result<ModelProfile>> {
+    return this.profileOp(async () => {
+      if (!enabled) {
+        const { default: def } = await this.d.client.listModelProfiles();
+        if (def === name) {
+          return fail('profile_is_default', `${name} is the default profile; make another profile the default before switching it off`);
+        }
+      }
+      return ok(await this.d.client.patchModelProfile(name, { enabled }));
+    });
   }
 
-  async removeProfile(_name: string): Promise<Result<null>> {
-    return fail('not_implemented', 'not implemented yet');
+  updateProfile(name: string, update: ProfileUpdate): Promise<Result<ModelProfile>> {
+    return this.profileOp(async () => {
+      const body: Partial<ModelProfile> = {};
+      if (update.description !== undefined) body.description = update.description;
+      if (update.model !== undefined) body.model = update.model;
+      if (update.effort !== undefined) body.effort = update.effort;
+      return ok(await this.d.client.patchModelProfile(name, body));
+    });
   }
 
-  async moveProfile(_name: string, _position: number): Promise<Result<null>> {
-    return fail('not_implemented', 'not implemented yet');
+  setDefaultProfile(name: string): Promise<Result<null>> {
+    return this.profileOp(async () => {
+      await this.d.client.setDefaultProfile(name);
+      return ok(null);
+    });
   }
 
-  async modelCatalog(): Promise<Result<HarnessCatalog[]>> {
-    return fail('not_implemented', 'not implemented yet');
+  removeProfile(name: string): Promise<Result<null>> {
+    return this.profileOp(async () => {
+      const sessions = (await this.d.client.listSessions()).filter((s) => s.profile === name && LIVE.has(s.state));
+      const tasks = (await this.d.store.read()).tasks.filter(
+        (t) => t.status === 'active' && (t.orchestratorProfile === name || t.workerProfiles.includes(name)),
+      );
+      if (sessions.length || tasks.length) {
+        const what = [
+          ...sessions.map((s) => `session ${s.id}`),
+          ...tasks.map((t) => `task "${t.title}"`),
+        ];
+        return fail('profile_in_use', `${name} is in use by ${what.slice(0, 5).join(', ')}${what.length > 5 ? ` and ${what.length - 5} more` : ''}; finish or stop them first, or switch the profile off instead`);
+      }
+      await this.d.client.deleteModelProfile(name);
+      return ok(null);
+    });
   }
 
-  async importModels(): Promise<Result<ImportResult>> {
-    return fail('not_implemented', 'not implemented yet');
+  moveProfile(name: string, position: number): Promise<Result<null>> {
+    return this.profileOp(async () => {
+      const { profiles } = await this.d.client.listModelProfiles();
+      const order = [...profiles].sort((a, b) => a.position - b.position);
+      const i = order.findIndex((p) => p.name === name);
+      if (i < 0) return fail('profile_not_found', `No profile ${name}`);
+      const [p] = order.splice(i, 1);
+      order.splice(Math.max(0, Math.min(position, order.length)), 0, p!);
+      for (const [k, x] of order.entries()) {
+        if (x.position !== k) await this.d.client.patchModelProfile(x.name, { position: k });
+      }
+      return ok(null);
+    });
+  }
+
+  modelCatalog(): Promise<Result<HarnessCatalog[]>> {
+    return guard(async () => {
+      const [raw, { profiles }] = await Promise.all([this.d.client.modelCatalog(), this.d.client.listModelProfiles()]);
+      const used = new Set(profiles.map((p) => p.agent + '\u0000' + p.model));
+      return ok(
+        raw.map((c) => ({
+          agent: c.agent, source: c.source ?? '', warning: c.warning ?? '',
+          models: (c.models ?? []).map((m) => ({
+            id: m.id, name: m.name ?? '', description: m.description ?? '', main: !!m.main, efforts: m.efforts ?? [],
+            known: used.has(c.agent + '\u0000' + m.id),
+          })),
+        })),
+      );
+    });
+  }
+
+  // Imports run one at a time: two at once would pick the same names.
+  private imports: Promise<unknown> = Promise.resolve();
+
+  importModels(): Promise<Result<ImportResult>> {
+    const run = () => this.profileOp(() => this.importOnce());
+    const p = this.imports.then(run, run);
+    this.imports = p.catch(() => undefined);
+    return p;
+  }
+
+  private async importOnce(): Promise<Result<ImportResult>> {
+    const cat = await this.modelCatalog();
+    if (!cat.ok) return cat;
+    const { profiles } = await this.d.client.listModelProfiles();
+    const taken = new Set(profiles.map((p) => p.name));
+    const used = new Set(profiles.map((p) => p.agent + '\u0000' + p.model));
+    const added: ModelProfile[] = [];
+    const failed: { agent: string; reason: string }[] = [];
+    let skipped = 0;
+    for (const c of cat.value) {
+      if (c.models.length === 0) {
+        if (c.warning) failed.push({ agent: c.agent, reason: c.warning });
+        continue;
+      }
+      for (const m of c.models) {
+        if (!m.main || used.has(c.agent + '\u0000' + m.id)) {
+          skipped++;
+          continue;
+        }
+        const name = uniqueProfileName(importProfileName(c.agent, m.id), taken);
+        if (!PROFILE_NAME_RE.test(name)) {
+          skipped++;
+          continue;
+        }
+        try {
+          added.push(await this.d.client.createModelProfile({
+            name, agent: c.agent, model: m.id, description: m.description || m.name, enabled: false,
+          }));
+          taken.add(name);
+          used.add(c.agent + '\u0000' + m.id);
+        } catch (err) {
+          failed.push({ agent: c.agent, reason: `${m.id}: ${(err as Error).message}` });
+        }
+      }
+    }
+    return ok({ added, skipped, failed });
   }
 }
 

@@ -12,6 +12,14 @@ export interface StoredArtifact extends Artifact {
 }
 import type { Ask, AskAnswer, Health, QuizAnswer, Session, Waiting } from '../../shared/types';
 
+// RawCatalog is one harness's entry of GET /v1/model-catalog.
+export interface RawCatalog {
+  agent: string;
+  source: string;
+  warning: string;
+  models: { id: string; name: string; description: string; main: boolean; efforts: string[] | null }[] | null;
+}
+
 // CreateSessionBody is the request of POST /v1/sessions.
 export interface CreateSessionBody {
   dir: string;
@@ -146,6 +154,27 @@ export class DaemonClient {
   async listModelProfiles(): Promise<{ profiles: ModelProfile[]; default: string }> {
     const r = await this.call<{ profiles: ModelProfile[] | null; default?: string }>('GET', '/v1/model-profiles');
     return { profiles: r.profiles ?? [], default: r.default ?? '' };
+  }
+
+  createModelProfile(body: Partial<ModelProfile> & { name: string }): Promise<ModelProfile> {
+    return this.call('POST', '/v1/model-profiles', body);
+  }
+
+  patchModelProfile(name: string, body: Partial<ModelProfile>): Promise<ModelProfile> {
+    return this.call('PATCH', `/v1/model-profiles/${enc(name)}`, body);
+  }
+
+  async deleteModelProfile(name: string): Promise<void> {
+    await this.call('DELETE', `/v1/model-profiles/${enc(name)}`);
+  }
+
+  async setDefaultProfile(name: string): Promise<void> {
+    await this.call('PUT', '/v1/model-profiles/default', { name });
+  }
+
+  async modelCatalog(refresh = false): Promise<RawCatalog[]> {
+    const r = await this.call<{ agents: RawCatalog[] | null }>('GET', '/v1/model-catalog' + (refresh ? '?refresh=1' : ''), undefined, this.spawnTimeoutMs);
+    return r.agents ?? [];
   }
 
   async listMailboxes(): Promise<{ name: string; unread: number; total: number }[]> {

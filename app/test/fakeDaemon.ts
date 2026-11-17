@@ -53,6 +53,8 @@ export class FakeDaemon {
   attach: Record<string, string[]> = {};
   defaultAttach: string[] = ['/bin/sh', '-c', 'echo hello; cat'];
   profiles: ModelProfile[] = [];
+  defaultProfile: string | undefined;
+  catalogs: { agent: string; source: string; warning: string; models: { id: string; name: string; description: string; main: boolean; efforts: string[] }[] }[] = [];
   posts: Post[] = [];
   artifacts: (Artifact & { path: string })[] = [];
   messages: { id: number; from?: string; to: string; body: string }[] = [];
@@ -266,8 +268,40 @@ export class FakeDaemon {
       return json(res, 200, a);
     }
     if (key === 'GET /v1/model-profiles') {
-      return json(res, 200, { profiles: this.profiles, default: this.profiles[0]?.name ?? '' });
+      return json(res, 200, { profiles: this.profiles, default: this.defaultProfile ?? this.profiles[0]?.name ?? '' });
     }
+    if (key === 'POST /v1/model-profiles') {
+      const b = JSON.parse(body || '{}') as Partial<ModelProfile> & { name: string };
+      if (this.profiles.some((p) => p.name === b.name)) return json(res, 409, { error: { code: 'profile_exists', message: 'profile ' + b.name + ' already exists' } });
+      const p = makeProfile(b.name, { ...b, enabled: b.enabled ?? true, position: Math.max(-1, ...this.profiles.map((x) => x.position)) + 1 });
+      this.profiles.push(p);
+      return json(res, 201, p);
+    }
+    if (key === 'PUT /v1/model-profiles/default') {
+      const name = (JSON.parse(body || '{}') as { name?: string }).name ?? '';
+      const p = this.profiles.find((x) => x.name === name);
+      if (!p) return json(res, 404, { error: { code: 'profile_not_found', message: 'no profile ' + name } });
+      if (!p.enabled) return json(res, 400, { error: { code: 'profile_disabled', message: 'profile ' + name + ' is disabled' } });
+      this.defaultProfile = name;
+      return json(res, 200, { default: name });
+    }
+    if ((m = path.match(/^\/v1\/model-profiles\/([^/]+)$/))) {
+      const name = decodeURIComponent(m[1]!);
+      const i = this.profiles.findIndex((x) => x.name === name);
+      if (i < 0) return json(res, 404, { error: { code: 'profile_not_found', message: 'no profile ' + name } });
+      if (req.method === 'PATCH') {
+        this.profiles[i] = { ...this.profiles[i]!, ...(JSON.parse(body || '{}') as Partial<ModelProfile>), name };
+        return json(res, 200, this.profiles[i]);
+      }
+      if (req.method === 'DELETE') {
+        this.profiles.splice(i, 1);
+        if (this.defaultProfile === name) this.defaultProfile = undefined;
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+    }
+    if (key === 'GET /v1/model-catalog') return json(res, 200, { agents: this.catalogs });
     if (key === 'GET /v1/mailboxes') return json(res, 200, { mailboxes: this.mailboxes });
     if (key === 'POST /v1/mailboxes') {
       const name = String((JSON.parse(body || '{}') as { name?: string }).name ?? '');
