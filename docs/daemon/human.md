@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-16 — fact 6 against the code on branch asks-labels and go test ./...; fact 7 against the code on branch daemon-posts and go test ./... (Plan 9); the rest against main (0453c7f) and the live checks of 2026-11-15 against ~/.hopp; the text sources by go test on lessons-1; answers without a choice and dismissal by go test on ask-dismiss
+verified: 2026-11-17 — against the code on main (670ba12): api/asks.go (answers without a choice, POST /v1/asks/{id}/dismiss and its message), store/asks.go, session/quiz.go (answerSettle 400 ms), the Claude Code and Codex chat readers
 ---
 
 # What the human sees and decides

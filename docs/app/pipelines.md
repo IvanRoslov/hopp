@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-16 — make app-test on shell-main, including a run against the real daemon on a temp HOPP_HOME; facts 6 and 7 by make app-test and e2e/ask-dismiss.spec.ts on ask-dismiss
+verified: 2026-11-17 — against the code on main (670ba12); facts 6 and 7 against Feed.tsx (the composer's "Send as the answer to"), AskActions.tsx and shared/stages.ts (a dismissed submission leaves its stage started)
 ---
 
 # Pipelines, the feed, stages and artifacts

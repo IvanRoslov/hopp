@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — against the code on main (e9468d7): WorkView, TaskView, Agents, TaskBase and the terminal; make app-test there
+verified: 2026-11-17 — against the code on main (670ba12): WorkView, TaskView, Agents, TaskBase, questions/Panel and AskActions (Other…, Not relevant), the terminal; make app-test there
 ---
 
 # A task's or an agent's screen

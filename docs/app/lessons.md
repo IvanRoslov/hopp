@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — make app-test on lessons-kinds (fake daemon, temp HOPP_HOME) and the real daemon built from daemon/ in profiles.integration.test.ts
+verified: 2026-11-17 — against the code on main (670ba12): startText.ts (LESSONS_MAX 20, LESSONS_MAX_BYTES 4096, both lesson commands, triageLessonsBrief), service.ts (lessonToGuardrails marks the lesson)
 ---
 
 # Lessons by kind: about hopp, about a project

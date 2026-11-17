@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — make app-test on shell-cli (fake daemon, temp HOPP_HOME, the built command run as processes), the packed app's command run through bin/hopp, and a live run with a throwaway long-lived agent; fact 2 by the install tests and e2e on lessons-1
+verified: 2026-11-17 — against the code on main (670ba12): app/src/cli (EXIT 1/2/3, the role refusal, the worker defaults), main/shell/server.ts (shell.sock 0600, /tmp/hopp-<uid>/), main/cliInstall.ts (ELECTRON_RUN_AS_NODE), startText.ts (started by)
 ---
 
 # The app's commands: hopp project, hopp pipeline, hopp task
