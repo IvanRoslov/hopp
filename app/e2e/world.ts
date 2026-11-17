@@ -20,6 +20,11 @@ export function hoppBinary(): string {
   const dir = mkdtempSync(join(tmpdir(), 'hopp-e2e-bin-'));
   const bin = join(dir, 'hopp');
   execFileSync('go', ['build', '-o', bin, './cmd/hopp'], { cwd: join(appDir, '..', 'daemon'), stdio: 'ignore' });
+  // The first run of a freshly built program waits for macOS to check it:
+  // 0.4 s when idle, 3 to 11 s under load (measured), against 0.04 s later.
+  // Run it once here, so that wait never lands inside a test's 5 s step
+  // (Start runs `hopp tools prompt`).
+  execFileSync(bin, ['--version'], { stdio: 'ignore', timeout: 120_000 });
   builtHopp = bin;
   return bin;
 }
