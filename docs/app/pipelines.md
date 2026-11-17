@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — against the code on main (670ba12); facts 6 and 7 against Feed.tsx (the composer's "Send as the answer to"), AskActions.tsx and shared/stages.ts (a dismissed submission leaves its stage started)
+verified: 2026-11-17 — against the code on main (670ba12); facts 6 and 7 against Feed.tsx (the composer's "Send as the answer to"), AskActions.tsx and shared/stages.ts (a dismissed submission leaves its stage started); fact 7's options by make app-test and e2e/submission-options.spec.ts
 ---
 
 # Pipelines, the feed, stages and artifacts
@@ -14,7 +14,7 @@ A task may follow a pipeline: an ordered list of stages the orchestrator walks w
 4. A task's feed is the daemon's posts labelled with its `hopp.task`, the asks (open and closed) that carry that label or come from one of the task's sessions, and every version of the artifacts whose scope is the orchestrator's session. The page is told to reload a task's feed when a daemon event carries that task's label.
 5. A stage's state (not started, started, submitted, accepted, returned) is derived by the app from those labels; a stage that does not wait for approval is accepted when the next stage starts or a `stage_done` post says so.
 6. The human's line in the feed is sent to the orchestrator as a message and recorded as a post without a sender, with the task's labels; it is refused while the orchestrator is not running. While exactly one ordinary question of the task is open, the line goes as that question's answer instead, unless the human unticks "Send as the answer to". Once the message is sent, a failure to record the post is logged, not reported, so the line is never sent twice.
-7. A submission is answered Accept, or Return with the text of what to fix, which becomes the ask's answer. Any open ask in the feed can also be closed as "Not relevant" after a one-line confirmation, which leaves a quiet "Dismissed · not relevant" line; a dismissed submission puts its stage back to started, never to accepted.
+7. A submission is answered with one of its own options, sent as written: an option that starts with Accept accepts the stage (the first such is the main button), one that starts with Return or Revise asks what to fix and returns it with that text, and any other answer also returns it, so a stage moves on only on an Accept. A submission whose options hold no Accept is shown as an ordinary question; the start text asks for exactly Accept and Return, with choices about what follows acceptance in a separate ask. Any open ask in the feed can also be closed as "Not relevant" after a one-line confirmation, which leaves a quiet "Dismissed · not relevant" line; a dismissed submission puts its stage back to started, never to accepted.
 8. The page loads artifact files from `hopp-artifact://v/<id>`, which serves only files inside `$HOPP_HOME/artifacts` (after resolving symlinks) under a sandboxing content policy, so an HTML artifact shows without running scripts or loading files beside it. The text viewer reads at most 2 MB.
 9. A markdown artifact (by type or `.md` name), the feed's posts, questions and answers, and the stage texts show as formatted markdown, with a Source switch in the viewer for both sides of a comparison. Raw HTML in them shows as text, a link opens in the browser only for https or opens another artifact of the task it names (`name@version`, a file name), and images load only from artifacts or `data:`.
 

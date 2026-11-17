@@ -12,6 +12,7 @@ import { UpIcon } from '../ui/icons';
 import { Markdown, type MarkdownLinks } from '../ui/Markdown';
 import { plainLine } from '../ui/plainText';
 import { DismissAsk, OwnAnswer } from '../questions/AskActions';
+import { submissionOptionKind, usableSubmissionOptions } from '../../shared/submission';
 import { answerLine, askKind, author, clock, feedEntries, findArtifact, resolveArtifactRef, stageTag, type Entry } from './model';
 
 export interface FeedProps {
@@ -222,19 +223,25 @@ function Attachments(props: FeedProps & { refs: string[] }) {
   );
 }
 
-// SubmissionBlock: Accept / Return / All artifacts. Return asks what should
-// be fixed; that text is the answer.
+// SubmissionBlock: the submission's own options, each sending its exact
+// text: the first acceptance is the primary button, a return option asks what
+// should be fixed first (that text is the answer), any other option is a plain
+// button; then All artifacts and Not relevant. A submission whose options hold
+// no acceptance is shown as an ordinary question, so no button can fail.
 function SubmissionBlock(props: FeedProps & { ask: Ask }) {
   const { ask } = props;
-  const [returning, setReturning] = useState(false);
+  const options = usableSubmissionOptions(ask);
+  const [returning, setReturning] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const answer = async (choice: 'Accept' | 'Return') => {
+  if (!options) return <ChoiceBlock {...props} ask={ask} options={ask.options ?? []} primary={-1} />;
+  const firstAccept = options.find((o) => submissionOptionKind(o) === 'accept');
+  const answer = async (choice: string, why?: string) => {
     setBusy(true);
     setError(null);
     try {
-      const r = await props.bridge.shell.answerSubmission(ask.id, choice === 'Accept' ? { choice } : { choice, text });
+      const r = await props.bridge.shell.answerSubmission(ask.id, why ? { choice, text: why } : { choice });
       if (!r.ok) setError(r.error.message);
       else props.reload();
     } catch (err) {
@@ -257,7 +264,7 @@ function SubmissionBlock(props: FeedProps & { ask: Ask }) {
   };
   return (
     <div className="entry-actions">
-      {returning ? (
+      {returning !== null ? (
         <div className="return-box">
           <textarea
             className="text-input"
@@ -269,22 +276,30 @@ function SubmissionBlock(props: FeedProps & { ask: Ask }) {
             onChange={(e) => setText(e.target.value)}
           />
           <div className="btns">
-            <button type="button" className="c-btn primary" disabled={busy || !text.trim()} onClick={() => void answer('Return')}>
-              Return
+            <button type="button" className="c-btn primary wrap" disabled={busy || !text.trim()} onClick={() => void answer(returning, text.trim())}>
+              {returning}
             </button>
-            <button type="button" className="c-btn" disabled={busy} onClick={() => setReturning(false)}>
+            <button type="button" className="c-btn" disabled={busy} onClick={() => setReturning(null)}>
               Cancel
             </button>
           </div>
         </div>
       ) : (
-        <div className="btns">
-          <button type="button" className="c-btn primary" disabled={busy} onClick={() => void answer('Accept')}>
-            Accept
-          </button>
-          <button type="button" className="c-btn" disabled={busy} onClick={() => setReturning(true)}>
-            Return
-          </button>
+        <div className="btns submission-btns">
+          {options.map((o) => {
+            const kind = submissionOptionKind(o);
+            return (
+              <button
+                key={o}
+                type="button"
+                className={'c-btn wrap' + (o === firstAccept ? ' primary' : '')}
+                disabled={busy}
+                onClick={() => (kind === 'return' ? setReturning(o) : void answer(o))}
+              >
+                {o}
+              </button>
+            );
+          })}
           <button type="button" className="c-btn" onClick={() => props.onAllArtifacts(ask.labels?.['hopp.stage'] ?? '')}>
             All artifacts
           </button>

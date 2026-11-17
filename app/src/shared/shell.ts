@@ -375,8 +375,13 @@ export interface StageState {
   lastAnswer: Ask | null;
 }
 
-// The human's answer to a submission. Return needs the text of what to fix.
-export type SubmissionAnswer = { choice: 'Accept' } | { choice: 'Return'; text: string };
+// The human's answer to a submission: one of the ask's options, exactly as
+// written (see shared/submission.ts for which accept and which return). A
+// return option needs the text of what to fix; any option may carry text.
+export interface SubmissionAnswer {
+  choice: string;
+  text?: string;
+}
 
 // ---- GitHub repositories ---------------------------------------------------
 

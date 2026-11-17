@@ -5,16 +5,17 @@
 // not started → started (a stage_started post, or anything else posted with
 // the stage's label) → submitted (an open submission ask) → accepted (answered
 // Accept) or returned (answered Return; a later start or submission moves it
-// on). A withdrawn submission returns the stage to started. A stage that does
+// on; any answer that is not an acceptance counts as a return, see
+// shared/submission.ts). A withdrawn or dismissed submission returns the
+// stage to started. A stage that does
 // not wait for approval is accepted when the next stage starts or a
 // stage_done post says so.
 import type { Ask } from './types';
+import { submissionOutcome } from './submission';
 import {
-  ACCEPT,
   EVENT_STAGE_DONE,
   KIND_SUBMISSION,
   LABEL,
-  RETURN,
   type Pipeline,
   type Post,
   type StageState,
@@ -91,9 +92,9 @@ export function deriveStages(pipeline: Pipeline, posts: Post[], asks: Ask[]): St
           st.submission = null;
           if (a.status === 'answered') {
             st.lastAnswer = a;
-            if (a.choice === ACCEPT) st.status = 'accepted';
-            else if (a.choice === RETURN) st.status = 'returned';
-            else st.status = 'started';
+            // Only an acceptance accepts (shared/submission.ts); any other
+            // answer returns the stage with that answer.
+            st.status = submissionOutcome(a);
           } else {
             st.status = 'started'; // withdrawn
           }

@@ -47,7 +47,7 @@ export function feedBridge(feed: TaskFeed) {
       const x = state.feed.asks.find((k) => k.id === id)!;
       x.status = 'answered';
       x.choice = a.choice;
-      if (a.choice === 'Return') x.answer = a.text;
+      if (a.text) x.answer = a.text;
       return { ok: true, value: x };
     }),
     answerAsk: vi.fn(async (id: number, body: { choice?: string; answer?: string }) => {
