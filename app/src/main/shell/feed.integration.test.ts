@@ -27,6 +27,9 @@ describe.skipIf(!hasGo)('the feed against the real daemon', () => {
     home = join(root, 'h');
     const bin = join(root, 'hopp');
     execFileSync('go', ['build', '-o', bin, './cmd/hopp'], { cwd: resolve(import.meta.dirname, '../../../../daemon'), stdio: 'ignore' });
+    // A fresh program's first run waits for macOS to check it (seconds under
+    // load); pay that here, not in the daemon's start below.
+    execFileSync(bin, ['--version'], { stdio: 'ignore', timeout: 120_000 });
     const env = { ...process.env, HOPP_HOME: home, HOPP_SESSION_ID: '', HOPP_SOCKET: '' };
     daemon = spawn(bin, ['daemon', 'run'], { env, stdio: 'ignore' });
     client = new DaemonClient(join(home, 'hopp.sock'));

@@ -23,6 +23,9 @@ describe.skipIf(!hasGo)('the real hopp tools CLI', () => {
     home = join(root, 'home');
     const bin = join(root, 'hopp');
     execFileSync('go', ['build', '-o', bin, './cmd/hopp'], { cwd: resolve(import.meta.dirname, '../../../../daemon'), stdio: 'ignore' });
+    // A fresh program's first run waits for macOS to check it (seconds under
+    // load); pay that here, not in the daemon's start below.
+    execFileSync(bin, ['--version'], { stdio: 'ignore', timeout: 120_000 });
     const tool = join(home, 'tools', 'fetcher');
     mkdirSync(tool, { recursive: true });
     writeFileSync(join(tool, 'tool.yaml'), 'name: fetcher\ndescription: Fetch a page\ncommand: [curl]\npaid: true\n');
