@@ -4,6 +4,9 @@
 import { vi } from 'vitest';
 import type { HoppBridge } from '../src/shared/bridge';
 import type {
+  HarnessCatalog,
+  ImportResult,
+  ProfileUpdate,
   Lesson,
   Pipeline,
   PipelineInput,
@@ -298,6 +301,15 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       if (!folder) return fail('repo_unknown', `No repository ${fullName}`);
       return ok({ path: `${ghStatus.home}/repos/${folder}` });
     }),
+    // Model profiles (stubs added with the contract; replace as needed).
+    onProfilesChanged: vi.fn((_cb: () => void) => () => {}),
+    setProfileEnabled: vi.fn(async (_n: string, _e: boolean): Promise<Result<ModelProfile>> => fail('not_implemented', 'not in tests')),
+    updateProfile: vi.fn(async (_n: string, _u: ProfileUpdate): Promise<Result<ModelProfile>> => fail('not_implemented', 'not in tests')),
+    setDefaultProfile: vi.fn(async (_n: string) => ok(null)),
+    removeProfile: vi.fn(async (_n: string) => ok(null)),
+    moveProfile: vi.fn(async (_n: string, _p: number) => ok(null)),
+    modelCatalog: vi.fn(async () => ok([] as HarnessCatalog[])),
+    importModels: vi.fn(async () => ok({ added: [], skipped: 0, failed: [] } as ImportResult)),
   } satisfies ShellBridge;
 
   return {

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { HoppBridge } from '../shared/bridge';
 import type { ShellBridge } from '../shared/shell';
-import { artifactUrl, IPC, SHELL_CHANGED, SHELL_FEED_CHANGED, SHELL_METHODS, shellChannel } from '../shared/ipc';
+import { artifactUrl, IPC, SHELL_CHANGED, SHELL_FEED_CHANGED, SHELL_METHODS, SHELL_PROFILES_CHANGED, shellChannel } from '../shared/ipc';
 
 function listen<A extends unknown[]>(channel: string, cb: (...args: A) => void): () => void {
   const h = (_e: IpcRendererEvent, ...args: unknown[]) => cb(...(args as A));
@@ -13,11 +13,12 @@ function listen<A extends unknown[]>(channel: string, cb: (...args: A) => void):
 // for store changes.
 const shellCalls = Object.fromEntries(
   SHELL_METHODS.map((m) => [m, (...args: unknown[]) => ipcRenderer.invoke(shellChannel(m), ...args)]),
-) as unknown as Omit<ShellBridge, 'onChanged' | 'onFeedChanged' | 'artifactUrl'>;
+) as unknown as Omit<ShellBridge, 'onChanged' | 'onFeedChanged' | 'onProfilesChanged' | 'artifactUrl'>;
 const shell: ShellBridge = {
   ...shellCalls,
   onChanged: (cb) => listen(SHELL_CHANGED, cb),
   onFeedChanged: (cb) => listen(SHELL_FEED_CHANGED, cb),
+  onProfilesChanged: (cb) => listen(SHELL_PROFILES_CHANGED, cb),
   artifactUrl: (id) => artifactUrl(id),
 };
 

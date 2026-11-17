@@ -157,6 +157,44 @@ export interface ModelProfile {
   description: string;
   enabled: boolean;
   position: number;
+  // Whether this is the daemon's default profile (a launch without one).
+  isDefault?: boolean;
+}
+
+// One model of a harness's catalog. `known`: a profile of that harness
+// already uses this model.
+export interface CatalogModel {
+  id: string;
+  name: string;
+  description: string;
+  // A current model; false for older ones the harness still lists.
+  main: boolean;
+  efforts: string[];
+  known: boolean;
+}
+
+export interface HarnessCatalog {
+  agent: string;
+  // Where the list came from (the harness, a cache, a built-in list).
+  source: string;
+  // Set when the harness is not installed or its list could not be read.
+  warning: string;
+  models: CatalogModel[];
+}
+
+export interface ProfileUpdate {
+  description?: string;
+  model?: string;
+  effort?: string;
+}
+
+export interface ImportResult {
+  // Profiles created, all switched off: the human switches on the ones to use.
+  added: ModelProfile[];
+  // Catalog models that already had a profile, or are not current models.
+  skipped: number;
+  // Harnesses whose catalog could not be read; the others are imported.
+  failed: { agent: string; reason: string }[];
 }
 
 export interface Tool {
@@ -317,6 +355,21 @@ export interface ShellBridge {
 
   // Enabled profiles first, in the daemon's order.
   listProfiles(): Promise<ModelProfile[]>;
+  // Fires after any profile change made through this app.
+  onProfilesChanged(cb: () => void): () => void;
+  setProfileEnabled(name: string, enabled: boolean): Promise<Result<ModelProfile>>;
+  updateProfile(name: string, update: ProfileUpdate): Promise<Result<ModelProfile>>;
+  setDefaultProfile(name: string): Promise<Result<null>>;
+  // Refused while a running session or an active task uses the profile.
+  removeProfile(name: string): Promise<Result<null>>;
+  // Moves a profile to position (0 = first) in the daemon's order.
+  moveProfile(name: string, position: number): Promise<Result<null>>;
+  // What each installed harness offers, with a mark for models that have a
+  // profile already.
+  modelCatalog(): Promise<Result<HarnessCatalog[]>>;
+  // A switched-off profile for every current catalog model without one;
+  // existing profiles are never changed.
+  importModels(): Promise<Result<ImportResult>>;
 
   // Makes the worktree (or folder), composes the start text and launches the
   // orchestrator's session.

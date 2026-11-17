@@ -21,6 +21,9 @@ import type {
   Artifact,
   GithubRepo,
   GithubStatus,
+  HarnessCatalog,
+  ImportResult,
+  ProfileUpdate,
   Pipeline,
   PipelineInput,
   Post,
@@ -135,6 +138,7 @@ export class ShellService {
   private readonly now: () => number;
 
   private readonly github: Github;
+  private readonly profileListeners = new Set<() => void>();
 
   constructor(private readonly d: ShellDeps) {
     this.now = d.now ?? (() => Math.floor(Date.now() / 1000));
@@ -814,6 +818,41 @@ export class ShellService {
 
   addGithubRepo(fullName: string): Promise<Result<{ path: string }>> {
     return guard(() => this.github.add(fullName));
+  }
+
+  // ---- model profiles (being implemented) -----------------------------------
+
+  onProfilesChanged(cb: () => void): () => void {
+    this.profileListeners.add(cb);
+    return () => this.profileListeners.delete(cb);
+  }
+
+  async setProfileEnabled(_name: string, _enabled: boolean): Promise<Result<ModelProfile>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async updateProfile(_name: string, _update: ProfileUpdate): Promise<Result<ModelProfile>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async setDefaultProfile(_name: string): Promise<Result<null>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async removeProfile(_name: string): Promise<Result<null>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async moveProfile(_name: string, _position: number): Promise<Result<null>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async modelCatalog(): Promise<Result<HarnessCatalog[]>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async importModels(): Promise<Result<ImportResult>> {
+    return fail('not_implemented', 'not implemented yet');
   }
 }
 

@@ -2,8 +2,8 @@
 // page are checked here; a malformed call gets an error back (a Result error
 // for methods that return a Result, a rejected promise for the others) and
 // never throws in the main process.
-import type { LongAgentInput, PipelineInput, PipelineStageInput, ProjectInput, Result, SubmissionAnswer, TaskInput } from '../../shared/shell';
-import { SHELL_CHANGED, SHELL_METHODS, shellChannel, type ShellMethod } from '../../shared/ipc';
+import type { LongAgentInput, PipelineInput, PipelineStageInput, ProfileUpdate, ProjectInput, Result, SubmissionAnswer, TaskInput } from '../../shared/shell';
+import { SHELL_CHANGED, SHELL_METHODS, SHELL_PROFILES_CHANGED, shellChannel, type ShellMethod } from '../../shared/ipc';
 import { errorResult, type ShellService } from './service';
 
 export class ArgError extends TypeError {
@@ -105,6 +105,16 @@ function submissionAnswer(v: unknown): SubmissionAnswer {
   throw new ArgError('choice must be Accept or Return');
 }
 
+function profileUpdate(v: unknown): ProfileUpdate {
+  if (!isObj(v)) throw new ArgError('update must be an object');
+  const out: ProfileUpdate = {};
+  for (const k of ['description', 'model', 'effort'] as const) {
+    const x = optStr(v[k], k);
+    if (x !== undefined) out[k] = x;
+  }
+  return out;
+}
+
 function lessonStatus(v: unknown): 'new' | 'closed' | 'all' {
   if (v === 'new' || v === 'closed' || v === 'all') return v;
   throw new ArgError('status must be new, closed or all');
@@ -151,6 +161,13 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   githubStatus: { result: false, run: (s) => s.githubStatus() },
   listGithubRepos: { result: true, run: (s, a) => s.listGithubRepos(str(a[0] ?? '', 'query', 200)) },
   addGithubRepo: { result: true, run: (s, a) => s.addGithubRepo(str(a[0], 'repository', 200)) },
+  setProfileEnabled: { result: true, run: (s, a) => s.setProfileEnabled(str(a[0], 'profile', 200), bool(a[1], 'enabled')) },
+  updateProfile: { result: true, run: (s, a) => s.updateProfile(str(a[0], 'profile', 200), profileUpdate(a[1])) },
+  setDefaultProfile: { result: true, run: (s, a) => s.setDefaultProfile(str(a[0], 'profile', 200)) },
+  removeProfile: { result: true, run: (s, a) => s.removeProfile(str(a[0], 'profile', 200)) },
+  moveProfile: { result: true, run: (s, a) => s.moveProfile(str(a[0], 'profile', 200), int(a[1], 'position')) },
+  modelCatalog: { result: true, run: (s) => s.modelCatalog() },
+  importModels: { result: true, run: (s) => s.importModels() },
 };
 
 // callShell runs one method with arguments from the page.
@@ -174,4 +191,5 @@ export interface IpcMainLike {
 export function registerShellIpc(ipc: IpcMainLike, svc: ShellService, send: (channel: string, ...args: unknown[]) => void): void {
   for (const m of SHELL_METHODS) ipc.handle(shellChannel(m), (_e, ...args) => callShell(svc, m, args));
   svc.onChanged((s) => send(SHELL_CHANGED, s));
+  svc.onProfilesChanged(() => send(SHELL_PROFILES_CHANGED));
 }

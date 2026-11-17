@@ -28,6 +28,7 @@ export const SHELL_METHODS = [
   'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules', 'listLessons', 'closeLesson',
   'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'postToTask', 'answerSubmission', 'artifactText',
   'githubStatus', 'listGithubRepos', 'addGithubRepo',
+  'setProfileEnabled', 'updateProfile', 'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels',
 ] as const;
 
 export type ShellMethod = (typeof SHELL_METHODS)[number];
@@ -38,6 +39,9 @@ export const SHELL_CHANGED = 'shell:changed';
 
 // Sent with a task id when that task's feed changed.
 export const SHELL_FEED_CHANGED = 'shell:feed-changed';
+
+// Sent after a profile change made through this app.
+export const SHELL_PROFILES_CHANGED = 'shell:profiles-changed';
 
 // The scheme the page loads artifact files from: hopp-artifact://v/<id>.
 // The id is in the path: a standard scheme parses a numeric host as an IPv4
