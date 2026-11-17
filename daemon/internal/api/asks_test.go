@@ -297,3 +297,57 @@ func TestAskCreateCopiesSessionLabels(t *testing.T) {
 		t.Errorf("unknown from: %d %v", code, errOut)
 	}
 }
+
+func TestDismissClosesWithoutAnswerAndTellsTheAsker(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "s1"})
+	a := createAsk(t, e, map[string]any{"from": "s1", "body": "Which one?", "options": []string{"A", "B", "C"}})
+	var out map[string]any
+	if code := e.call(t, "POST", askPath(a, "/dismiss"), nil, &out); code != 200 || out["status"] != "withdrawn" || out["reason"] != "dismissed" {
+		t.Fatalf("dismiss: %d %v", code, out)
+	}
+	id := strconv.Itoa(int(a["id"].(float64)))
+	msgs, _ := e.st.ListMessages("s1", 0)
+	want := "[hopp] Ask #" + id + " was dismissed by the human as no longer relevant: do not wait for an answer to it; go by what was said since."
+	if len(msgs) != 1 || msgs[0].Body != want {
+		t.Fatalf("messages %+v", msgs)
+	}
+	var w struct {
+		Asks []map[string]any `json:"asks"`
+	}
+	e.call(t, "GET", "/v1/waiting", nil, &w)
+	if len(w.Asks) != 0 {
+		t.Errorf("a dismissed ask still waits: %v", w.Asks)
+	}
+	if code := e.call(t, "POST", askPath(a, "/dismiss"), nil, &out); code != 409 || errCode(out) != "ask_closed" {
+		t.Errorf("dismiss again: %d %v", code, out)
+	}
+	if code := e.call(t, "POST", "/v1/asks/999/dismiss", nil, &out); code != 404 {
+		t.Errorf("unknown: %d", code)
+	}
+	evs, _ := e.st.ListEvents(0, 0, "s1")
+	seen := false
+	for _, ev := range evs {
+		seen = seen || (ev.Type == "ask.withdrawn" && ev.Data["reason"] == "dismissed")
+	}
+	if !seen {
+		t.Errorf("no ask.withdrawn event with reason dismissed")
+	}
+}
+
+func TestAnswerInOwnWordsWhenNoOptionFits(t *testing.T) {
+	e := newAPIEnv(t)
+	e.create(t, map[string]any{"dir": t.TempDir(), "id": "s1"})
+	a := createAsk(t, e, map[string]any{"from": "s1", "body": "A or B?", "options": []string{"A", "B"}})
+	var out map[string]any
+	if code := e.call(t, "POST", askPath(a, "/answer"), map[string]any{"answer": "  "}, &out); code != 400 || errCode(out) != "ask_invalid" {
+		t.Fatalf("empty: %d %v", code, out)
+	}
+	if code := e.call(t, "POST", askPath(a, "/answer"), map[string]any{"answer": "Neither: do C"}, &out); code != 200 || out["choice"] != nil && out["choice"] != "" {
+		t.Fatalf("own words: %d %v", code, out)
+	}
+	msgs, _ := e.st.ListMessages("s1", 0)
+	if len(msgs) != 1 || msgs[0].Body != "[hopp] Answer to ask #"+strconv.Itoa(int(a["id"].(float64)))+": Neither: do C" {
+		t.Fatalf("messages %+v", msgs)
+	}
+}

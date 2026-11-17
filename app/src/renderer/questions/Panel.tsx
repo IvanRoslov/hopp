@@ -4,6 +4,7 @@ import { plainLine } from '../ui/plainText';
 import type { DaemonBridge } from '../../shared/bridge';
 import type { Ask, Session, SessionQuestion } from '../../shared/types';
 import { cleanError } from '../errors';
+import { DismissAsk, DISMISSED_LINE, isDismissed, OwnAnswer } from './AskActions';
 
 // How long "Sent" waits for the daemon to report the question resolved
 // before it gives the buttons back.
@@ -164,7 +165,9 @@ function AnsweredRow(props: { ask: Ask }) {
     ' — ' +
     (a.status === 'answered'
       ? [a.choice, a.answer && plainLine(a.answer)].filter(Boolean).join(' · ')
-      : `withdrawn${a.reason ? ' (' + a.reason.replace(/_/g, ' ') + ')' : ''}`);
+      : isDismissed(a)
+        ? DISMISSED_LINE
+        : `withdrawn${a.reason ? ' (' + a.reason.replace(/_/g, ' ') + ')' : ''}`);
   return (
     <div className="answered-row" title={line}>
       {line}
@@ -194,6 +197,18 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; le
       props.reload();
     }
   };
+  const dismiss = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await props.daemon.dismissAsk(ask.id);
+    } catch (err) {
+      setError(cleanError(err));
+    } finally {
+      setBusy(false);
+      props.reload();
+    }
+  };
 
   return (
     <section className="ask-block" data-testid={`ask-${ask.id}`}>
@@ -207,6 +222,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; le
                 {o}
               </button>
             ))}
+            <OwnAnswer busy={busy} onSend={(t) => void answer({ answer: t })} />
           </div>
         ) : (
           <form
@@ -222,6 +238,9 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; le
             </button>
           </form>
         )}
+      </div>
+      <div className="ask-dismiss-row">
+        <DismissAsk busy={busy} onDismiss={() => void dismiss()} />
       </div>
       {error && <div className="err" role="alert">{error}</div>}
     </section>

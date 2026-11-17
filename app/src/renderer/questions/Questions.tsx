@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { DaemonBridge } from '../../shared/bridge';
 import type { Ask, Session, SessionQuestion } from '../../shared/types';
 import { cleanError } from '../errors';
+import { DismissAsk, OwnAnswer } from './AskActions';
 
 // questionCount: the session's open asks plus one for a harness question.
 export function questionCount(session: Session | null, asks: Ask[]): number {
@@ -161,6 +162,18 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void }) 
       props.reload();
     }
   };
+  const dismiss = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await props.daemon.dismissAsk(ask.id);
+    } catch (err) {
+      setError(cleanError(err));
+    } finally {
+      setBusy(false);
+      props.reload();
+    }
+  };
 
   const options = ask.options ?? [];
   return (
@@ -174,6 +187,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void }) 
               {o}
             </button>
           ))}
+          <OwnAnswer busy={busy} onSend={(t) => void answer({ answer: t })} />
         </div>
       ) : (
         <form
@@ -189,6 +203,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void }) 
           </button>
         </form>
       )}
+      <DismissAsk busy={busy} onDismiss={() => void dismiss()} />
       {error && <div className="question-error">{error}</div>}
     </div>
   );

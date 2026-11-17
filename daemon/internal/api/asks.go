@@ -166,6 +166,26 @@ func registerAskRoutes(mux *http.ServeMux, d Deps) {
 		writeJSON(w, http.StatusOK, toAskResponse(a))
 	})
 
+	// The human closes an ask without answering it: it is withdrawn with the
+	// reason "dismissed", and the asker is told not to wait for an answer.
+	mux.HandleFunc("POST /v1/asks/{id}/dismiss", func(w http.ResponseWriter, r *http.Request) {
+		a, ok := lookupAsk(w, r, d)
+		if !ok {
+			return
+		}
+		a, err := d.Store.WithdrawAsk(a.ID, store.ReasonDismissed, time.Now().Unix())
+		if !writeAskErr(w, err) {
+			return
+		}
+		publishAsk(d, "ask.withdrawn", a)
+		body := fmt.Sprintf("[hopp] Ask #%d was dismissed by the human as no longer relevant: do not wait for an answer to it; go by what was said since.", a.ID)
+		if err := sendToAsker(d, a, body); err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal_error", "ask dismissed, but the asker was not told: "+err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, toAskResponse(a))
+	})
+
 	mux.HandleFunc("POST /v1/asks/{id}/withdraw", func(w http.ResponseWriter, r *http.Request) {
 		a, ok := lookupAsk(w, r, d)
 		if !ok {
@@ -266,9 +286,6 @@ func writeAskErr(w http.ResponseWriter, err error) bool {
 // queue, a registered mailbox without a live session holds it, and an ended
 // session without a mailbox gets nothing (the answer stays stored).
 func sendAnswerToAsker(d Deps, a store.Ask) error {
-	if a.FromSession == "" {
-		return nil
-	}
 	body := fmt.Sprintf("[hopp] Answer to ask #%d: ", a.ID)
 	switch {
 	case a.Choice != "" && a.Answer != "":
@@ -277,6 +294,14 @@ func sendAnswerToAsker(d Deps, a store.Ask) error {
 		body += a.Choice
 	default:
 		body += a.Answer
+	}
+	return sendToAsker(d, a, body)
+}
+
+// sendToAsker delivers body to the asking session as sendAnswerToAsker does.
+func sendToAsker(d Deps, a store.Ask, body string) error {
+	if a.FromSession == "" {
+		return nil
 	}
 	sess, err := d.Store.GetSession(a.FromSession)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {

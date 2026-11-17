@@ -437,3 +437,10 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .lesson.closed .md { color: var(--muted); }
 .lesson .inline-confirm { margin-top: 10px; }
 .lesson .form-error { margin: 8px 0 0; }
+
+/* An open ask: its own-words answer, and closing it as not relevant. */
+.own-answer { margin-top: 8px; }
+.ask-dismiss-row { margin-top: 8px; }
+.entry-actions .btns .sp { flex: 1; }
+.dismiss-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-small); }
+.quiet-dismiss { margin-left: -6px; }

@@ -24,6 +24,9 @@ describe('hoppLayer', () => {
   it('names the commands every session uses', () => {
     const t = hoppLayer();
     for (const w of ['hopp send', 'hopp ask', 'hopp lesson', 'hopp tools', '$HOPP_SESSION_ID', '$HOPP_PARENT_ID']) expect(t).toContain(w);
+    // Asks: own words, and withdrawing one settled another way.
+    expect(t).toContain('Offer options only when they cover the cases: the human may answer in their own words instead.');
+    expect(t).toContain('withdraw the ask with `hopp ask withdraw <id>` so it does not stay waiting');
     // Lessons of two kinds, both commands spelled out.
     expect(t).toContain('`hopp lesson --label hopp.about=project "<what the next agent in this project must know>"`');
     expect(t).toContain('`hopp lesson --label hopp.about=hopp "<what in hopp got in the way or is missing>"`');

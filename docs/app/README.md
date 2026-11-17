@@ -28,7 +28,7 @@ The desktop app is a window onto the daemon: it lists the daemon's sessions, ope
 
 ### Questions, and running it
 
-10. The header button `Questions · N` counts the selected session's open asks plus one when its screen waits on a question; the column it opens answers both, the screen question through the daemon's quiz answer and asks through the ask answer, and a refused answer shows the daemon's message in place.
+10. The header button `Questions · N` counts the selected session's open asks plus one when its screen waits on a question; the column it opens answers both, the screen question through the daemon's quiz answer and asks through the ask answer, and a refused answer shows the daemon's message in place. Every open ask, there and in a task's feed, also offers "Other…", an answer in the human's own words when none of its options fits (a submission keeps Accept and Return), and a quiet "Not relevant" that closes it without an answer after a one-line confirmation, takes it out of "Waiting for you" and the task's "waiting for me" at once, and tells the asker.
 11. `make app-install` installs it, `make app-dev` runs it, `make app-pack` builds an unsigned `hopp.app` under `app/dist/`, `make app-install-mac` builds `bin/hopp` and the app and puts the app in `/Applications` (the app writes its commands into `$HOPP_HOME/bin` at every start), and `make app-test` type-checks it and runs its unit and end-to-end tests against a fake daemon on a temporary socket, never `~/.hopp`.
 
 Code: [app](app)

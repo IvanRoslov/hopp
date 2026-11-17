@@ -10,6 +10,8 @@ import { cleanError } from '../errors';
 import { Dropdown } from '../ui/Dropdown';
 import { UpIcon } from '../ui/icons';
 import { Markdown, type MarkdownLinks } from '../ui/Markdown';
+import { plainLine } from '../ui/plainText';
+import { DismissAsk, OwnAnswer } from '../questions/AskActions';
 import { answerLine, askKind, author, clock, feedEntries, findArtifact, resolveArtifactRef, stageTag, type Entry } from './model';
 
 export interface FeedProps {
@@ -105,7 +107,7 @@ export function Feed(props: FeedProps) {
       <div className="feed-foot">
         <div className="feed-col">
           {props.status && <div className="status-line feed-status">{props.status}</div>}
-          <Composer bridge={props.bridge} task={task} stageFilter={props.stageFilter} onSent={() => {
+          <Composer bridge={props.bridge} task={task} asks={props.feed.asks} stageFilter={props.stageFilter} onSent={() => {
             stick.current = true;
             props.reload();
           }} />
@@ -241,6 +243,18 @@ function SubmissionBlock(props: FeedProps & { ask: Ask }) {
       setBusy(false);
     }
   };
+  const dismiss = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await props.bridge.daemon.dismissAsk(ask.id);
+      props.reload();
+    } catch (err) {
+      setError(cleanError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="entry-actions">
       {returning ? (
@@ -274,6 +288,8 @@ function SubmissionBlock(props: FeedProps & { ask: Ask }) {
           <button type="button" className="c-btn" onClick={() => props.onAllArtifacts(ask.labels?.['hopp.stage'] ?? '')}>
             All artifacts
           </button>
+          <span className="sp" />
+          <DismissAsk busy={busy} onDismiss={() => void dismiss()} />
         </div>
       )}
       {error && (
@@ -304,6 +320,18 @@ function ChoiceBlock(props: FeedProps & { ask: Ask; options: string[]; primary: 
       setBusy(false);
     }
   };
+  const dismiss = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await props.bridge.daemon.dismissAsk(ask.id);
+      props.reload();
+    } catch (err) {
+      setError(cleanError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="entry-actions">
       {props.options.length > 0 ? (
@@ -313,6 +341,7 @@ function ChoiceBlock(props: FeedProps & { ask: Ask; options: string[]; primary: 
               {o}
             </button>
           ))}
+          <OwnAnswer busy={busy} onSend={(t) => void send({ answer: t })} />
         </div>
       ) : (
         <div className="inline-field">
@@ -331,6 +360,9 @@ function ChoiceBlock(props: FeedProps & { ask: Ask; options: string[]; primary: 
           </button>
         </div>
       )}
+      <div className="ask-dismiss-row">
+        <DismissAsk busy={busy} onDismiss={() => void dismiss()} />
+      </div>
       {error && (
         <div className="entry-err" role="alert">
           {error}
@@ -342,16 +374,28 @@ function ChoiceBlock(props: FeedProps & { ask: Ask; options: string[]; primary: 
 
 // Composer: "Write to the orchestrator". Enter sends, Shift+Enter is a new
 // line. With a stage filter set, the line is tagged with that stage.
-function Composer(props: { bridge: HoppBridge; task: Task; stageFilter: string; onSent: () => void }) {
+function Composer(props: { bridge: HoppBridge; task: Task; asks: Ask[]; stageFilter: string; onSent: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // With exactly one open question (not a submission or a paid step), the
+  // line can go as its answer: on by default, off for this ask once unticked.
+  const open = props.asks.filter((a) => a.status === 'open' && askKind(a) === 'question');
+  const only = open.length === 1 ? open[0]! : null;
+  const [notAnswerTo, setNotAnswerTo] = useState<number | null>(null);
+  const asAnswer = only !== null && notAnswerTo !== only.id;
   const send = async () => {
     const t = text.trim();
     if (!t || busy) return;
     setBusy(true);
     setError(null);
     try {
+      if (asAnswer && only) {
+        await props.bridge.daemon.answerAsk(only.id, { answer: t });
+        setText('');
+        props.onSent();
+        return;
+      }
       const r = await props.bridge.shell.postToTask(props.task.id, t, props.stageFilter || undefined);
       if (r.ok) {
         setText('');
@@ -381,6 +425,12 @@ function Composer(props: { bridge: HoppBridge; task: Task; stageFilter: string; 
         disabled={props.task.status === 'finished'}
       />
       <div className="composer-bar">
+        {only && (
+          <label className="as-answer" title={only.body}>
+            <input type="checkbox" checked={asAnswer} onChange={(e) => setNotAnswerTo(e.target.checked ? null : only.id)} />
+            <span>Send as the answer to: {plainLine(only.body)}</span>
+          </label>
+        )}
         {error && (
           <span className="entry-err" role="alert">
             {error}
