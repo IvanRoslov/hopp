@@ -1,5 +1,6 @@
 // What the page shows, derived from the shell store and the daemon's
 // sessions. Pure functions: the store keeps only what the daemon cannot know.
+import { plainLine } from '../ui/plainText';
 import type { LongAgent, Project, ShellState, Task } from '../../shared/shell';
 import type { Session, SessionQuestion, Waiting } from '../../shared/types';
 
@@ -157,7 +158,7 @@ export function waitingRows(w: Waiting, state: ShellState, sessions: Session[]):
   }
   for (const a of w.asks) {
     const owner = a.from ? ownerOf(a.from, state, sessions) : null;
-    rows.push({ key: 'a:' + a.id, text: firstLine(a.body), under: under(a.from || 'hopp', owner), owner, session: a.from, askId: a.id });
+    rows.push({ key: 'a:' + a.id, text: plainLine(a.body), under: under(a.from || 'hopp', owner), owner, session: a.from, askId: a.id });
   }
   return rows;
 }

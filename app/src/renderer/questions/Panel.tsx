@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Markdown } from '../ui/Markdown';
+import { plainLine } from '../ui/plainText';
 import type { DaemonBridge } from '../../shared/bridge';
 import type { Ask, Session, SessionQuestion } from '../../shared/types';
 import { cleanError } from '../errors';
@@ -40,12 +42,7 @@ export function QuestionsPanel(props: {
         <div data-testid="answered">
           <div className="answered-head">You answered</div>
           {closed.map((a) => (
-            <div key={a.id} className="answered-row">
-              {a.body.split('\n')[0]} —{' '}
-              {a.status === 'answered'
-                ? [a.choice, a.answer].filter(Boolean).join(' · ')
-                : `withdrawn${a.reason ? ' (' + a.reason.replace(/_/g, ' ') + ')' : ''}`}
-            </div>
+            <AnsweredRow key={a.id} ask={a} />
           ))}
         </div>
       )}
@@ -159,13 +156,31 @@ function HarnessQuestion(props: { daemon: DaemonBridge; sessionId: string; q: Se
   );
 }
 
+// AnsweredRow: one line, cut with an ellipsis; the whole line in the tooltip.
+function AnsweredRow(props: { ask: Ask }) {
+  const a = props.ask;
+  const line =
+    plainLine(a.body) +
+    ' — ' +
+    (a.status === 'answered'
+      ? [a.choice, a.answer && plainLine(a.answer)].filter(Boolean).join(' · ')
+      : `withdrawn${a.reason ? ' (' + a.reason.replace(/_/g, ' ') + ')' : ''}`);
+  return (
+    <div className="answered-row" title={line}>
+      {line}
+    </div>
+  );
+}
+
 function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; lead?: boolean }) {
   const { ask } = props;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const options = ask.options ?? [];
-  const [head, ...rest] = ask.body.split('\n');
+  // The question's first block as its line; the rest formatted below it.
+  const [first, ...rest] = ask.body.split('\n');
+  const head = plainLine(first ?? '');
 
   const answer = async (body: { choice?: string; answer?: string }) => {
     setBusy(true);
@@ -183,7 +198,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; le
   return (
     <section className="ask-block" data-testid={`ask-${ask.id}`}>
       <div className="q">{head}</div>
-      {rest.join('\n').trim() && <div className="sub pre">{rest.join('\n').trim()}</div>}
+      {rest.join('\n').trim() && <Markdown variant="compact" className="sub" text={rest.join('\n').trim()} />}
       <div className="body">
         {options.length > 0 ? (
           <div className="btns">

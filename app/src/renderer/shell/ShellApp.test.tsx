@@ -203,6 +203,29 @@ describe('left column', () => {
     expect(screen.getAllByTestId('agent-row').map((r) => r.textContent)).toEqual(['cto', 'docsoff · 3']);
   });
 
+  it('a waiting row and the answered rows show an ask as plain text, without markdown marks', async () => {
+    const body = '## Этап «Дизайн» готов\n\nСпека описывает **сетку** и `**/*.css`';
+    const f = fakeBridge({
+      sessions: [makeSession('t-a', { activity: 'active' })],
+      asks: [
+        makeAsk(3, 't-a', { body: 'Спека описывает **сетку**, [палитру](palette@1) и `**/*.css`\n\n- детали ниже' }),
+        makeAsk(4, 't-a', { body, status: 'answered', choice: 'Accept' }),
+      ],
+      shell: { state: { projects: [makeProject('one')], tasks: [makeTask('t-a', 'one', { title: 'Task A' })] } },
+    });
+    await mount(f);
+    const row = screen.getByTestId('waiting-row');
+    const line = 'Спека описывает сетку, палитру и **/*.css';
+    expect(row.querySelector('.t')!.textContent).toBe(line);
+    expect(row.getAttribute('title')).toBe(line);
+    fireEvent.click(row);
+    await flush();
+    expect(screen.getByTestId('ask-3').querySelector('.q')!.textContent).toBe(line);
+    const answered = screen.getByTestId('answered').querySelector('.answered-row')!;
+    expect(answered.textContent).toBe('Этап «Дизайн» готов — Accept');
+    expect(answered.getAttribute('title')).toBe('Этап «Дизайн» готов — Accept');
+  });
+
   it('a waiting row opens its task with the questions open, on that session', async () => {
     const q = { asked_at: 1, questions: [{ question: 'Run tests?', header: '', multi_select: false, options: [{ label: 'Yes' }, { label: 'No' }] }] };
     const f = fakeBridge({

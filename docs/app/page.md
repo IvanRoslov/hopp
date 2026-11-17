@@ -10,7 +10,7 @@ What the human sees and does in the app's window. What the main process keeps an
 
 ### The left column
 
-1. Top to bottom: New task and Pipelines; "Waiting for you", one row per open question with the task or agent under it; "Work", the active tasks grouped by project (only projects that have some), each once with its state; "Recent", the finished tasks; and pinned at the bottom the long-lived agents, New agent, Settings and the theme switch.
+1. Top to bottom: New task and Pipelines; "Waiting for you", one row per open question (its text as plain words, markdown marks removed) with the task or agent under it; "Work", the active tasks grouped by project (only projects that have some), each once with its state; "Recent", the finished tasks; and pinned at the bottom the long-lived agents, New agent, Settings and the theme switch.
 2. A task's state is a mark when it works (a ring with a dot) or idles (an empty ring), and a word on a second line otherwise: waiting for me, starting, stopped, agent exited, error or session gone. A task the daemon does not list yet reads as starting for its first two minutes.
 3. A "Waiting for you" row finds its task through the asking session (the task's own, or one whose labels or parents lead to it), never through the ask's labels, since the daemon does not copy a session's labels into its asks.
 4. With no project the window shows only "Create your first project"; with projects but no tasks the column says so.

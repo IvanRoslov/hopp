@@ -9,6 +9,7 @@
 import { Lexer, type Token, type Tokens } from 'marked';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import './markdown.css';
+import { decode } from './plainText';
 
 export interface MarkdownLinks {
   // An artifact the reference names (`name@version`, `name`, `./file.md`):
@@ -200,21 +201,4 @@ function image(img: Tokens.Image, ctx: Ctx): ReactNode {
 // isLocalRef: a reference without a scheme (`analysis@2`, `./chart.png`).
 function isLocalRef(href: string): boolean {
   return href !== '' && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('//') && !href.startsWith('#');
-}
-
-const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' };
-
-// decode: the few HTML entities marked leaves in text, as characters.
-function decode(s: string): string {
-  return s.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e: string) => {
-    const k = e.toLowerCase();
-    if (k in ENTITIES) return ENTITIES[k]!;
-    if (k.startsWith('#x')) return safeChar(parseInt(k.slice(2), 16), m);
-    if (k.startsWith('#')) return safeChar(parseInt(k.slice(1), 10), m);
-    return m;
-  });
-}
-
-function safeChar(code: number, fallback: string): string {
-  return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : fallback;
 }

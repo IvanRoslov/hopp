@@ -251,7 +251,7 @@ button.set-row:hover .nm { text-decoration: underline; text-decoration-color: va
 .inline-field { display: flex; gap: 8px; align-items: center; }
 .inline-field .text-input { flex: 1; max-width: 460px; height: 36px; padding: 0 14px; }
 .answered-head { font-size: var(--fs-small); color: var(--muted); margin: 30px 0 14px; }
-.answered-row { color: var(--muted); font-size: var(--fs-name); line-height: 1.6; margin: 0 0 12px; overflow-wrap: anywhere; }
+.answered-row { color: var(--muted); font-size: var(--fs-name); line-height: 1.6; margin: 0 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Banners in the work area (daemon down, load errors) */
 .notice { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: var(--fs-name); padding: 10px var(--page-x); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
