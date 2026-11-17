@@ -81,7 +81,8 @@ func (m *Monitor) sessionLaunchedAt(sess store.Session) int64 {
 // checkStartScreen catches a session whose agent CLI stopped on an
 // interactive start screen before its first turn (Codex: «Trust this
 // folder?», «Update available», «Background server has incompatible feature
-// settings»). It applies only to adapters implementing agent.StartupProber,
+// settings»; Kimi Code's folder-trust screen; Claude Code's is
+// checkClaudeStartScreen). It applies only to adapters implementing agent.StartupProber,
 // and only while HasStartedTurn is false for the current launch
 // (sessionLaunchedAt): a restored session in the same worktree is checked
 // afresh, since the previous run's journal there already has turns.
@@ -139,6 +140,31 @@ func (m *Monitor) checkStartScreen(ctx context.Context, sess store.Session, ag a
 	if agent.PaneDialectOf(ag) == runtime.PaneDialectKimi {
 		parse, build, screenName = runtime.ParseKimiStartScreen, session.NewKimiStartScreenQuiz, "Kimi Code"
 	}
+	switch m.startScreenOnPane(sess, st, pending, startPending, out, parse, build, screenName) {
+	case screenShown:
+		return activity.Blocked, time.Now()
+	case screenPassed:
+		return activity.Ready, time.Now()
+	}
+	return state, ts
+}
+
+// startScreenSeen is what startScreenOnPane read off a pane.
+type startScreenSeen int
+
+const (
+	screenNone   startScreenSeen = iota // no screen, nothing pending (or not yet two misses)
+	screenShown                         // the screen is up: the session waits on the human
+	screenPassed                        // the pending screen is gone: its quiz was closed
+)
+
+// startScreenOnPane applies one sweep's pane capture out to the session's
+// start-screen state: a screen parsed by parse becomes (or stays) the
+// pending quiz built by build, a different screen replaces it once
+// confirmed, and a pending screen missing for startScreenMissThreshold
+// sweeps is closed.
+func (m *Monitor) startScreenOnPane(sess store.Session, st *startScreenState, pending session.Quiz, startPending bool, out string,
+	parse func(string) (runtime.PermissionPrompt, bool), build func(runtime.PermissionPrompt, int64, int64) session.Quiz, screenName string) startScreenSeen {
 	if p, ok := parse(out); ok {
 		st.miss = 0
 		switch {
@@ -158,20 +184,67 @@ func (m *Monitor) checkStartScreen(ctx context.Context, sess store.Session, ag a
 				m.publishStartScreen(sess, p, true, build, screenName)
 			}
 		}
-		return activity.Blocked, time.Now()
+		return screenShown
 	}
 
 	st.next = permissionCandidate{}
 	if !startPending {
-		return state, ts
+		return screenNone
 	}
 	st.miss++
 	if st.miss < startScreenMissThreshold {
-		return state, ts
+		return screenNone
 	}
 	st.miss = 0
 	m.closeStartScreen(sess, pending)
-	return activity.Ready, time.Now()
+	return screenPassed
+}
+
+// checkClaudeStartScreen is checkStartScreen for a Claude Code root (Claude
+// Code and DeepSeek): until the root's journal shows a turn of this launch,
+// it reads the pane for Claude Code's folder-trust screen
+// (runtime.ParseClaudeStartScreen). It runs before the exact binding is
+// required, since a root stopped on that screen may have none yet. It reports
+// whether the screen is up, in which case the session is marked blocked and
+// the rest of the Claude poll is skipped.
+func (m *Monitor) checkClaudeStartScreen(ctx context.Context, sess store.Session, r claudeResolution) bool {
+	if sess.State != "running" && sess.State != "spawning" {
+		return false
+	}
+	pending, hasPending := session.ParseQuiz(sess.PendingQuiz)
+	startPending := hasPending && pending.IsStartScreen()
+	if sess.PendingQuiz != "" && !startPending {
+		return false
+	}
+	st := m.startState(sess.ID, m.sessionLaunchedAt(sess))
+	if st.started {
+		return false
+	}
+	if r.observation.target.HoppSessionID != "" {
+		if _, _, _, err := claudeJournalTurn(ctx, r.Identity); err == nil {
+			// The first turn ran: the check is over for this launch.
+			st.started = true
+			if startPending {
+				m.closeStartScreen(sess, pending)
+				m.applyMerge(sess, activity.Ready, time.Now(), true, "claude-start-screen")
+			}
+			return false
+		}
+	}
+	out, err := m.rt.Capture(ctx, runtime.Handle{Name: sess.TmuxName}, runtime.PermissionCaptureLines)
+	if err != nil {
+		return startPending
+	}
+	switch m.startScreenOnPane(sess, st, pending, startPending, out, runtime.ParseClaudeStartScreen, session.NewClaudeStartScreenQuiz, "Claude Code") {
+	case screenShown:
+		m.applyMerge(sess, activity.Blocked, time.Now(), true, "claude-start-screen")
+		return true
+	case screenPassed:
+		// Without this the poll would keep the blocked it set: an uncertain
+		// journal never clears a block.
+		m.applyMerge(sess, activity.Ready, time.Now(), true, "claude-start-screen")
+	}
+	return false
 }
 
 // publishStartScreen makes screen p the session's pending quiz and, when its

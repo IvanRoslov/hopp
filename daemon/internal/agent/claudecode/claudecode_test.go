@@ -1148,3 +1148,79 @@ func readTrustedProjects(t *testing.T, path string) map[string]bool {
 	}
 	return trusted
 }
+
+// A linked worktree is trusted under the main repository's root too: Claude
+// Code keeps the trust of a folder whose .claude/settings.json pre-approves
+// permissions under the project root, which for a worktree is the main
+// repository. Those entries carry only our flag, so the prune rule still
+// drops them once the repository is gone.
+func TestSetupWorkspaceTrustsMainRepoOfLinkedWorktree(t *testing.T) {
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+	base := t.TempDir()
+	main := filepath.Join(base, "main")
+	wt := filepath.Join(base, "worktrees", "task")
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(main, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(main, ".claude", "settings.json"), []byte(`{"permissions":{"allow":["Read(*)"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("-C", main, "init", "-q", "-b", "main")
+	git("-C", main, "add", "-A")
+	git("-C", main, "-c", "user.email=t@e.invalid", "-c", "user.name=t", "commit", "-qm", "init")
+	git("-C", main, "worktree", "add", "-q", "-b", "task", wt)
+
+	if err := trustWorktree(wt); err != nil {
+		t.Fatalf("trustWorktree: %v", err)
+	}
+	read := func() map[string]map[string]any {
+		data, err := os.ReadFile(filepath.Join(fakeHome, ".claude.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc struct {
+			Projects map[string]map[string]any `json:"projects"`
+		}
+		if err := json.Unmarshal(data, &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc.Projects
+	}
+	rmain, _ := filepath.EvalSymlinks(main)
+	rwt, _ := filepath.EvalSymlinks(wt)
+	projects := read()
+	for _, key := range []string{rwt, rmain} {
+		if e := projects[key]; len(e) != 1 || e["hasTrustDialogAccepted"] != true {
+			t.Errorf("entry %s = %v, want only hasTrustDialogAccepted", key, e)
+		}
+	}
+
+	// Once the repository is gone, the next trust prunes our entries.
+	if err := os.RemoveAll(base); err != nil {
+		t.Fatal(err)
+	}
+	if err := trustWorktree(t.TempDir()); err != nil {
+		t.Fatalf("trustWorktree: %v", err)
+	}
+	projects = read()
+	for _, key := range []string{wt, main, rwt, rmain} {
+		if _, ok := projects[key]; ok {
+			t.Errorf("entry %s survived the prune", key)
+		}
+	}
+}
+
+func TestMainRepoRootOutsideAGitRepository(t *testing.T) {
+	if got := mainRepoRoot(t.TempDir()); got != "" {
+		t.Errorf("mainRepoRoot = %q, want empty", got)
+	}
+}

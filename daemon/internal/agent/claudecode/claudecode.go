@@ -444,10 +444,25 @@ func trustWorktree(worktreePath string) error {
 // the configured worktrees_dir or an ASCII slug (repo id / session id), so
 // there is no non-ASCII spelling for NFC to change. If worktree paths ever
 // gain user-supplied Unicode, add the normalized variants here.
+//
+// For a folder inside a git repository it also returns the main repository's
+// root (and its resolved form). Claude Code keeps the trust of a folder whose
+// .claude/settings.json pre-approves permissions under the project root, and
+// for a linked worktree that root is the main repository, not the worktree:
+// with the worktree's own key alone, Claude Code 2.1.326 still stops on
+// «Quick safety check … This folder pre-approves N tool permissions»
+// (reproduced 2026-11-17; accepting it there wrote only
+// projects[<main repo>].hasTrustDialogAccepted).
 func trustKeys(worktreePath string) []string {
 	candidates := []string{worktreePath}
 	if r, err := filepath.EvalSymlinks(worktreePath); err == nil {
 		candidates = append(candidates, r)
+	}
+	if root := mainRepoRoot(worktreePath); root != "" {
+		candidates = append(candidates, root)
+		if r, err := filepath.EvalSymlinks(root); err == nil {
+			candidates = append(candidates, r)
+		}
 	}
 
 	seen := map[string]bool{}
@@ -460,6 +475,22 @@ func trustKeys(worktreePath string) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// mainRepoRoot returns the working tree root of the main repository that
+// path belongs to (for a linked worktree, the repository it was added from),
+// or "" when path is not in a git repository with a .git directory (a bare
+// repository has no root to trust).
+func mainRepoRoot(path string) string {
+	out, err := exec.Command("git", "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		return ""
+	}
+	common := filepath.Clean(strings.TrimSpace(string(out)))
+	if filepath.Base(common) != ".git" {
+		return ""
+	}
+	return filepath.Dir(common)
 }
 
 // pruneDeadTrustEntries removes project entries that rocket created for a

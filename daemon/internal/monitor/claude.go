@@ -194,6 +194,9 @@ func (m *Monitor) applyClaude(ctx context.Context, sess store.Session, observati
 }
 func (m *Monitor) pollClaudeSession(ctx context.Context, sess store.Session, a agent.Agent, liveSet map[string]bool, haveLiveSet bool) {
 	r := m.resolveClaude(ctx, sess)
+	if m.checkClaudeStartScreen(ctx, sess, r) {
+		return
+	}
 	// Even runtime disappearance is applied only to the captured exact binding.
 	if r.observation.target.HoppSessionID == "" {
 		return

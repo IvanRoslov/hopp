@@ -39,6 +39,10 @@ type PermissionRef struct {
 	// (runtime.ParseKimiStartScreen): its options carry no digits, so the
 	// answer path moves the cursor with arrow keys and confirms with Enter.
 	Unnumbered bool `json:"unnumbered,omitempty"`
+	// Claude marks Claude Code's folder-trust start screen
+	// (runtime.ParseClaudeStartScreen): unnumbered too, read with its own
+	// parser.
+	Claude bool `json:"claude,omitempty"`
 }
 
 // NewPermissionQuiz builds the pending quiz for dialog p journalled as row
@@ -89,6 +93,28 @@ func NewKimiStartScreenQuiz(p runtime.PermissionPrompt, promptID, askedAt int64)
 	q.Questions[0].Header = kimiStartScreenQuizHeader
 	q.Permission.Unnumbered = true
 	return q
+}
+
+// claudeStartScreenQuizHeader is the badge of a Claude Code start-screen quiz.
+const claudeStartScreenQuizHeader = "Экран Claude Code"
+
+// NewClaudeStartScreenQuiz builds the pending quiz for Claude Code's
+// folder-trust start screen p (runtime.ParseClaudeStartScreen): an
+// unnumbered start-screen quiz flagged Claude.
+func NewClaudeStartScreenQuiz(p runtime.PermissionPrompt, promptID, askedAt int64) Quiz {
+	q := NewKimiStartScreenQuiz(p, promptID, askedAt)
+	q.Questions[0].Header = claudeStartScreenQuizHeader
+	q.Permission.Claude = true
+	return q
+}
+
+// unnumberedStartScreen returns the parser and the cursor reader of the
+// unnumbered start screen quiz was built from.
+func unnumberedStartScreen(quiz Quiz) (func(string) (runtime.PermissionPrompt, bool), func(string) int) {
+	if quiz.Permission != nil && quiz.Permission.Claude {
+		return runtime.ParseClaudeStartScreen, runtime.ClaudeStartScreenCursor
+	}
+	return runtime.ParseKimiStartScreen, runtime.KimiStartScreenCursor
 }
 
 // ParseQuiz decodes a session's stored pending quiz; ok is false when there
@@ -189,6 +215,10 @@ func (m *Manager) answerPermission(ctx context.Context, sess store.Session, quiz
 	if err != nil {
 		return validationErr("invalid_answer", err.Error())
 	}
+	if idx == permissionEscIndex && quiz.IsStartScreen() && quiz.Permission.Claude {
+		// Esc on Claude Code's trust screen exits Claude Code.
+		return validationErr("invalid_answer", "Esc is not offered on a Claude Code start screen: it exits Claude Code; choose one of the options")
+	}
 	if idx == permissionEscIndex && quiz.IsStartScreen() && quiz.Permission.Unnumbered {
 		// Esc on Kimi's trust screen exits Kimi altogether.
 		return validationErr("invalid_answer", "Esc is not offered on a Kimi Code start screen: it exits Kimi; choose one of the options")
@@ -209,7 +239,7 @@ func (m *Manager) answerPermission(ctx context.Context, sess store.Session, quiz
 	parse := runtime.ParsePermissionPrompt
 	switch {
 	case unnumbered:
-		parse = runtime.ParseKimiStartScreen
+		parse, _ = unnumberedStartScreen(quiz)
 	case quiz.IsStartScreen():
 		parse = runtime.ParseStartScreen
 	}
@@ -231,7 +261,8 @@ func (m *Manager) answerPermission(ctx context.Context, sess store.Session, quiz
 		label = quiz.Questions[0].Options[idx].Label
 		switch {
 		case unnumbered:
-			steps = unnumberedStartScreenSteps(runtime.KimiStartScreenCursor(pane), idx, m.kimiStartScreenCursorOn(sess, quiz, idx))
+			_, cursorOf := unnumberedStartScreen(quiz)
+			steps = unnumberedStartScreenSteps(cursorOf(pane), idx, m.kimiStartScreenCursorOn(sess, quiz, idx))
 		default:
 			steps = []keyStep{{Kind: keyDigit, Value: strconv.Itoa(idx + 1), Settle: quizKeySettle}}
 			if quiz.IsStartScreen() {
@@ -298,15 +329,17 @@ func unnumberedStartScreenSteps(cursor, idx int, cursorOn func() bool) []keyStep
 }
 
 // kimiStartScreenCursorOn reports, when called, whether the pane still
-// shows quiz's Kimi start screen with the cursor on option idx.
+// shows quiz's unnumbered start screen (Kimi Code's, or Claude Code's) with
+// the cursor on option idx.
 func (m *Manager) kimiStartScreenCursorOn(sess store.Session, quiz Quiz, idx int) func() bool {
 	return func() bool {
 		pane, err := m.rt.Capture(context.Background(), runtime.Handle{Name: sess.TmuxName}, runtime.PermissionCaptureLines)
 		if err != nil {
 			return false
 		}
-		p, ok := runtime.ParseKimiStartScreen(pane)
-		return ok && p.SameDialog(quiz.PermissionPrompt()) && runtime.KimiStartScreenCursor(pane) == idx
+		parse, cursorOf := unnumberedStartScreen(quiz)
+		p, ok := parse(pane)
+		return ok && p.SameDialog(quiz.PermissionPrompt()) && cursorOf(pane) == idx
 	}
 }
 
