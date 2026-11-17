@@ -21,12 +21,17 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const hoppHome = resolveHoppHome(process.env);
+// HOPP_APP_HOME keeps the app's own store (and its single-instance lock) apart
+// from the hopp home whose daemon, worktrees, tools and artifacts it uses, so
+// a second app can work against a live daemon without touching the store of
+// the app that is already open on it. Default: the hopp home.
+const appHome = process.env['HOPP_APP_HOME'] || hoppHome;
 
 // One app per hopp home: a second launch focuses the first window instead of
 // running a second process that would overwrite the first one's store. With
 // an explicit HOPP_HOME (tests, a second home) the app keeps its own data
 // there, so it locks per home and never collides with the everyday app.
-if (process.env['HOPP_HOME']) app.setPath('userData', join(hoppHome, 'app-data'));
+if (process.env['HOPP_HOME'] || process.env['HOPP_APP_HOME']) app.setPath('userData', join(appHome, 'app-data'));
 const primary = app.requestSingleInstanceLock();
 if (!primary) app.quit();
 app.on('second-instance', () => {
@@ -66,7 +71,7 @@ const afterEnv = (r: typeof gitRunner): typeof gitRunner => async (args, opts) =
 };
 const shellService = new ShellService({
   home: hoppHome,
-  store: new ShellStore(hoppHome),
+  store: new ShellStore(appHome),
   client,
   git: afterEnv(gitRunner),
   hopp: afterEnv(hoppRunner),

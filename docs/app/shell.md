@@ -10,7 +10,7 @@ The daemon knows sessions, folders and labels; the app adds projects, tasks and 
 
 ### What the app keeps
 
-1. Projects, pipelines, tasks and long-lived agents live in `$HOPP_HOME/shell/state.json`, versioned, written atomically and synced to disk, and the page is told after every change. The state before each change stays in `state.json.bak`: when `state.json` cannot be read (empty after a crash, corrupt) the app uses the `.bak`, and it refuses to start only when neither can be read, or the file comes from a newer app. Only one app runs per hopp home; a second launch brings the first window forward.
+1. Projects, pipelines, tasks and long-lived agents live in `$HOPP_HOME/shell/state.json`, versioned, written atomically and synced to disk, and the page is told after every change. The state before each change stays in `state.json.bak`: when `state.json` cannot be read (empty after a crash, corrupt) the app uses the `.bak`, and it refuses to start only when neither can be read, or the file comes from a newer app. Only one app runs per store; a second launch brings the first window forward. `HOPP_APP_HOME` puts the store (and that lock) in another folder while the daemon, worktrees, tools and artifacts stay in the hopp home, so a second app can work against a live daemon without touching the open app's store.
 2. The store keeps only what the daemon cannot know: whether a task runs, waits or has stopped is read from its sessions.
 3. A project has a name, a slug made from the name, a description, an optional repository for the orchestrator, repositories for workers (they need the orchestrator's) and guardrails. Each repository is checked to be a git repository and stored as its top folder, and the slug cannot change once the project has tasks.
 
