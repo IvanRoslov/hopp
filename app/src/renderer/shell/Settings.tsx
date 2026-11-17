@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ModelsTab } from './Models';
 import { RepoLabel } from './repos';
 import type { Lesson, ModelProfile, ShellBridge, ShellState, Tool, ToolCatalog, ToolRules } from '../../shared/shell';
 import { cleanError } from '../errors';
@@ -33,11 +34,16 @@ export function Settings(props: {
       <div className="top">
         <span className="name">Settings</span>
       </div>
-      <div className="page">
-        <div className="settings-col">
+      {/* The tabs stay put; only the tab's content scrolls under them. */}
+      <div className="settings-head">
+        <div className="settings-head-col">
           <Tabs tabs={TABS} value={props.tab} onChange={(t) => props.go({ k: 'settings', tab: t })} />
+        </div>
+      </div>
+      <div className="page settings-page">
+        <div className="settings-col">
           {props.tab === 'projects' && <ProjectsTab state={props.state} go={props.go} />}
-          {props.tab === 'models' && <ModelsTab profiles={props.profiles} error={props.profilesError} />}
+          {props.tab === 'models' && <ModelsTab shell={props.shell} profiles={props.profiles} error={props.profilesError} />}
           {props.tab === 'tools' && <ToolsTab shell={props.shell} />}
           {props.tab === 'lessons' && <LessonsTab shell={props.shell} state={props.state} />}
         </div>
@@ -65,30 +71,6 @@ function ProjectsTab(props: { state: ShellState; go: Go }) {
         <PlusIcon width={14} height={14} />
         New project
       </button>
-    </div>
-  );
-}
-
-function ModelsTab(props: { profiles: ModelProfile[] | null; error: string | null }) {
-  if (props.error) return <p className="subtle-note" role="alert">Could not read the model profiles: {props.error}</p>;
-  if (!props.profiles) return <p className="subtle-note">Loading…</p>;
-  return (
-    <div data-testid="settings-models">
-      <p className="subtle-note">The daemon's model profiles. New tasks and agents can use the enabled ones. Change them with <span className="mono">hopp models</span>.</p>
-      {props.profiles.map((p) => (
-        <div key={p.name} className="set-row">
-          <span className="txt">
-            <div className="nm">{p.name}</div>
-            <div className="ds">
-              {p.agent}
-              {p.model && p.model !== p.name ? ` · ${p.model}` : ''}
-              {p.effort ? ` · ${p.effort}` : ''}
-              {p.description ? ` · ${p.description}` : ''}
-            </div>
-          </span>
-          <span className="def">{p.enabled ? 'enabled' : 'off'}</span>
-        </div>
-      ))}
     </div>
   );
 }

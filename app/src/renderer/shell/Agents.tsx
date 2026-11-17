@@ -24,7 +24,9 @@ export function NewAgent(props: {
   const [error, setError] = useState<ShellError | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const chosen = profile || enabled[0]?.name || '';
+  // A picked profile that is switched off meanwhile falls back, visibly.
+  const pickedOff = !!profile && !!props.profiles && !enabled.some((p) => p.name === profile);
+  const chosen = (!pickedOff && profile) || enabled[0]?.name || '';
   const fieldError = (f: string) => (error?.field === f ? error.message : undefined);
 
   const submit = async () => {
@@ -83,7 +85,13 @@ export function NewAgent(props: {
                 value={chosen}
                 onChange={setProfile}
               />
-              {fieldError('profile') && <small className="error" role="alert">{fieldError('profile')}</small>}
+              {fieldError('profile') ? (
+                <small className="error" role="alert">{fieldError('profile')}</small>
+              ) : pickedOff ? (
+                <small className="profile-note" role="status">
+                  {profile} is switched off in Settings → Models; {chosen || 'no profile'} is used instead.
+                </small>
+              ) : null}
             </div>
             <Field
               label="Folder"

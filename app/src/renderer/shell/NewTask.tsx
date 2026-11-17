@@ -65,17 +65,26 @@ export function NewTask(props: {
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
 
-  // Defaults once the profiles arrive: the last choice if it is still
-  // enabled, else the first enabled profile.
+  // Profiles that were chosen (or remembered) and are switched off now; the
+  // form says so instead of changing the choice silently.
+  const [switchedOff, setSwitchedOff] = useState<string[]>([]);
+  const picked = useRef({ orchestrator, workers });
+  picked.current = { orchestrator, workers };
+
+  // Defaults once the profiles arrive, and again when they change: the
+  // current or last choice if it is still enabled, else the first enabled one.
   useEffect(() => {
     if (!enabled.length) return;
     const names = new Set(enabled.map((p) => p.name));
-    setOrchestrator((o) => (o && names.has(o) ? o : last.orchestrator && names.has(last.orchestrator) ? last.orchestrator : enabled[0]!.name));
-    setWorkers((w) => {
-      if (w) return w.filter((x) => names.has(x));
-      const prev = (last.workers ?? []).filter((x) => names.has(x));
-      return prev.length ? prev : [enabled[0]!.name];
-    });
+    const cur = picked.current;
+    const wantOrch = cur.orchestrator || last.orchestrator || '';
+    const wantWorkers = cur.workers ?? last.workers ?? [];
+    const orch = wantOrch && names.has(wantOrch) ? wantOrch : enabled[0]!.name;
+    const kept = wantWorkers.filter((x) => names.has(x));
+    setOrchestrator(orch);
+    setWorkers(kept.length || cur.workers ? kept : [enabled[0]!.name]);
+    const off = [wantOrch, ...wantWorkers].filter((x, i, a) => x && !names.has(x) && a.indexOf(x) === i);
+    setSwitchedOff((prev) => [...new Set([...prev.filter((x) => !names.has(x)), ...off])]);
   }, [enabled, last]);
 
   const proj = props.projects.find((p) => p.slug === project);
@@ -185,6 +194,11 @@ export function NewTask(props: {
               </button>
             </div>
           </div>
+          {switchedOff.length > 0 && (
+            <div className="profile-note" role="status" data-testid="profiles-switched-off">
+              {switchedOff.join(', ')} {switchedOff.length === 1 ? 'is' : 'are'} switched off in Settings → Models, so the form no longer offers {switchedOff.length === 1 ? 'it' : 'them'}.
+            </div>
+          )}
           <div className={'folder-hint' + (generalError ? ' error' : '')} role={generalError ? 'alert' : undefined}>
             {busy ? 'Starting the orchestrator…' : generalError ?? (props.profilesError ? `Model profiles: ${props.profilesError}` : where)}
           </div>
