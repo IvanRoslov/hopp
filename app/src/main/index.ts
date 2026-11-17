@@ -114,7 +114,8 @@ app.whenReady().then(() => {
       headers.set('X-Content-Type-Options', 'nosniff');
       headers.set('Content-Security-Policy', "default-src 'none'; img-src hopp-artifact: data:; media-src hopp-artifact:; style-src 'unsafe-inline'; sandbox");
       return new Response(r.body, { status: r.status, headers });
-    } catch {
+    } catch (err) {
+      console.warn(`hopp: artifact ${id} not served: ${(err as Error).message}`);
       return new Response('not found', { status: 404 });
     }
   });

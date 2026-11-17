@@ -336,7 +336,9 @@ export interface ShellBridge {
   // appears or changes; call taskFeed again to read it.
   onFeedChanged(cb: (taskId: string) => void): () => void;
   // The human's line: sent to the orchestrator as a message and recorded in
-  // the feed as a post without `from`. stageId tags it with that stage.
+  // the feed as a post without `from`. stageId tags it with that stage. When
+  // the message went out but the post could not be stored, the result is ok
+  // with a post of id 0, so the human does not send it twice.
   postToTask(taskId: string, text: string, stageId?: string): Promise<Result<Post>>;
   // Accept or Return a submission ask.
   answerSubmission(askId: number, answer: SubmissionAnswer): Promise<Result<Ask>>;

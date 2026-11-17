@@ -374,6 +374,23 @@ describe('task launch', () => {
     expect((await svc.state()).tasks).toHaveLength(1);
   });
 
+  it('a worktree add that made its branch and then failed leaves no branch behind', async () => {
+    const repo = mkRepo('site');
+    await project({ orchestratorRepo: repo });
+    const flaky: Runner = async (args, opts) => {
+      if (args.includes('worktree') && args.includes('add')) {
+        await git(['-C', repo, 'branch', args[args.indexOf('-b') + 1]!]);
+        throw new RunError('fatal: could not create work tree');
+      }
+      return git(args, opts);
+    };
+    const s2 = new ShellService({ home, store, client: new DaemonClient(d.socketPath), git: flaky, hopp: fakeHopp, pickFolder: async () => null });
+    execFileSync('git', ['-C', repo, 'branch', 'keep-me']);
+    const r = await s2.createTask(taskInput());
+    expect(!r.ok && r.error.code).toBe('command_failed');
+    expect(branches(repo).sort()).toEqual(['keep-me', 'main']);
+  });
+
   it('makes nothing when the tool catalog cannot be read', async () => {
     const repo = mkRepo('site');
     await project({ orchestratorRepo: repo });

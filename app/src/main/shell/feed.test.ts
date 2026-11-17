@@ -186,6 +186,14 @@ describe('the feed', () => {
     expect(d.posts).toHaveLength(1);
   });
 
+  it('a line sent but not recorded in the feed is not reported as a failure', async () => {
+    const { task } = await taskWithPipeline();
+    d.override.set('POST /v1/posts', { status: 500, body: { error: { code: 'internal_error', message: 'disk full' } } });
+    const r = await svc.postToTask(task.id, 'Use the blue logo');
+    expect(r.ok && r.value).toMatchObject({ id: 0, from: '', body: 'Use the blue logo' });
+    expect(d.messages).toHaveLength(1);
+  });
+
   it('answers a submission with Accept, or Return with what to fix', async () => {
     d.asks = [makeAsk(1, 's', { options: ['Accept', 'Return'] }), makeAsk(2, 's', { options: ['Accept', 'Return'] })];
     expect((await svc.answerSubmission(1, { choice: 'Accept' })).ok).toBe(true);

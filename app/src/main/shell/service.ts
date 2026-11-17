@@ -267,7 +267,18 @@ export class ShellService {
     try {
       await mkdir(worktreesDir, { recursive: true });
       if (project.orchestratorRepo) {
-        await this.d.git(['-C', project.orchestratorRepo, 'worktree', 'add', '-b', 'hopp/' + id, dir, 'HEAD']);
+        try {
+          await this.d.git(['-C', project.orchestratorRepo, 'worktree', 'add', '-b', 'hopp/' + id, dir, 'HEAD']);
+        } catch (err) {
+          // git may have made the branch before the checkout failed; the
+          // branch is new (uniqueId saw none), so it is this launch's.
+          if (await this.branchExists(project.orchestratorRepo, 'hopp/' + id)) {
+            await this.d.git(['-C', project.orchestratorRepo, 'branch', '-D', 'hopp/' + id]).catch((e) =>
+              console.warn(`hopp: could not delete branch hopp/${id} in ${project.orchestratorRepo}: ${(e as Error).message}`),
+            );
+          }
+          throw err;
+        }
         made.worktree = true;
       } else {
         await mkdir(join(this.d.home, 'work', project.slug), { recursive: true });
@@ -358,19 +369,21 @@ export class ShellService {
     textsDir: string,
     made: { worktree: boolean; folder: boolean; texts: boolean },
   ): Promise<void> {
-    const quiet = async (f: () => Promise<unknown>) => {
+    // Best effort: the error that caused the undo is the one to report, but
+    // anything left behind is logged so it can be found.
+    const quiet = async (what: string, f: () => Promise<unknown>) => {
       try {
         await f();
-      } catch {
-        // best effort: the error that caused the undo is the one to report
+      } catch (err) {
+        console.warn(`hopp: undoing the launch of ${id}, could not ${what}: ${(err as Error).message}`);
       }
     };
     if (made.worktree && project.orchestratorRepo) {
-      await quiet(() => this.d.git(['-C', project.orchestratorRepo!, 'worktree', 'remove', '--force', dir]));
-      await quiet(() => this.d.git(['-C', project.orchestratorRepo!, 'branch', '-D', 'hopp/' + id]));
+      await quiet(`remove the worktree ${dir}`, () => this.d.git(['-C', project.orchestratorRepo!, 'worktree', 'remove', '--force', dir]));
+      await quiet(`delete the branch hopp/${id}`, () => this.d.git(['-C', project.orchestratorRepo!, 'branch', '-D', 'hopp/' + id]));
     }
-    if (made.folder) await quiet(() => rm(dir, { recursive: true, force: true }));
-    if (made.texts) await quiet(() => rm(textsDir, { recursive: true, force: true }));
+    if (made.folder) await quiet(`remove the folder ${dir}`, () => rm(dir, { recursive: true, force: true }));
+    if (made.texts) await quiet(`remove ${textsDir}`, () => rm(textsDir, { recursive: true, force: true }));
   }
 
   private async branchExists(repo: string, branch: string): Promise<boolean> {
@@ -683,7 +696,14 @@ export class ShellService {
       await this.d.client.sendMessage({ to: t.sessionId, body });
       const labels: Record<string, string> = { [LABEL.project]: t.projectSlug, [LABEL.task]: t.id };
       if (stageId) labels[LABEL.stage] = stageId;
-      return ok(await this.d.client.createPost({ from: '', body, labels }));
+      // The message is what matters: once it is sent, a failure to record the
+      // post must not make the human send it again.
+      try {
+        return ok(await this.d.client.createPost({ from: '', body, labels }));
+      } catch (err) {
+        console.warn(`hopp: sent to ${t.sessionId} but could not record it in the feed: ${(err as Error).message}`);
+        return ok({ id: 0, from: '', labels, body, attachments: [], created_at: this.now() });
+      }
     });
   }
 
