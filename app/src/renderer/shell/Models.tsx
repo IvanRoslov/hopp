@@ -3,6 +3,7 @@
 // made the default, described, given an effort where its harness takes one,
 // moved, or removed. Import models adds a switched-off profile for every
 // current model the installed harnesses offer that has none yet.
+import { profileEffortTag } from '../ui/effort';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HarnessCatalog, ImportResult, ModelProfile, Result, ShellBridge } from '../../shared/shell';
 import { cleanError } from '../errors';
@@ -20,6 +21,7 @@ export function ModelsTab(props: { shell: ShellBridge; profiles: ModelProfile[] 
   // Profiles the last import added: marked until the tab is left.
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const catalog = useCatalog(shell);
+  useEffect(() => catalog.load(), [catalog]);
 
   const runImport = async () => {
     setImporting(true);
@@ -176,7 +178,8 @@ function ProfileRow(props: {
     run: () => void run(() => shell.removeProfile(p.name)),
   });
 
-  const sub = [p.model && p.model !== p.name ? p.model : null, p.effort ? `effort ${p.effort}` : null].filter(Boolean).join(' · ');
+  const sub = p.model && p.model !== p.name ? p.model : '';
+  const effort = profileEffortTag(p, props.catalog.known ? props.catalog.effortsFor(p.agent, p.model) : null);
 
   return (
     <div className={'model-row' + (p.enabled ? '' : ' off') + (props.fresh ? ' fresh' : '')} data-testid="model-row" data-name={p.name}>
@@ -186,6 +189,11 @@ function ProfileRow(props: {
           <span className="tag" title="Harness">
             {p.agent}
           </span>
+          {effort && (
+            <span className="tag" data-testid="effort-tag" title="Effort">
+              {effort}
+            </span>
+          )}
           {p.isDefault && <span className="tag strong">Default</span>}
           {props.fresh && <span className="tag new">New</span>}
         </div>
@@ -283,11 +291,14 @@ function ProfileEditor(props: {
   );
 }
 
-// The harnesses' catalogs, read once when an editor first needs efforts.
+// The harnesses' catalogs, read once when the tab opens (each row's effort
+// tag needs the levels its model has; the daemon caches them).
 interface CatalogState {
   load: () => void;
   reset: () => void;
   effortsFor: (agent: string, model: string) => string[];
+  // Whether the catalog has been read (until then no row says "default").
+  known: boolean;
 }
 
 function useCatalog(shell: ShellBridge): CatalogState {
@@ -308,6 +319,7 @@ function useCatalog(shell: ShellBridge): CatalogState {
         setList(null);
       },
       effortsFor: (agent, model) => list?.find((c) => c.agent === agent)?.models.find((m) => m.id === model)?.efforts ?? [],
+      known: list !== null,
     }),
     [shell, list],
   );

@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
+import { useModelCatalog } from '../data/hooks';
+import { profileEffortTag } from '../ui/effort';
 import type { HoppBridge } from '../../shared/bridge';
 import type { LongAgent, ModelProfile, Result, ShellBridge, ShellError } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
@@ -18,6 +20,7 @@ export function NewAgent(props: {
   onCancel: () => void;
 }) {
   const enabled = useMemo(() => (props.profiles ?? []).filter((p) => p.enabled), [props.profiles]);
+  const effortsFor = useModelCatalog(props.shell);
   const [name, setName] = useState('');
   const [profile, setProfile] = useState('');
   const [dir, setDir] = useState('');
@@ -81,7 +84,7 @@ export function NewAgent(props: {
               <Dropdown
                 label={chosen || (props.profiles ? 'No enabled profiles' : '…')}
                 testId="pick-agent-profile"
-                options={enabled.map((p) => ({ value: p.name, label: p.name, hint: p.description || p.agent }))}
+                options={enabled.map((p) => ({ value: p.name, label: p.name, tag: profileEffortTag(p, effortsFor(p.agent, p.model)) ?? undefined, hint: p.description || p.agent }))}
                 value={chosen}
                 onChange={setProfile}
               />

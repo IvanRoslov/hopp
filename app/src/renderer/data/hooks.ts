@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DaemonBridge } from '../../shared/bridge';
-import type { ModelProfile, ShellBridge, ShellState } from '../../shared/shell';
+import type { HarnessCatalog, ModelProfile, ShellBridge, ShellState } from '../../shared/shell';
 import type { StreamState, Waiting } from '../../shared/types';
 import { cleanError } from '../errors';
 
@@ -128,4 +128,31 @@ export function useProfiles(shell: ShellBridge) {
     };
   }, [shell, load]);
   return { profiles, error, reload: load };
+}
+
+// useModelCatalog: the harnesses' model catalogs (the daemon caches them),
+// read once, for the effort levels each profile's model has. effortsFor is
+// null until the catalog is known.
+export function useModelCatalog(shell: ShellBridge) {
+  const [list, setList] = useState<HarnessCatalog[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    let p: Promise<unknown> | undefined;
+    try {
+      p = shell.modelCatalog().then(
+        (r) => live && setList(r.ok ? r.value : []),
+        () => live && setList([]),
+      );
+    } catch {
+      setList([]);
+    }
+    void p;
+    return () => {
+      live = false;
+    };
+  }, [shell]);
+  return useCallback(
+    (agent: string, model: string): string[] | null => (list ? list.find((c) => c.agent === agent)?.models.find((m) => m.id === model)?.efforts ?? [] : null),
+    [list],
+  );
 }

@@ -8,6 +8,8 @@ export interface Option {
   value: string;
   label: string;
   hint?: string;
+  // A quiet tag after the label (a profile's effort).
+  tag?: string;
   dim?: boolean;
 }
 
@@ -68,6 +70,7 @@ export function Dropdown(
           >
             <span className="t">
               {o.label}
+              {o.tag && <span className="tag">{o.tag}</span>}
               {o.hint && <span className="muted"> · {o.hint}</span>}
             </span>
             <span className="ck">{selected(o.value) && <CheckIcon />}</span>

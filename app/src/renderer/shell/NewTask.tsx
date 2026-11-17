@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useModelCatalog } from '../data/hooks';
+import { profileEffortTag } from '../ui/effort';
 import { Markdown } from '../ui/Markdown';
 import type { ModelProfile, Pipeline, Project, ShellBridge, ShellError, Task, TaskInput } from '../../shared/shell';
 import { slugify } from '../../shared/slug';
@@ -121,7 +123,8 @@ export function NewTask(props: {
     }
   };
 
-  const profileOptions = enabled.map((p) => ({ value: p.name, label: p.name, hint: p.description || p.agent }));
+  const effortsFor = useModelCatalog(props.shell);
+  const profileOptions = enabled.map((p) => ({ value: p.name, label: p.name, tag: profileEffortTag(p, effortsFor(p.agent, p.model)) ?? undefined, hint: p.description || p.agent }));
   const workersLabel = workers && workers.length ? workers.join(', ') : 'none';
   const generalError = error && (!error.field || !MORE_FIELDS.has(error.field)) ? error.message : null;
   const where = proj ? <WhereHint shell={props.shell} repo={proj.orchestratorRepo} /> : '';

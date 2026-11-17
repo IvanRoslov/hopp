@@ -53,7 +53,8 @@ describe('Settings → Models', () => {
     expect(within(opus).getByText('claude-code').className).toBe('tag');
     expect(within(opus).getByText('Default')).toBeTruthy();
     expect(opus.querySelector('.mr-desc')!.textContent).toBe('Hard work\nand orchestration');
-    expect(row('codex-sol').querySelector('.mr-sub')!.textContent).toBe('gpt-6-sol · effort xhigh');
+    expect(row('codex-sol').querySelector('.mr-sub')!.textContent).toBe('gpt-6-sol');
+    expect(within(row('codex-sol')).getByTestId('effort-tag').textContent).toBe('effort: xhigh');
     expect(within(row('kimi-k3')).queryByText('Default')).toBeNull();
     expect((within(row('deepseek-pro')).getByRole('switch') as HTMLElement).getAttribute('aria-checked')).toBe('false');
   });
@@ -115,7 +116,7 @@ describe('Settings → Models', () => {
     fireEvent.click(within(row('codex-sol')).getByRole('button', { name: 'Save' }));
     await flush();
     expect(f.shell!.updateProfile).toHaveBeenLastCalledWith('codex-sol', { description: '', effort: 'high' });
-    expect(row('codex-sol').querySelector('.mr-sub')!.textContent).toBe('gpt-6-sol · effort high');
+    expect(within(row('codex-sol')).getByTestId('effort-tag').textContent).toBe('effort: high');
     await menu('codex-sol', 'Edit…');
     await flush();
     fireEvent.click(within(row('codex-sol')).getByTestId('effort-codex-sol'));
@@ -226,5 +227,35 @@ describe('forms offer only profiles that are on', () => {
     await flush();
     expect(screen.getByTestId('pick-agent-profile').textContent).toContain('claude-opus');
     expect(screen.getByText('codex-sol is switched off in Settings → Models; claude-opus is used instead.')).toBeTruthy();
+  });
+});
+
+describe('effort on every profile', () => {
+  const catalog = [
+    { agent: 'kimi-code', source: 'kimi', warning: '', models: [{ id: 'kimi-code/k3', name: 'K3', description: '', main: true, efforts: ['low', 'high', 'max'], known: true }] },
+    { agent: 'deepseek', source: 'deepseek', warning: '', models: [{ id: 'deepseek-v4-pro', name: 'V4 Pro', description: '', main: true, efforts: [], known: true }] },
+  ];
+
+  it('a row shows its level, "default" where the model has levels, nothing where it has none', async () => {
+    await openModels({ catalog });
+    await flush();
+    expect(within(row('codex-sol')).getByTestId('effort-tag').textContent).toBe('effort: xhigh');
+    expect(within(row('kimi-k3')).getByTestId('effort-tag').textContent).toBe('effort: default');
+    expect(within(row('deepseek-pro')).queryByTestId('effort-tag')).toBeNull();
+    // A model the catalog does not list says nothing either.
+    expect(within(row('claude-opus')).queryByTestId('effort-tag')).toBeNull();
+  });
+
+  it('the New task pickers tell two profiles of one model apart by effort', async () => {
+    const profiles = [...PROFILES, makeProfile('kimi-k3-max', { agent: 'kimi-code', model: 'kimi-code/k3', effort: 'max', description: 'То же, трудные места', position: 4 })];
+    await openModels({ catalog, profiles });
+    fireEvent.click(screen.getAllByRole('button', { name: 'New task' })[0]!);
+    await flush();
+    fireEvent.click(screen.getByTestId('pick-orchestrator'));
+    const tagOf = (n: string) => screen.getAllByRole('menuitemradio').find((o) => o.querySelector('.t')!.firstChild!.textContent === n)!.querySelector('.tag')?.textContent ?? null;
+    expect(tagOf('kimi-k3')).toBe('effort: default');
+    expect(tagOf('kimi-k3-max')).toBe('effort: max');
+    expect(tagOf('codex-sol')).toBe('effort: xhigh');
+    expect(tagOf('claude-opus')).toBeNull();
   });
 });
