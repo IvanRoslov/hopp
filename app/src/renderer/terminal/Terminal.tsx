@@ -93,23 +93,30 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
       },
     );
 
+    // refit: fit the grid to the box and tell the pty if the size changed.
+    const refit = () => {
+      if (disposed) return;
+      try {
+        fit.fit();
+      } catch {
+        return;
+      }
+      if (term.cols === sent.cols && term.rows === sent.rows) return;
+      sent = { cols: term.cols, rows: term.rows };
+      if (termId !== null && !ended) bridge.resize(termId, sent.cols, sent.rows);
+    };
     let timer: ReturnType<typeof setTimeout> | null = null;
     const ro = new ResizeObserver(() => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        if (disposed) return;
-        try {
-          fit.fit();
-        } catch {
-          return;
-        }
-        if (term.cols === sent.cols && term.rows === sent.rows) return;
-        sent = { cols: term.cols, rows: term.rows };
-        if (termId !== null && !ended) bridge.resize(termId, sent.cols, sent.rows);
+        refit();
       }, RESIZE_DEBOUNCE_MS);
     });
     ro.observe(el);
+    // A cell's width is measured with the font at hand; once the fonts have
+    // loaded it may differ while the box keeps its size.
+    void document.fonts?.ready.then(refit);
 
     return () => {
       disposed = true;
@@ -124,7 +131,7 @@ export function Terminal(props: { sessionId: string; bridge?: TerminalBridge; on
   }, [sessionId, bridge]);
 
   return (
-    <div ref={box} className="terminal" data-testid="terminal">
+    <div ref={box} className="term-host" data-testid="terminal">
       {attaching && <div className="term-attaching">Attaching…</div>}
     </div>
   );
