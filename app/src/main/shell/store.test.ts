@@ -137,6 +137,17 @@ describe('ShellStore', () => {
     await expect(new ShellStore(home).read()).rejects.toThrow(/state\.json.*state\.json\.bak/s);
   });
 
+  it('tasks stored before base was recorded load with base null', async () => {
+    mkdirSync(join(home, 'shell'));
+    writeFileSync(join(home, 'shell', 'state.json'), JSON.stringify({
+      version: 1, projects: [], pipelines: [], agents: [],
+      tasks: [{ id: 't', projectSlug: 'p', title: 't', brief: 'b', sessionId: 't', dir: '/d', branch: null, orchestratorProfile: 'o', workerProfiles: [], status: 'active', hidden: false, createdAt: 1, finishedAt: 0 }],
+    }));
+    const t = (await new ShellStore(home).read()).tasks[0]!;
+    expect(t.base).toBeNull();
+    expect(t.pipeline).toBeNull();
+  });
+
   it('refuses a corrupt file and never overwrites it', async () => {
     mkdirSync(join(home, 'shell'));
     writeFileSync(join(home, 'shell', 'state.json'), '{not json');

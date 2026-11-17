@@ -2,7 +2,7 @@
 // in layers: (1) hopp, (2) role, (3) project, (4) tools, then the human's
 // extra system prompt. A long-lived agent gets layers 1 and 4 only; its role
 // lives in its own folder.
-import type { Pipeline, Project } from '../../shared/shell';
+import type { Pipeline, Project, TaskBase } from '../../shared/shell';
 
 // hoppLayer: you run inside hopp, and the commands every session uses.
 export function hoppLayer(): string {
@@ -44,6 +44,8 @@ export interface OrchestratorContext {
   brief?: string;
   // The task's pipeline; null or absent for a task without one.
   pipeline?: Pipeline | null;
+  // What the task's worktree started from; absent for a plain folder.
+  base?: TaskBase | null;
   // Managed clones (from GitHub) and the ref their worktrees start from,
   // e.g. origin/main; plain repositories are absent.
   repoBases?: Record<string, string>;
@@ -125,6 +127,7 @@ export function orchestratorText(c: OrchestratorContext): string {
     '# Your role: orchestrator',
     '',
     `You lead the task "${c.title}" (task id \`${c.taskId}\`). Your folder is ${c.taskDir}. The human's request is your first message.`,
+    ...baseLines(c.base),
     '',
     'Plan the work, split it into pieces, and launch workers for the pieces. You own the result: review what workers return and integrate it.',
     '',
@@ -273,3 +276,18 @@ export const RESUMED_ORCHESTRATOR =
   'You were restarted and your earlier conversation is gone. Follow "After a restart" in your instructions: find where the work stands (your branch, `hopp ls --mine`, `hopp messages $HOPP_SESSION_ID`), then continue the task. Do not redo what is done.';
 export const RESUMED_AGENT =
   'Your session was restarted and your earlier conversation is gone. Read what waits for you with `hopp inbox`, see what was said with `hopp messages $HOPP_SESSION_ID`, then carry on.';
+
+// baseLines: the commit the worktree started from, and a warning when the
+// fetch before it failed.
+export function baseLines(b: TaskBase | null | undefined): string[] {
+  if (!b || !b.commit) return [];
+  const date = b.committedAt ? new Date(b.committedAt * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'an unknown date';
+  const lines = ['', `Your worktree started from ${b.ref} at commit ${b.commit.slice(0, 12)} (${date}).`];
+  if (b.warning) {
+    const branch = b.ref.startsWith('origin/') ? b.ref : 'origin/<default branch>';
+    lines.push(
+      `The fetch before the start failed (${b.warning}), so this may be behind GitHub. Run \`git fetch origin\` and compare with \`git log --oneline HEAD..${branch}\` before you rely on it; tell the human if it is behind.`,
+    );
+  }
+  return lines;
+}

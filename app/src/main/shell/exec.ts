@@ -22,7 +22,9 @@ export class RunError extends Error {
   }
 }
 
-export type Runner = (args: string[], opts?: { cwd?: string; input?: string }) => Promise<RunResult>;
+// timeoutMs overrides the runner's bound for one call; a call that runs out
+// is killed and fails with a RunError saying so.
+export type Runner = (args: string[], opts?: { cwd?: string; input?: string; timeoutMs?: number }) => Promise<RunResult>;
 
 export function makeRunner(program: string | (() => string | null), env: () => NodeJS.ProcessEnv, timeoutMs = 60_000): Runner {
   return (args, opts = {}) =>
@@ -35,10 +37,12 @@ export function makeRunner(program: string | (() => string | null), env: () => N
       const child = execFile(
         bin,
         args,
-        { cwd: opts.cwd, env: env(), timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 },
+        { cwd: opts.cwd, env: env(), timeout: opts.timeoutMs ?? timeoutMs, maxBuffer: 16 * 1024 * 1024 },
         (err, stdout, stderr) => {
           if (err) {
-            const msg = String(stderr).trim() || err.message;
+            const killed = (err as { killed?: boolean }).killed;
+            const ms = opts.timeoutMs ?? timeoutMs;
+            const msg = killed ? `timed out after ${(ms / 1000).toFixed(ms < 1000 ? 1 : 0)} s` : String(stderr).trim() || err.message;
             reject(new RunError(msg, String(stdout), String(stderr), (err as NodeJS.ErrnoException).code ?? null));
             return;
           }

@@ -13,6 +13,7 @@ import type {
   ProjectInput,
   Result,
   ShellState,
+  TaskBase,
   Task,
   TaskInput,
   ToolCatalog,
@@ -52,6 +53,8 @@ export interface ShellDeps {
   now?: () => number;
   // The user's gh CLI; absent means gh is not set up for this app.
   gh?: Runner;
+  // Bound of the fetch before a task on a managed clone (default 60 s).
+  fetchTimeoutMs?: number;
 }
 
 const LIVE = new Set(['spawning', 'running']);
@@ -146,7 +149,7 @@ export class ShellService {
     const noGh: Runner = async () => {
       throw Object.assign(new RunError('program not found on PATH'), { code: 'ENOENT' });
     };
-    this.github = new Github(d.home, d.gh ?? noGh, d.git);
+    this.github = new Github(d.home, d.gh ?? noGh, d.git, undefined, d.fetchTimeoutMs);
   }
 
   get home(): string {
@@ -286,6 +289,7 @@ export class ShellService {
     // Managed clones: fetched first, so the task and its workers start from
     // the remote's default branch; a plain folder starts from its HEAD.
     let worktreeBase = 'HEAD';
+    let orchFetch: { fetched: boolean; warning: string } = { fetched: false, warning: '' };
     const repoBases: Record<string, string> = {};
     for (const repo of allowedRepos(project)) {
       if (!this.github.isManaged(repo)) continue;
@@ -293,6 +297,7 @@ export class ShellService {
         const prep = await this.github.prepare(repo);
         if (prep.warning) console.warn('hopp: ' + prep.warning);
         repoBases[repo] = prep.base;
+        if (repo === project.orchestratorRepo) orchFetch = { fetched: prep.fetched, warning: prep.warning };
       } catch (err) {
         if (repo === project.orchestratorRepo) return fail('repo_empty', (err as Error).message);
         console.warn('hopp: ' + (err as Error).message);
@@ -303,6 +308,7 @@ export class ShellService {
     const dir = workDir(id);
     const textsDir = join(this.d.home, 'shell', 'tasks', id);
     const made = { worktree: false, folder: false, texts: false };
+    let taskBase: TaskBase | null = null;
     let spawnSent = false;
     try {
       await mkdir(worktreesDir, { recursive: true });
@@ -320,6 +326,7 @@ export class ShellService {
           throw err;
         }
         made.worktree = true;
+        taskBase = await this.baseOf(dir, project.orchestratorRepo, repoBases[project.orchestratorRepo] ?? null, orchFetch);
       } else {
         await mkdir(join(this.d.home, 'work', project.slug), { recursive: true });
         await mkdir(dir);
@@ -339,7 +346,7 @@ export class ShellService {
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
         toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
-        repoBases,
+        repoBases, base: taskBase,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
@@ -369,7 +376,7 @@ export class ShellService {
     const task: Task = {
       id, projectSlug: project.slug, title, brief, sessionId: id, dir,
       branch: project.orchestratorRepo ? 'hopp/' + id : null,
-      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline, base: null,
+      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline, base: taskBase,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
     const record = () =>
@@ -385,6 +392,23 @@ export class ShellService {
       );
     }
     return ok(task);
+  }
+
+  // baseOf reads the commit a new worktree stands on. managedRef is the
+  // origin/<branch> it was made from, or null for a folder (then the ref is
+  // HEAD and its branch).
+  private async baseOf(dir: string, repo: string, managedRef: string | null, f: { fetched: boolean; warning: string }): Promise<TaskBase | null> {
+    try {
+      const [commit, ts] = (await this.d.git(['-C', dir, 'log', '-1', '--format=%H %ct'])).stdout.trim().split(' ');
+      let ref = managedRef ?? 'HEAD';
+      if (!managedRef) {
+        const branch = (await this.d.git(['-C', repo, 'rev-parse', '--abbrev-ref', 'HEAD']).catch(() => ({ stdout: '' }))).stdout.trim();
+        if (branch && branch !== 'HEAD') ref = `HEAD (${branch})`;
+      }
+      return { ref, commit: commit ?? '', committedAt: Number(ts) || 0, fetched: managedRef ? f.fetched : false, warning: managedRef ? f.warning : '' };
+    } catch {
+      return null;
+    }
   }
 
   // spawnOutcome decides, after a failed launch request, whether the session

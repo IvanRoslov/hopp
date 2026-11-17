@@ -30,6 +30,8 @@ export class Github {
     private readonly gh: Runner,
     private readonly git: Runner,
     private readonly now: () => number = () => Date.now(),
+    // A fetch that runs out counts as a failed one: the task still starts.
+    private readonly fetchTimeoutMs = 60_000,
   ) {}
 
   get reposDir(): string {
@@ -143,10 +145,12 @@ export class Github {
   // prepare fetches a managed clone (best effort) and returns the ref a new
   // worktree should start from: origin/<default branch>. warning says why
   // the fetch failed, when it did. A clone without any commit is an error.
-  async prepare(repo: string): Promise<{ base: string; warning: string }> {
+  async prepare(repo: string): Promise<{ base: string; warning: string; fetched: boolean }> {
     let warning = '';
+    let fetched = false;
     try {
-      await this.git(['-C', repo, 'fetch', 'origin', '--prune']);
+      await this.git(['-C', repo, 'fetch', 'origin', '--prune'], { timeoutMs: this.fetchTimeoutMs });
+      fetched = true;
     } catch (err) {
       warning = `could not fetch ${managedRepoName(repo, this.home) ?? repo} (${(err as Error).message}); its worktree starts from the last fetched state`;
     }
@@ -165,7 +169,7 @@ export class Github {
       // origin/HEAD unknown (an empty repo, or a clone made without it)
     }
     for (const ref of [head, 'origin/main', 'origin/master', 'HEAD'].filter(Boolean)) {
-      if (await verify(ref)) return { base: ref, warning };
+      if (await verify(ref)) return { base: ref, warning, fetched };
     }
     throw new RunError(`${managedRepoName(repo, this.home) ?? repo} has no commits yet; push a first commit to it and try again`);
   }

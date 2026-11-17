@@ -312,3 +312,88 @@ describe('a task on a managed clone', () => {
     expect(existsSync(join(clone, '.git'))).toBe(true);
   });
 });
+
+describe('what a task started from', () => {
+  async function managedProject(full: string, deps: Partial<ConstructorParameters<typeof ShellService>[0]> = {}) {
+    const s2 = new ShellService({
+      home, store: new ShellStore(home), client: new DaemonClient(d.socketPath), git,
+      hopp: async () => ({ stdout: '', stderr: '' }), pickFolder: async () => null, gh: gh.runner, ...deps,
+    });
+    const r = await s2.addGithubRepo(full);
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    await s2.createProject({ name: 'Site', description: '', orchestratorRepo: r.value.path, workerRepos: [], guardrails: '' });
+    return { s2, clone: r.value.path };
+  }
+  const start = (s2: ShellService) => s2.createTask({ projectSlug: 'site', brief: 'Fix it', orchestratorProfile: 'p', workerProfiles: [] });
+
+  it('fetch ok: fetched, and the commit is the origin tip after GitHub moved on', async () => {
+    const bare = origin('ivan/site');
+    const { s2 } = await managedProject('ivan/site');
+    push(bare, 'NEW.md', 'new\n', 'newer on github');
+    const tip = sh(bare, 'rev-parse', 'main').trim();
+    const r = await start(s2);
+    expect(r.ok && r.value.base).toMatchObject({ ref: 'origin/main', commit: tip, fetched: true, warning: '' });
+    expect(r.ok && r.value.base!.committedAt).toBeGreaterThan(1_700_000_000);
+    expect((await s2.state()).tasks[0]!.base!.commit).toBe(tip);
+    const sp = String(d.created.at(-1)!['system_prompt']);
+    expect(sp).toContain(`Your worktree started from origin/main at commit ${tip.slice(0, 12)}`);
+    expect(sp).not.toContain('may be behind GitHub');
+  });
+
+  it('fetch fails: the warning is recorded, the task starts, and the text says it may be behind', async () => {
+    const bare = origin('ivan/site');
+    const { s2 } = await managedProject('ivan/site');
+    const old = sh(bare, 'rev-parse', 'main').trim();
+    renameSync(bare, bare + '.gone');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const r = await start(s2);
+      expect(r.ok).toBe(true);
+      expect(r.ok && r.value.base).toMatchObject({ ref: 'origin/main', commit: old, fetched: false });
+      expect(r.ok && r.value.base!.warning).toMatch(/could not fetch ivan\/site/);
+      const sp = String(d.created.at(-1)!['system_prompt']);
+      expect(sp).toContain('so this may be behind GitHub');
+      expect(sp).toContain('git log --oneline HEAD..origin/main');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a fetch that hangs times out, counts as failed, and does not hold the launch', async () => {
+    origin('ivan/site');
+    const hanging: Runner = (args, opts) =>
+      args.includes('fetch')
+        ? new Promise((_, reject) => setTimeout(() => reject(new RunError(`timed out after ${opts?.timeoutMs} ms`)), opts?.timeoutMs ?? 600_000))
+        : git(args, opts);
+    const { s2 } = await managedProject('ivan/site', { git: hanging, fetchTimeoutMs: 150 });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const t0 = Date.now();
+      const r = await start(s2);
+      expect(Date.now() - t0).toBeLessThan(5_000);
+      expect(r.ok && r.value.base).toMatchObject({ fetched: false });
+      expect(r.ok && r.value.base!.warning).toContain('timed out after 150 ms');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a plain folder: HEAD with its branch, not fetched', async () => {
+    const plain = join(root, 'plain');
+    mkdirSync(plain);
+    sh(plain, 'init', '-q', '-b', 'main');
+    writeFileSync(join(plain, 'a'), 'a');
+    sh(plain, 'add', '.');
+    sh(plain, '-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '-m', 'one');
+    const head = sh(plain, 'rev-parse', 'HEAD').trim();
+    await svc.createProject({ name: 'Site', description: '', orchestratorRepo: plain, workerRepos: [], guardrails: '' });
+    const r = await svc.createTask({ projectSlug: 'site', brief: 'x', orchestratorProfile: 'p', workerProfiles: [] });
+    expect(r.ok && r.value.base).toMatchObject({ ref: 'HEAD (main)', commit: head, fetched: false, warning: '' });
+  });
+
+  it('a project without a repository has no base', async () => {
+    await svc.createProject({ name: 'Site', description: '', orchestratorRepo: null, workerRepos: [], guardrails: '' });
+    const r = await svc.createTask({ projectSlug: 'site', brief: 'x', orchestratorProfile: 'p', workerProfiles: [] });
+    expect(r.ok && r.value.base).toBeNull();
+  });
+});
