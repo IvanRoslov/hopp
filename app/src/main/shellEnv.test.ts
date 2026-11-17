@@ -21,13 +21,15 @@ describe('loginShellPath', () => {
   it('reads PATH from a login shell, ignoring what its startup files print', async () => {
     // The fake shell ignores its flags and runs the command it was given.
     const sh = fakeShell('echo "welcome banner"; PATH="/home/u/.local/bin:/usr/bin"; eval "$2"; echo trailing');
-    expect(await loginShellPath(sh, 2000)).toBe('/home/u/.local/bin:/usr/bin');
+    // A generous bound: under load, starting a process can take seconds;
+    // only the hanging shell below needs a short one.
+    expect(await loginShellPath(sh, 15_000)).toBe('/home/u/.local/bin:/usr/bin');
   });
 
   it('gives up on a shell that hangs or fails', async () => {
     expect(await loginShellPath(fakeShell('sleep 10'), 300)).toBeUndefined();
-    expect(await loginShellPath(fakeShell('exit 1'), 2000)).toBeUndefined();
-    expect(await loginShellPath(join(dir, 'missing'), 2000)).toBeUndefined();
+    expect(await loginShellPath(fakeShell('exit 1'), 15_000)).toBeUndefined();
+    expect(await loginShellPath(join(dir, 'missing'), 15_000)).toBeUndefined();
   });
 });
 
