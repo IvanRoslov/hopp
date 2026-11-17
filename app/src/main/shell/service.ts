@@ -19,6 +19,8 @@ import type {
   ToolRules,
   Lesson,
   Artifact,
+  GithubRepo,
+  GithubStatus,
   Pipeline,
   PipelineInput,
   Post,
@@ -771,6 +773,20 @@ export class ShellService {
       if (!looksText(f.mime, buf)) return fail('not_text', 'The file is not text');
       return ok(buf.toString('utf8'));
     });
+  }
+
+  // ---- GitHub (being implemented) -------------------------------------------
+
+  async githubStatus(): Promise<GithubStatus> {
+    return { available: false, login: '', reason: 'not implemented yet', command: '', home: this.d.home };
+  }
+
+  async listGithubRepos(_query: string): Promise<Result<GithubRepo[]>> {
+    return fail('not_implemented', 'not implemented yet');
+  }
+
+  async addGithubRepo(_fullName: string): Promise<Result<{ path: string }>> {
+    return fail('not_implemented', 'not implemented yet');
   }
 }
 

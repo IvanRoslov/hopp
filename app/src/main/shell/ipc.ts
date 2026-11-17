@@ -148,6 +148,9 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   },
   answerSubmission: { result: true, run: (s, a) => s.answerSubmission(int(a[0], 'ask id'), submissionAnswer(a[1])) },
   artifactText: { result: true, run: (s, a) => s.artifactText(int(a[0], 'artifact id')) },
+  githubStatus: { result: false, run: (s) => s.githubStatus() },
+  listGithubRepos: { result: true, run: (s, a) => s.listGithubRepos(str(a[0] ?? '', 'query', 200)) },
+  addGithubRepo: { result: true, run: (s, a) => s.addGithubRepo(str(a[0], 'repository', 200)) },
 };
 
 // callShell runs one method with arguments from the page.

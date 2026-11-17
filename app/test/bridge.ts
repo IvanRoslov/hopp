@@ -273,6 +273,10 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       lessons = lessons.map((l) => (l.id === id ? { ...l, status: 'closed' as const, closed_at: 2 } : l));
       return ok(null);
     }),
+    // GitHub: off by default in page tests (stubs added with the contract).
+    githubStatus: vi.fn(async () => ({ available: false, login: '', reason: 'gh is not set up in this test', command: 'gh auth login', home: '/h' })),
+    listGithubRepos: vi.fn(async (_q: string) => ok([] as import('../src/shared/shell').GithubRepo[])),
+    addGithubRepo: vi.fn(async (_n: string) => ({ ok: false as const, error: { code: 'not_implemented', message: 'not in tests' } })),
   } satisfies ShellBridge;
 
   return {

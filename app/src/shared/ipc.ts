@@ -27,6 +27,7 @@ export const SHELL_METHODS = [
   'createAgent', 'startAgent', 'stopAgent', 'removeAgent', 'agentMail', 'waiting',
   'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules', 'listLessons', 'closeLesson',
   'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'postToTask', 'answerSubmission', 'artifactText',
+  'githubStatus', 'listGithubRepos', 'addGithubRepo',
 ] as const;
 
 export type ShellMethod = (typeof SHELL_METHODS)[number];

@@ -36,7 +36,7 @@ describe('shell IPC', () => {
       'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
       'removeAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
       'listLessons', 'closeLesson', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
-      'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText',
+      'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText', 'githubStatus', 'listGithubRepos', 'addGithubRepo',
     ];
     const local = ['onChanged', 'onFeedChanged', 'artifactUrl'];
     expect([...SHELL_METHODS].sort()).toEqual(bridgeKeys.filter((k) => !local.includes(k)).sort());

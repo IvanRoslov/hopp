@@ -273,6 +273,34 @@ export interface StageState {
 // The human's answer to a submission. Return needs the text of what to fix.
 export type SubmissionAnswer = { choice: 'Accept' } | { choice: 'Return'; text: string };
 
+// ---- GitHub repositories ---------------------------------------------------
+
+// A repository the user can access on GitHub, through their own `gh` CLI.
+export interface GithubRepo {
+  // owner/repo
+  fullName: string;
+  description: string;
+  private: boolean;
+  defaultBranch: string;
+  // ISO time of the last push.
+  updatedAt: string;
+  // Whether a managed clone of it exists in <HOPP_HOME>/repos.
+  cloned: boolean;
+}
+
+export interface GithubStatus {
+  available: boolean;
+  // The gh login when available.
+  login: string;
+  // When not available: why, in a sentence.
+  reason: string;
+  // When not available: the one command that fixes it (`brew install gh`,
+  // `gh auth login`); empty otherwise.
+  command: string;
+  // The hopp home, for managedRepoName(path, home) in shared/repos.ts.
+  home: string;
+}
+
 // ---- the bridge -------------------------------------------------------------
 
 export interface ShellBridge {
@@ -348,4 +376,14 @@ export interface ShellBridge {
   // The text of an artifact version, for the text viewer; refused for a file
   // over 2 MB or one that is not text.
   artifactText(id: number): Promise<Result<string>>;
+
+  // GitHub, through the user's `gh` CLI; hopp stores no token.
+  githubStatus(): Promise<GithubStatus>;
+  // Repositories the user can access, most recently pushed first, filtered by
+  // query (case-insensitive, on owner/repo and description).
+  listGithubRepos(query: string): Promise<Result<GithubRepo[]>>;
+  // Clones owner/repo into <HOPP_HOME>/repos/<owner>__<repo> unless it is
+  // there already, and returns that path for the project's repositories.
+  // See managedRepoName in shared/repos.ts to label such paths.
+  addGithubRepo(fullName: string): Promise<Result<{ path: string }>>;
 }
