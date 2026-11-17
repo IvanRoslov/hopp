@@ -38,6 +38,9 @@ const paths = await packager({
   appCategoryType: 'public.app-category.developer-tools',
   // Only the build output and the runtime dependencies go in.
   ignore: (p) => p !== '' && !keep.test(p),
+  // The CLI bundle (hopp task …) next to the archive, as a plain file the
+  // app's Node runs: Contents/Resources/hopp-shell.cjs.
+  extraResource: [join(root, 'out', 'cli', 'hopp-shell.cjs')],
   prune: true,
   // node-pty's native module and its spawn-helper must live outside the
   // asar archive to be loaded and executed.

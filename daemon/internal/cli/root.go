@@ -75,12 +75,17 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newUsageCmd())
 	root.AddCommand(newLogsCmd())
 	root.AddCommand(newDoctorCmd())
+	withExternalHelp(root)
 	return root
 }
 
 // Execute returns the exit code for the process (0/1/2/3).
 func Execute() int {
-	if err := NewRootCmd().Execute(); err != nil {
+	root := NewRootCmd()
+	if code, handled := runExternal(root, os.Args[1:], os.Stderr); handled {
+		return code
+	}
+	if err := root.Execute(); err != nil {
 		os.Stderr.WriteString("hopp: " + err.Error() + "\n")
 		return exitCode(err)
 	}

@@ -233,6 +233,15 @@ export class ShellService {
     if (!project) return fail('project_not_found', 'Choose a project', 'projectSlug');
     const brief = (input.brief ?? '').trim();
     if (!brief) return fail('brief_required', 'Say what needs to be done', 'brief');
+    const startedBy = (input.startedBy ?? '').trim() || null;
+    if (startedBy) {
+      const starter = await this.sessionOrNull(startedBy);
+      if (!starter) return fail('starter_unknown', `The daemon has no session "${startedBy}" (the starting agent, from $HOPP_SESSION_ID)`);
+      const role = starter.labels?.[LABEL.role];
+      if (role === 'orchestrator' || role === 'worker') {
+        return fail('starter_not_allowed', `${startedBy} is ${role === 'orchestrator' ? 'an orchestrator' : 'a worker'} of a task, and tasks are not started from inside tasks. Ask your orchestrator or the human instead.`);
+      }
+    }
 
     const profiles = await this.listProfiles();
     const enabled = new Map(profiles.filter((p) => p.enabled).map((p) => [p.name, p]));
@@ -275,11 +284,12 @@ export class ShellService {
       ...st.agents.map((a) => a.name),
       ...mailboxes.map((b) => b.name),
     ]);
-    const id = await uniqueId(base, async (c) => {
+    const isTaken = async (c: string) => {
       if (used.has(c) || existsSync(workDir(c)) || existsSync(join(this.d.home, 'shell', 'tasks', c))) return true;
       if (project.orchestratorRepo) return this.branchExists(project.orchestratorRepo, 'hopp/' + c);
       return false;
-    });
+    };
+    let id = await uniqueId(base, isTaken);
 
     // Tools sections, one per harness, before anything is written.
     const harnesses = [...new Set([orch.agent, ...workers.map((w) => w.agent)])];
@@ -305,9 +315,23 @@ export class ShellService {
     }
     if (project.orchestratorRepo && repoBases[project.orchestratorRepo]) worktreeBase = repoBases[project.orchestratorRepo]!;
 
+    // The id is taken by making its texts folder: mkdir is atomic, so of two
+    // launches (in two processes) picking the same id only one gets it.
+    const tasksDir = join(this.d.home, 'shell', 'tasks');
+    await mkdir(tasksDir, { recursive: true });
+    for (let tries = 0; ; tries++) {
+      try {
+        await mkdir(join(tasksDir, id));
+        break;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || tries >= 20) throw err;
+        used.add(id);
+        id = await uniqueId(base, isTaken);
+      }
+    }
     const dir = workDir(id);
-    const textsDir = join(this.d.home, 'shell', 'tasks', id);
-    const made = { worktree: false, folder: false, texts: false };
+    const textsDir = join(tasksDir, id);
+    const made = { worktree: false, folder: false, texts: true };
     let taskBase: TaskBase | null = null;
     let spawnSent = false;
     try {
@@ -333,8 +357,6 @@ export class ShellService {
         made.folder = true;
       }
 
-      await mkdir(textsDir, { recursive: true });
-      made.texts = true;
       const workerFiles: WorkerFile[] = [];
       for (const w of workers) {
         const file = join(textsDir, `worker-${w.agent}.md`);
@@ -346,15 +368,17 @@ export class ShellService {
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
         toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
-        repoBases, base: taskBase,
+        repoBases, base: taskBase, startedBy,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
       const spawnDirs = [...new Set([...allowedRepos(project), worktreesDir, dir])];
+      const labels: Record<string, string> = { [LABEL.project]: project.slug, [LABEL.task]: id, [LABEL.role]: 'orchestrator' };
+      if (startedBy) labels[LABEL.startedBy] = startedBy;
       spawnSent = true;
       await this.d.client.createSession({
         dir, id, profile: orch.name,
-        labels: { 'hopp.project': project.slug, 'hopp.task': id, 'hopp.role': 'orchestrator' },
+        labels,
         spawn_dirs: spawnDirs, system_prompt: systemPrompt, message: brief,
       });
     } catch (err) {
@@ -376,7 +400,7 @@ export class ShellService {
     const task: Task = {
       id, projectSlug: project.slug, title, brief, sessionId: id, dir,
       branch: project.orchestratorRepo ? 'hopp/' + id : null,
-      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline, base: taskBase,
+      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline, base: taskBase, startedBy,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
     const record = () =>

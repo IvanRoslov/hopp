@@ -62,7 +62,7 @@ function taskInput(v: unknown): TaskInput {
     orchestratorProfile: str(v['orchestratorProfile'], 'orchestratorProfile', 200),
     workerProfiles: strList(v['workerProfiles'] ?? [], 'workerProfiles'),
   };
-  for (const k of ['title', 'sessionName', 'extraSystemPrompt'] as const) {
+  for (const k of ['title', 'sessionName', 'extraSystemPrompt', 'startedBy'] as const) {
     const x = optStr(v[k], k);
     if (x !== undefined) out[k] = x;
   }

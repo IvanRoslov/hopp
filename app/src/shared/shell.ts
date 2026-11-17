@@ -121,6 +121,9 @@ export interface Task {
   // What the task's worktree started from; null for a folder without git
   // (and for tasks stored before this was recorded).
   base: TaskBase | null;
+  // The session id of the agent that started the task (`hopp task new` run
+  // inside a hopp session); null when the human started it.
+  startedBy: string | null;
   status: TaskStatus;
   // Removed from the list by the human; kept in the store.
   hidden: boolean;
@@ -140,6 +143,9 @@ export interface TaskInput {
   // "More" section of the form.
   sessionName?: string;
   extraSystemPrompt?: string;
+  // The session id of the agent starting the task (the CLI sets it from
+  // $HOPP_SESSION_ID); omitted when the human starts it.
+  startedBy?: string;
 }
 
 // A long-lived agent: stands above projects, runs in its own folder where
@@ -261,6 +267,8 @@ export const LABEL = {
   substageTitle: 'hopp.substage_title',
   event: 'hopp.event',
   kind: 'hopp.kind',
+  // On a task's orchestrator: the agent session that started the task.
+  startedBy: 'hopp.started_by',
 } as const;
 
 // Values of hopp.event and hopp.kind.

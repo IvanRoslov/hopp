@@ -93,3 +93,13 @@ describe('what a task started from', () => {
     expect(screen.getByTestId('base-warning').textContent).toContain('Could not fetch ivan/shop');
   });
 });
+
+describe('who started a task', () => {
+  it('task details name the agent that started it, and say nothing when the human did', async () => {
+    await open(null, { startedBy: 'cto' });
+    expect(within(details()).getByTestId('task-started-by').textContent).toBe('cto');
+    cleanup();
+    await open(null);
+    expect(within(details()).queryByText('Started by')).toBeNull();
+  });
+});

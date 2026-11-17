@@ -49,6 +49,14 @@ export function TaskDetails(props: { task: Task; project?: Project }) {
       <dd>{task.workerProfiles.length ? task.workerProfiles.join(', ') : 'none'}</dd>
       <dt>Started</dt>
       <dd>{when(task.createdAt)}</dd>
+      {task.startedBy && (
+        <>
+          <dt>Started by</dt>
+          <dd className="mono" data-testid="task-started-by">
+            {task.startedBy}
+          </dd>
+        </>
+      )}
       {task.status === 'finished' && (
         <>
           <dt>Finished</dt>
