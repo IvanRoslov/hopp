@@ -32,6 +32,9 @@ export interface FeedProps {
   jump?: { stageId: string; n: number } | null;
 }
 
+// MARK_MS: how long the question a jump leads to stays tinted.
+export const MARK_MS = 1600;
+
 export function Feed(props: FeedProps) {
   const { task, feed } = props;
   const pipeline = task.pipeline;
@@ -49,11 +52,13 @@ export function Feed(props: FeedProps) {
   useEffect(() => {
     if (!props.focusAskId) return;
     const el = scroller.current?.querySelector(`[data-ask="${props.focusAskId}"]`);
-    if (el) {
-      el.scrollIntoView?.({ block: 'center' });
-      setFocused(props.focusAskId);
-      stick.current = false;
-    }
+    if (!el) return;
+    el.scrollIntoView?.({ block: 'center' });
+    setFocused(props.focusAskId);
+    stick.current = false;
+    // The mark says "here it is" and then goes.
+    const t = setTimeout(() => setFocused(null), MARK_MS);
+    return () => clearTimeout(t);
   }, [props.focusAskId, props.loaded]);
 
   useEffect(() => {
