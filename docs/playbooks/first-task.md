@@ -16,7 +16,7 @@ You want to run work through the hopp desktop app for the first time: create a p
 
 ## Steps
 
-1. **Start the app.** Either `make app-dev` (a development window), or `make app-pack` once and then double-click `app/dist/hopp-darwin-arm64/hopp.app` (unsigned and built on this Mac, so it opens directly). Only one copy runs at a time; opening it again brings the first window forward.
+1. **Start the app.** Either `make app-dev` (a development window), or `make app-pack` once and then double-click `app/dist/hopp-darwin-arm64/hopp.app` (unsigned and built on this Mac, so it opens directly), or `make app-install-mac` to put it in `/Applications`. Only one copy runs at a time; opening it again brings the first window forward.
    - If the left column says "The hopp daemon is not running", press **Start daemon** (it runs `hopp daemon start` with your login shell's `PATH`), or run it yourself; the app reconnects on its own.
 2. **Create your first project.** With no project the window shows only this form.
    - **Name** — anything; **Slug** follows the name until you edit it (it names folders and branches).

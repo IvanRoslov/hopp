@@ -1,4 +1,4 @@
-.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build app-pack
+.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build app-pack app-install-mac
 
 lint-docs:
 	python3 scripts/lint_docs.py .
@@ -67,3 +67,11 @@ app-build:
 # Not signed or notarized; nothing is installed or copied to /Applications.
 app-pack:
 	cd app && npm run build && node scripts/pack.mjs
+
+# Builds the bundle and puts it in /Applications/hopp.app, replacing the copy
+# there. A running hopp.app is asked to quit first; the daemon is not touched.
+app-install-mac: app-pack
+	-test -d /Applications/hopp.app && pgrep -f /Applications/hopp.app/Contents/MacOS >/dev/null && osascript -e 'tell application "/Applications/hopp.app" to quit' && sleep 2
+	rm -rf /Applications/hopp.app
+	ditto app/dist/hopp-darwin-arm64/hopp.app /Applications/hopp.app
+	@echo "installed /Applications/hopp.app"
