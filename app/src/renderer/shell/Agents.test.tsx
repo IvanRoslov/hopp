@@ -26,7 +26,7 @@ async function open(seed: { mail?: Record<string, number>; foreignTmux?: string[
   await flush();
   return f;
 }
-const statusLine = () => screen.getByTestId('work-view').querySelector('.status-line') as HTMLElement;
+const alertLine = () => screen.getByTestId('work-view').querySelector('.top-alert') as HTMLElement;
 
 describe('an agent name a tmux session outside hopp holds', () => {
   it('New agent says so next to Name', async () => {
@@ -45,9 +45,9 @@ describe('an agent name a tmux session outside hopp holds', () => {
 
   it('Start says it in words, with Rename and Remove agent beside it', async () => {
     await open({ foreignTmux: ['cto'] });
-    fireEvent.click(within(statusLine()).getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByTestId('agent-start'));
     await flush();
-    const alert = within(statusLine()).getByRole('alert');
+    const alert = within(alertLine()).getByRole('alert');
     expect(alert.textContent).toContain(TMUX);
     expect(alert.textContent).not.toContain('session id is taken');
     expect(within(alert).getByRole('button', { name: 'Rename' })).toBeTruthy();
@@ -56,9 +56,9 @@ describe('an agent name a tmux session outside hopp holds', () => {
 
   it('Rename from there opens the details with the new-name field', async () => {
     const f = await open({ foreignTmux: ['cto'] });
-    fireEvent.click(within(statusLine()).getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByTestId('agent-start'));
     await flush();
-    fireEvent.click(within(statusLine()).getByRole('button', { name: 'Rename' }));
+    fireEvent.click(within(alertLine()).getByRole('button', { name: 'Rename' }));
     await flush();
     const form = screen.getByTestId('rename-agent');
     type(within(form).getByLabelText('New name'), 'boss');
@@ -66,32 +66,33 @@ describe('an agent name a tmux session outside hopp holds', () => {
     await flush();
     expect(f.shell!.renameAgent).toHaveBeenCalledWith('cto', 'boss');
     expect(screen.getByTestId('agent-details').textContent).toContain('boss');
-    expect(screen.getByTestId('work-view').textContent).toContain('boss is off');
+    expect(screen.getByTestId('work-view').querySelector('.top .name')!.textContent).toBe('boss');
+    expect(screen.getByTestId('work-status').textContent).toBe('Off');
   });
 });
 
-describe('remove beside Start', () => {
-  it('a quiet Remove asks first, then removes', async () => {
-    const f = await open();
-    fireEvent.click(screen.getByTestId('agent-remove'));
-    const ask = within(statusLine()).getByRole('alertdialog');
-    expect(ask.textContent).toContain('Remove cto? Its folder stays as it is.');
-    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
-    expect(f.shell!.removeAgent).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId('agent-remove'));
-    fireEvent.click(within(statusLine()).getByRole('button', { name: 'Remove' }));
+describe('remove', () => {
+  it('there is no Remove beside Start; Remove agent in the menu says what waits', async () => {
+    const f = await open({ mail: { cto: 2 } });
+    expect(screen.queryByTestId('agent-remove')).toBeNull();
+    fireEvent.click(screen.getByTestId('actions-menu'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove agent' }));
+    const ask = screen.getByRole('alertdialog', { name: /2 letters wait in its mailbox, so the mailbox stays/ });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
     await flush();
     expect(f.shell!.removeAgent).toHaveBeenCalledWith('cto');
   });
 
-  it('waiting mail is said in the confirmation, here and in the menu', async () => {
-    await open({ mail: { cto: 2 } });
-    fireEvent.click(screen.getByTestId('agent-remove'));
-    expect(within(statusLine()).getByRole('alertdialog').textContent).toContain('2 letters wait in its mailbox, so the mailbox stays.');
-    fireEvent.click(within(statusLine()).getByRole('button', { name: 'Cancel' }));
-    fireEvent.click(screen.getByTestId('actions-menu'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove agent' }));
-    expect(screen.getByRole('alertdialog', { name: /2 letters wait in its mailbox/ })).toBeTruthy();
+  it('Remove agent beside the tmux-name error asks first, on that line', async () => {
+    const f = await open({ foreignTmux: ['cto'] });
+    fireEvent.click(screen.getByTestId('agent-start'));
+    await flush();
+    fireEvent.click(within(alertLine()).getByRole('button', { name: 'Remove agent' }));
+    const ask = within(alertLine()).getByRole('alertdialog');
+    expect(ask.textContent).toContain('Remove cto? Its folder stays as it is.');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
+    await flush();
+    expect(f.shell!.removeAgent).toHaveBeenCalledWith('cto');
   });
 });
 

@@ -7,7 +7,7 @@ import { agentStatus, sessionTree } from '../model/shellModel';
 import { Dropdown } from '../ui/Dropdown';
 import { Field } from '../ui/Field';
 import type { Go, Panel } from './route';
-import { ActionsMenu, WorkView, type MenuItem } from './WorkView';
+import { ActionsMenu, ConfirmButton, WorkView, type MenuItem } from './WorkView';
 
 // NewAgent: a long-lived agent stands above projects. Its role lives in its
 // folder; it gets no project settings and no worktree.
@@ -149,7 +149,7 @@ export function AgentView(props: {
   const [selected, setSelected] = useState(agent.name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ShellError | null>(null);
-  // The quiet Remove beside Start asks first, in the status line.
+  // Remove agent from the tmux-name error asks first, on its line.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const selectedId = tree.some((s) => s.id === selected) ? selected : agent.name;
@@ -181,57 +181,55 @@ export function AgentView(props: {
     go({ k: 'agent', name: agent.name, panel: 'details' });
   };
   const items: MenuItem[] = [];
-  if (!off) {
-    items.push({
-      label: 'Stop agent',
-      confirm: { text: `Stop ${agent.name}? Mail waits for it until it is started again.`, action: 'Stop' },
-      run: () => void act(() => shell.stopAgent(agent.name)),
-    });
-  } else {
-    items.push({ label: 'Start', run: () => void act(() => shell.startAgent(agent.name)) });
+  if (off) {
     items.push({ label: 'Rename…', run: startRename });
     items.push({ label: 'Remove agent', confirm: { text: removeText, action: 'Remove' }, run: remove });
   }
   items.push({ label: 'Agent details', run: () => go({ k: 'agent', name: agent.name, panel: 'details' }) });
 
-  const status = off ? (
-    confirmRemove ? (
-      <span className="inline-confirm" role="alertdialog" aria-label={removeText}>
-        <span>{removeText}</span>
-        <button
-          type="button"
-          className="c-btn primary"
-          disabled={busy}
-          onClick={() => {
-            setConfirmRemove(false);
-            remove();
-          }}
-        >
-          Remove
-        </button>
-        <button type="button" className="c-btn" onClick={() => setConfirmRemove(false)}>
-          Cancel
-        </button>
-      </span>
-    ) : (
-      <>
-        {agent.name} is off{props.mail > 0 ? ` · ${letters}` : ''}
-        <button type="button" className="c-btn" disabled={busy} onClick={() => void act(() => shell.startAgent(agent.name))}>
-          Start
-        </button>
-        <button type="button" className="link-btn" disabled={busy} data-testid="agent-remove" onClick={() => setConfirmRemove(true)}>
-          Remove
-        </button>
-      </>
-    )
-  ) : st.kind === 'starting' ? (
-    'Starting…'
-  ) : sel && sel.activity === 'exited' ? (
-    'The agent exited. The terminal shows the shell it left.'
-  ) : null;
+  // Start or Stop, before Questions.
+  const action = off ? (
+    <button type="button" className="c-btn" disabled={busy} data-testid="agent-start" onClick={() => void act(() => shell.startAgent(agent.name))}>
+      Start
+    </button>
+  ) : (
+    <ConfirmButton
+      label="Stop"
+      testId="agent-stop"
+      disabled={busy}
+      confirm={{ text: `Stop ${agent.name}? Mail waits for it until it is started again.`, action: 'Stop' }}
+      run={() => void act(() => shell.stopAgent(agent.name))}
+    />
+  );
+  const status = off
+    ? 'Off' + (props.mail > 0 ? ` · ${letters}` : '')
+    : st.kind === 'starting'
+      ? 'Starting…'
+      : sel && sel.activity === 'exited'
+        ? 'The agent exited. The terminal shows the shell it left.'
+        : null;
 
-  // A name a tmux session outside hopp holds: the two ways out sit beside it.
-  const errorLine = error && (
+  // A name a tmux session outside hopp holds: the two ways out sit beside it;
+  // Remove agent asks first, on the same line.
+  const alert = confirmRemove ? (
+    <span className="inline-confirm" role="alertdialog" aria-label={removeText}>
+      <span>{removeText}</span>
+      <button
+        type="button"
+        className="c-btn primary"
+        disabled={busy}
+        onClick={() => {
+          setConfirmRemove(false);
+          remove();
+        }}
+      >
+        Remove
+      </button>
+      <button type="button" className="c-btn" onClick={() => setConfirmRemove(false)}>
+        Cancel
+      </button>
+    </span>
+  ) : error ? (
     <span className="agent-error" role="alert">
       <span className="form-error">! {error.message}</span>
       {error.code === 'name_in_tmux' && off && (
@@ -245,7 +243,7 @@ export function AgentView(props: {
         </>
       )}
     </span>
-  );
+  ) : null;
 
   return (
     <WorkView
@@ -258,14 +256,9 @@ export function AgentView(props: {
       panel={props.panel}
       onPanel={(p) => go({ k: 'agent', name: agent.name, panel: p })}
       menu={<ActionsMenu items={items} />}
-      status={
-        status || error ? (
-          <>
-            {status}
-            {!confirmRemove && errorLine}
-          </>
-        ) : null
-      }
+      action={action}
+      status={status}
+      alert={alert}
       attachable={!off && !!sel && sel.state === 'running'}
       noTerminal={off ? 'The terminal appears once the agent is started.' : 'The terminal opens when the session is running.'}
       details={

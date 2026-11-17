@@ -40,16 +40,15 @@ test('a long-lived agent: create, start, stop', async () => {
     w.d.mailboxes[0]!.unread = 2;
     w.d.publish('mailbox.received', 'cto', { mailbox: 'cto' });
     await page.getByTestId('agent-row').filter({ hasText: 'cto' }).click();
-    await expect(page.getByText(/cto is off · 2 letters wait for it/)).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Start' }).first().click();
+    await expect(page.getByTestId('work-status')).toHaveText('Off · 2 letters wait for it', { timeout: 10_000 });
+    await page.getByTestId('agent-start').click();
     await expect.poll(() => w.d.created.map((c) => c['id'])).toEqual(['cto']);
     expect(w.d.created[0]).toMatchObject({ dir: folder, labels: { 'hopp.agent': 'cto' } });
     expect(String(w.d.created[0]!['system_prompt'])).toContain('hopp inbox');
     w.d.publish('session.spawned', 'cto');
     await expect(page.locator('.xterm-rows')).toContainText('agent screen', { timeout: 15_000 });
 
-    await page.getByTestId('actions-menu').click();
-    await page.getByRole('menuitem', { name: 'Stop agent' }).click();
+    await page.getByTestId('agent-stop').click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Stop' }).click();
     await expect.poll(() => w.d.sessions.find((s) => s.id === 'cto')?.state).toBe('killed');
   } finally {

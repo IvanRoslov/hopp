@@ -33,11 +33,28 @@ function dismissed(): string[] {
   }
 }
 
+// useBaseDismissal: whether the human dismissed the fetch warning of this
+// task (remembered per task), and how to dismiss it.
+export function useBaseDismissal(taskId: string): { gone: boolean; dismiss: () => void } {
+  const [gone, setGone] = useState<{ id: string; gone: boolean }>(() => ({ id: taskId, gone: dismissed().includes(taskId) }));
+  const current = gone.id === taskId ? gone.gone : dismissed().includes(taskId);
+  return {
+    gone: current,
+    dismiss: () => {
+      setGone({ id: taskId, gone: true });
+      try {
+        localStorage.setItem(DISMISSED_KEY, JSON.stringify([...dismissed(), taskId].slice(-200)));
+      } catch {
+        // Not remembered; it shows again next time.
+      }
+    },
+  };
+}
+
 // BaseWarning: on the task screen, until the human dismisses it for this task.
-export function BaseWarning(props: { task: Task; project?: Project }) {
+export function BaseWarning(props: { task: Task; project?: Project; onDismiss: () => void }) {
   const text = useBaseWarning(props.task, props.project);
-  const [gone, setGone] = useState(() => dismissed().includes(props.task.id));
-  if (!text || gone) return null;
+  if (!text) return null;
   return (
     <div className="base-warning" role="status" data-testid="base-warning">
       <span className="bw-mark" aria-hidden>
@@ -47,18 +64,7 @@ export function BaseWarning(props: { task: Task; project?: Project }) {
         <span>{text}</span>
         <span className="bw-reason">{props.task.base!.warning}</span>
       </span>
-      <button
-        type="button"
-        className="link-btn"
-        onClick={() => {
-          setGone(true);
-          try {
-            localStorage.setItem(DISMISSED_KEY, JSON.stringify([...dismissed(), props.task.id].slice(-200)));
-          } catch {
-            // Not remembered; it shows again next time.
-          }
-        }}
-      >
+      <button type="button" className="link-btn" onClick={props.onDismiss}>
         Dismiss
       </button>
     </div>

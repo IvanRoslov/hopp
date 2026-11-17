@@ -18,6 +18,8 @@ export interface PipelineTaskViewProps {
   bridge: HoppBridge;
   task: Task;
   menu: ReactNode;
+  // Stop or Resume, right after the title.
+  action?: ReactNode;
   terminal: ReactNode;
   details: ReactNode;
   status?: ReactNode;
@@ -106,6 +108,7 @@ export function PipelineTaskView(props: PipelineTaskViewProps) {
         <span className="name" title={task.title}>
           {task.title}
         </span>
+        {props.action}
         <span className="sp" />
         <button
           type="button"
@@ -128,7 +131,6 @@ export function PipelineTaskView(props: PipelineTaskViewProps) {
         >
           Artifacts
         </button>
-        {props.menu}
         <button
           type="button"
           className={'c-btn' + (props.panel === 'terminal' ? ' on' : '')}
@@ -139,6 +141,7 @@ export function PipelineTaskView(props: PipelineTaskViewProps) {
           <TermIcon />
           Terminal
         </button>
+        {props.menu}
       </div>
       <div className="ptask-feed">
         <Feed

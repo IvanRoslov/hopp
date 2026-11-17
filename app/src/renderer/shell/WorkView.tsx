@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { HoppBridge } from '../../shared/bridge';
 import type { Session, StreamState } from '../../shared/types';
 import { sessionWord } from '../model/shellModel';
@@ -86,9 +87,53 @@ export function ActionsMenu(props: { items: MenuItem[]; testId?: string }) {
   );
 }
 
-// WorkView: a task or a long-lived agent. The header carries the title,
-// "Questions · N" and the menu; the terminal of the selected session stays on
-// the right; the questions (or the details) open in a column to its left.
+// ConfirmButton: a visible action (Stop) that asks first, in a small
+// popover under the button, the way a menu item with a confirmation does.
+export function ConfirmButton(props: { label: string; confirm: { text: string; action: string }; run: () => void; disabled?: boolean; testId?: string }) {
+  const anchor = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        className={'c-btn' + (open ? ' on' : '')}
+        disabled={props.disabled}
+        data-testid={props.testId}
+        onClick={() => setOpen(!open)}
+      >
+        {props.label}
+      </button>
+      <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} align="left" label={props.label}>
+        <div className="menu-confirm" role="alertdialog" aria-label={props.confirm.text}>
+          <div>{props.confirm.text}</div>
+          <div className="btns">
+            <button
+              type="button"
+              className="c-btn primary"
+              onClick={() => {
+                setOpen(false);
+                props.run();
+              }}
+            >
+              {props.confirm.action}
+            </button>
+            <button type="button" className="c-btn" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Popover>
+    </>
+  );
+}
+
+// WorkView: a task or a long-lived agent. The header is one row: the title,
+// Start or Stop, "Questions · N", the session picker, a quiet status and the
+// menu; an error or a warning adds a second line only while there is one. The
+// terminal of the selected session starts right under it; the questions (or
+// the details) open in a column to its left, and then the picker moves to
+// the terminal's own head.
 // The terminal keeps its place in the tree, so opening or closing the column
 // never remounts it: it only resizes, and only then.
 export function WorkView(props: {
@@ -101,8 +146,12 @@ export function WorkView(props: {
   panel: Panel;
   onPanel: (p: Panel) => void;
   menu: ReactNode;
-  // Above the terminal: a calm line about the state, with its action.
-  status: ReactNode;
+  // The visible action before Questions: Start, Stop or Resume.
+  action?: ReactNode;
+  // A quiet word about the state; cut with an ellipsis, whole in the tooltip.
+  status?: string | null;
+  // An error or a warning, with its ways out: a second line while present.
+  alert?: ReactNode;
   // Whether the selected session can be attached to now.
   attachable: boolean;
   // Shown in place of the terminal when it cannot be.
@@ -116,6 +165,10 @@ export function WorkView(props: {
   const count = asks.filter((a) => a.status === 'open').length + (selected?.question ? 1 : 0);
   const open = props.panel !== null;
   const split = useSplit();
+  // Where the terminal's picker goes: the header, or the terminal's head
+  // while a column is open.
+  const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  const [termSlot, setTermSlot] = useState<HTMLElement | null>(null);
 
   return (
     <div
@@ -125,20 +178,30 @@ export function WorkView(props: {
       style={open && split.width !== null ? { gridTemplateColumns: `min(${split.width}px, calc(100% - ${MIN_TERM + 5}px)) 5px minmax(0, 1fr)` } : undefined}
     >
       <div className="top task-top">
-        <span className="name" title={props.title}>
-          {props.title}
-        </span>
-        <button
-          type="button"
-          className={'c-btn' + (props.panel === 'questions' ? ' on' : '')}
-          data-testid="questions-button"
-          aria-pressed={props.panel === 'questions'}
-          onClick={() => props.onPanel(props.panel === 'questions' ? null : 'questions')}
-        >
-          {count > 0 ? `Questions · ${count}` : 'Questions'}
-        </button>
-        <span className="sp" />
-        {props.menu}
+        <div className="top-row">
+          <span className="name" title={props.title}>
+            {props.title}
+          </span>
+          {props.action}
+          <button
+            type="button"
+            className={'c-btn' + (props.panel === 'questions' ? ' on' : '')}
+            data-testid="questions-button"
+            aria-pressed={props.panel === 'questions'}
+            onClick={() => props.onPanel(props.panel === 'questions' ? null : 'questions')}
+          >
+            {count > 0 ? `Questions · ${count}` : 'Questions'}
+          </button>
+          <span className="top-slot" ref={setHeadSlot} />
+          {props.status && (
+            <span className="top-status" title={props.status} data-testid="work-status">
+              {props.status}
+            </span>
+          )}
+          <span className="sp" />
+          {props.menu}
+        </div>
+        {props.alert && <div className="top-alert">{props.alert}</div>}
       </div>
       {open && (
         <section className="task-q" data-testid="zone-middle" aria-label={props.panel === 'details' ? 'Details' : 'Questions'}>
@@ -177,13 +240,18 @@ export function WorkView(props: {
         />
       )}
       <section className="task-term" aria-label="Terminal">
-        {open && <div className="term-label">Terminal</div>}
+        {open && (
+          <div className="term-label">
+            <span>Terminal</span>
+            <span className="top-slot" ref={setTermSlot} />
+          </div>
+        )}
         <TerminalArea
           bridge={bridge}
           tree={props.tree}
           selectedId={selectedId}
           onSelect={props.onSelect}
-          status={props.status}
+          barSlot={open ? termSlot : headSlot}
           attachable={props.attachable}
           noTerminal={props.noTerminal}
         />
@@ -192,15 +260,17 @@ export function WorkView(props: {
   );
 }
 
-// TerminalArea: the session picker, the state line, and the terminal of the
-// selected session (or why there is none). A closed terminal offers Reattach.
-// Task views without a pipeline and pipeline task views both use it.
+// TerminalArea: the session picker and the terminal of the selected session
+// (or why there is none). A closed terminal offers Reattach. Task views
+// without a pipeline and pipeline task views both use it; a work view puts
+// the picker into its header (barSlot), the pipeline view keeps it above the
+// terminal.
 export function TerminalArea(props: {
   bridge: HoppBridge;
   tree: Session[];
   selectedId: string;
   onSelect: (id: string) => void;
-  status: ReactNode;
+  barSlot?: HTMLElement | null;
   attachable: boolean;
   noTerminal: ReactNode;
 }) {
@@ -220,28 +290,31 @@ export function TerminalArea(props: {
   }, [props.attachable]);
 
   const options = props.tree.map((s) => ({ value: s.id, label: `${s.id} · ${sessionWord(s)}`, dim: !(s.state === 'running' || s.state === 'spawning') }));
+  const bar = (
+    <>
+      {props.tree.length > 0 && (
+        <Dropdown
+          label={selected ? `${selected.id} · ${sessionWord(selected)}` : selectedId}
+          testId="session-picker"
+          options={options}
+          value={selectedId}
+          onChange={props.onSelect}
+        />
+      )}
+      {closed && live && props.attachable && (
+        <span className="term-closed">
+          Terminal closed.
+          <button type="button" className="c-btn" onClick={() => setNonce((n) => n + 1)}>
+            Reattach
+          </button>
+        </span>
+      )}
+    </>
+  );
+  const hasBar = props.tree.length > 0 || (closed && live && props.attachable);
   return (
     <>
-      <div className="term-bar">
-        {props.tree.length > 0 && (
-          <Dropdown
-            label={selected ? `${selected.id} · ${sessionWord(selected)}` : selectedId}
-            testId="session-picker"
-            options={options}
-            value={selectedId}
-            onChange={props.onSelect}
-          />
-        )}
-        {props.status && <div className="status-line">{props.status}</div>}
-        {closed && live && props.attachable && (
-          <div className="status-line">
-            Terminal closed.
-            <button type="button" className="c-btn" onClick={() => setNonce((n) => n + 1)}>
-              Reattach
-            </button>
-          </div>
-        )}
-      </div>
+      {props.barSlot !== undefined ? (props.barSlot ? createPortal(bar, props.barSlot) : null) : hasBar && <div className="term-bar">{bar}</div>}
       <div className="term-box">
         {props.attachable && selected ? (
           <Terminal key={selectedId + ':' + nonce} sessionId={selectedId} bridge={bridge.terminal} onEnded={() => setClosed(true)} />
