@@ -32,6 +32,7 @@ import { SLUG_PATTERN, slugify } from '../../shared/slug';
 import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
+import { Github } from './github';
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
 import { agentText, allowedRepos, orchestratorText, RESUMED_AGENT, RESUMED_ORCHESTRATOR, workerText, type WorkerFile } from './startText';
@@ -45,6 +46,8 @@ export interface ShellDeps {
   hopp: Runner;
   pickFolder: () => Promise<string | null>;
   now?: () => number;
+  // The user's gh CLI; absent means gh is not set up for this app.
+  gh?: Runner;
 }
 
 const LIVE = new Set(['spawning', 'running']);
@@ -131,8 +134,14 @@ export async function uniqueId(base: string, taken: (id: string) => Promise<bool
 export class ShellService {
   private readonly now: () => number;
 
+  private readonly github: Github;
+
   constructor(private readonly d: ShellDeps) {
     this.now = d.now ?? (() => Math.floor(Date.now() / 1000));
+    const noGh: Runner = async () => {
+      throw Object.assign(new RunError('program not found on PATH'), { code: 'ENOENT' });
+    };
+    this.github = new Github(d.home, d.gh ?? noGh, d.git);
   }
 
   get home(): string {
@@ -268,6 +277,23 @@ export class ShellService {
     const toolsPrompt = new Map<string, string>();
     for (const h of harnesses) toolsPrompt.set(h, await this.toolsPromptFor(h));
 
+    // Managed clones: fetched first, so the task and its workers start from
+    // the remote's default branch; a plain folder starts from its HEAD.
+    let worktreeBase = 'HEAD';
+    const repoBases: Record<string, string> = {};
+    for (const repo of allowedRepos(project)) {
+      if (!this.github.isManaged(repo)) continue;
+      try {
+        const prep = await this.github.prepare(repo);
+        if (prep.warning) console.warn('hopp: ' + prep.warning);
+        repoBases[repo] = prep.base;
+      } catch (err) {
+        if (repo === project.orchestratorRepo) return fail('repo_empty', (err as Error).message);
+        console.warn('hopp: ' + (err as Error).message);
+      }
+    }
+    if (project.orchestratorRepo && repoBases[project.orchestratorRepo]) worktreeBase = repoBases[project.orchestratorRepo]!;
+
     const dir = workDir(id);
     const textsDir = join(this.d.home, 'shell', 'tasks', id);
     const made = { worktree: false, folder: false, texts: false };
@@ -276,7 +302,7 @@ export class ShellService {
       await mkdir(worktreesDir, { recursive: true });
       if (project.orchestratorRepo) {
         try {
-          await this.d.git(['-C', project.orchestratorRepo, 'worktree', 'add', '-b', 'hopp/' + id, dir, 'HEAD']);
+          await this.d.git(['-C', project.orchestratorRepo, 'worktree', 'add', '-b', 'hopp/' + id, dir, worktreeBase]);
         } catch (err) {
           // git may have made the branch before the checkout failed; the
           // branch is new (uniqueId saw none), so it is this launch's.
@@ -307,6 +333,7 @@ export class ShellService {
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
         toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
+        repoBases,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
@@ -775,18 +802,18 @@ export class ShellService {
     });
   }
 
-  // ---- GitHub (being implemented) -------------------------------------------
+  // ---- GitHub ------------------------------------------------------------------
 
-  async githubStatus(): Promise<GithubStatus> {
-    return { available: false, login: '', reason: 'not implemented yet', command: '', home: this.d.home };
+  githubStatus(): Promise<GithubStatus> {
+    return this.github.status();
   }
 
-  async listGithubRepos(_query: string): Promise<Result<GithubRepo[]>> {
-    return fail('not_implemented', 'not implemented yet');
+  listGithubRepos(query: string): Promise<Result<GithubRepo[]>> {
+    return guard(() => this.github.list(query));
   }
 
-  async addGithubRepo(_fullName: string): Promise<Result<{ path: string }>> {
-    return fail('not_implemented', 'not implemented yet');
+  addGithubRepo(fullName: string): Promise<Result<{ path: string }>> {
+    return guard(() => this.github.add(fullName));
   }
 }
 

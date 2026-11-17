@@ -6,7 +6,7 @@ verified: 2026-11-16 — make app-test on the shell-main branch (fake daemon, te
 
 # Projects, tasks and long-lived agents
 
-The daemon knows sessions, folders and labels; the app adds projects, tasks and long-lived agents on top and maps each onto daemon sessions. This leaf says what the app keeps and what a launch does; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]].
+The daemon knows sessions, folders and labels; the app adds projects, tasks and long-lived agents on top and maps each onto daemon sessions. This leaf says what the app keeps and what a launch does; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]]. Repositories picked from GitHub: [[docs/app/github]].
 
 ### What the app keeps
 

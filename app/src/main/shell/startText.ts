@@ -44,6 +44,9 @@ export interface OrchestratorContext {
   brief?: string;
   // The task's pipeline; null or absent for a task without one.
   pipeline?: Pipeline | null;
+  // Managed clones (from GitHub) and the ref their worktrees start from,
+  // e.g. origin/main; plain repositories are absent.
+  repoBases?: Record<string, string>;
 }
 
 export interface WorkerContext {
@@ -66,14 +69,17 @@ export function allowedRepos(p: Project): string[] {
   return out;
 }
 
-function projectLayer(p: Project, forOrchestrator: boolean, worktreesDir?: string): string {
+function projectLayer(p: Project, forOrchestrator: boolean, worktreesDir?: string, repoBases: Record<string, string> = {}): string {
   const lines = ['# Project: ' + p.name, ''];
   if (p.description) lines.push(p.description, '');
   if (forOrchestrator) {
     const repos = allowedRepos(p);
     if (repos.length > 0) {
       lines.push('Workers may run only in worktrees of these repositories, made under ' + worktreesDir + ':', '');
-      for (const r of repos) lines.push('- ' + r);
+      for (const r of repos) {
+        const b = repoBases[r];
+        lines.push(b ? `- ${r} — a clone of a GitHub repository; base worker worktrees on \`${b}\`, after \`git -C ${r} fetch origin\`` : '- ' + r);
+      }
     } else {
       lines.push('This project has no repository. Workers run in plain folders under ' + worktreesDir + '.');
     }
@@ -103,13 +109,15 @@ export function orchestratorText(c: OrchestratorContext): string {
   const repos = allowedRepos(c.project);
   const name = '<name>';
   const dir = `${c.worktreesDir}/${c.taskId}-${name}`;
+  const anyBase = Object.keys(c.repoBases ?? {}).length > 0;
   const prepare =
     repos.length > 0
       ? [
-          `   git -C <repository> worktree add -b hopp/${c.taskId}-${name} ${dir}`,
+          `   git -C <repository> worktree add -b hopp/${c.taskId}-${name} ${dir}` + (anyBase ? ' [<base>]' : ''),
           '',
           '   where <repository> is one of the repositories listed under the project' +
-            (c.project.workerRepos.length === 0 ? ' (the orchestrator\'s repository).' : '.'),
+            (c.project.workerRepos.length === 0 ? ' (the orchestrator\'s repository).' : '.') +
+            (anyBase ? ' For a repository listed with a base, fetch it first and put that base at the end; for the others, leave it out.' : ''),
         ]
       : [`   mkdir -p ${dir}`];
   const profiles = c.workers.map((w) => `   - \`${w.profile}\` (${w.harness}): \`--system-prompt-file ${w.file}\``);
@@ -160,7 +168,7 @@ export function orchestratorText(c: OrchestratorContext): string {
     hoppLayer(),
     role,
     task,
-    projectLayer(c.project, true, c.worktreesDir),
+    projectLayer(c.project, true, c.worktreesDir, c.repoBases),
     c.pipeline ? pipelineLayer(c.pipeline) : undefined,
     toolsLayer(c.toolsPrompt),
     extra(c.extraSystemPrompt),

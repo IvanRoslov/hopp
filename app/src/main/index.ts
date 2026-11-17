@@ -65,6 +65,8 @@ const stream = new EventStream(socketPath);
 const childEnv = () => ({ ...process.env, HOPP_HOME: hoppHome });
 const gitRunner = makeRunner('git', childEnv);
 const hoppRunner = makeRunner(() => resolveExecutable('hopp', process.env) ?? null, childEnv);
+// gh clones can take long: their runner has a 30 minute bound.
+const ghRunner = makeRunner(() => resolveExecutable('gh', process.env) ?? null, childEnv, 30 * 60_000);
 const afterEnv = (r: typeof gitRunner): typeof gitRunner => async (args, opts) => {
   await envReady;
   return r(args, opts);
@@ -75,6 +77,7 @@ const shellService = new ShellService({
   client,
   git: afterEnv(gitRunner),
   hopp: afterEnv(hoppRunner),
+  gh: afterEnv(ghRunner),
   pickFolder: async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const opts = { properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] };
