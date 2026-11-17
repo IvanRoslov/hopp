@@ -298,7 +298,7 @@ export class ShellService {
       }
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
-        toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline,
+        toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 

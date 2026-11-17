@@ -65,9 +65,40 @@ describe('orchestratorText', () => {
   it('carries the guardrails, the review ask, and the rule that workers do not ask the human', () => {
     const t = orch();
     expect(t).toContain('## Guardrails\n\nNever push to main.');
-    expect(t).toContain('hopp ask "Fix the header: ready for review" --option Accept --option Revise');
+    expect(t).toContain('hopp ask "Ready for review: <what is done and where, in one line>" --option Accept --option Revise');
     expect(t).toContain('Workers never ask the human');
     expect(t).toContain('hopp lesson');
+  });
+
+  // Live run, 2026-11-17: the review ask carried the title cut at 60
+  // characters mid-word ("… on your bra: ready for review").
+  it('does not put the task title into the review ask', () => {
+    const t = orch({ title: 'Add two files to this repository and commit them on your bra' });
+    expect(t).not.toContain('on your bra: ready for review');
+  });
+
+  // Live runs: the orchestrator polled `git log` and `hopp ls` while a worker
+  // worked, and left the worker running after merging its piece.
+  it('says a worker reports by message, so no polling, and to stop a worker once its piece is in', () => {
+    const t = orch();
+    expect(t).toContain('arrives in your input as a message');
+    expect(t).toContain('do not poll');
+    expect(t).toContain('hopp kill <worker session>');
+  });
+
+  // Live run: an English brief got Russian replies (the human's global prompt).
+  it('says to write to the human in the language of the brief', () => {
+    expect(orch()).toContain('in the language of the task\'s brief');
+  });
+
+  // Live run: Resume relaunched the orchestrator with its start text but no
+  // first message and no conversation; it sat at an empty prompt.
+  it('repeats the brief and says how to pick up the work after a restart', () => {
+    const t = orch({ brief: 'Fix the header.\nKeep the logo.' });
+    expect(t).toContain('## The task\n\nFix the header.\nKeep the logo.');
+    expect(t).toContain('hopp ls --mine');
+    expect(t).toContain('hopp messages $HOPP_SESSION_ID');
+    expect(orch()).not.toContain('## The task');
   });
 
   it('without tools says how to get one, and leaves out an empty extra prompt and empty guardrails', () => {
