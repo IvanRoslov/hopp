@@ -23,7 +23,7 @@
 .entry { margin: 0 0 34px; scroll-margin: 64px; }
 .entry-meta { display: flex; gap: 12px; color: var(--muted); font-size: var(--fs-small); line-height: 1.6; margin-bottom: 8px; white-space: nowrap; overflow: hidden; }
 .entry-meta span:last-child:not(:first-child):not(:nth-child(2)) { overflow: hidden; text-overflow: ellipsis; }
-.entry-body { font-size: var(--fs-body); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.entry-body { font-size: var(--fs-body); line-height: 1.6; overflow-wrap: anywhere; }
 .entry.quiet .entry-meta { margin-bottom: 14px; }
 .entry-quiet { color: var(--muted); font-size: var(--fs-name); line-height: 1.6; overflow-wrap: anywhere; }
 .entry.open.marked { border-radius: var(--r-m); box-shadow: 0 0 0 1px var(--line), 0 0 0 10px var(--hover); background: var(--hover); }
@@ -98,7 +98,8 @@
 .stage-word { font-size: var(--fs-small); color: var(--muted); white-space: nowrap; }
 .stage-word.wait { color: var(--text); }
 .stage-body { padding: 2px 0 14px 50px; border-left: 1px solid var(--line); margin-left: 34px; padding-left: 16px; }
-.stage-text { margin: 6px 0 10px; color: var(--muted); font-size: var(--fs-small); line-height: 1.6; white-space: pre-wrap; }
+.stage-text { margin: 6px 0 10px; color: var(--muted); font-size: var(--fs-small); line-height: 1.6; }
+.stage-text .md { color: var(--muted); font-size: var(--fs-small); }
 .stage-flags { margin: 10px 0 0; color: var(--faint); font-size: var(--fs-small); line-height: 1.6; }
 .stage-link { text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; margin: 8px 0 0 -6px; display: inline-block; }
 .substage { margin: 0 0 2px; }

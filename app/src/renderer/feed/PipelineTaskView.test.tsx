@@ -57,6 +57,9 @@ async function mount(props: Partial<Parameters<typeof Host>[0]> = {}, feed = sam
   return f;
 }
 
+// quiet: the text of the answered entries, question and answer line.
+const quiet = () => [...document.querySelectorAll('.entry-quiet')].map((e) => e.textContent ?? '');
+
 describe('PipelineTaskView feed', () => {
   it('shows the brief, posts with author, time and stage tag, artifact tiles, and quiet answered lines', async () => {
     await mount();
@@ -65,8 +68,8 @@ describe('PipelineTaskView feed', () => {
     // The post declares the substage's title; the ask with the slug alone shows it too.
     expect(screen.getAllByText('Scenes · Scene 2', { selector: '.entry-meta span' })).toHaveLength(2);
     expect(screen.getAllByTestId('artifact-tile-scene-2@2').length).toBeGreaterThan(0);
-    expect(screen.getByText(/How warm\? — You answered: Warmer/)).toBeTruthy();
-    expect(screen.getByText(/Script is ready — You answered: Accept/)).toBeTruthy();
+    expect(quiet()).toContain('How warm?You answered: Warmer');
+    expect(quiet()).toContain('Script is readyYou answered: Accept');
     expect(screen.getByText('notes.txt')).toBeTruthy();
   });
 
@@ -76,7 +79,7 @@ describe('PipelineTaskView feed', () => {
     fireEvent.click(within(block as HTMLElement).getByRole('button', { name: 'Accept' }));
     await flush();
     expect(f.calls.answerSubmission).toHaveBeenCalledWith(expect.any(Number), { choice: 'Accept' });
-    expect(screen.getByText(/Stage «Scenes» is ready — You answered: Accept/)).toBeTruthy();
+    expect(quiet()).toContain('Stage «Scenes» is readyYou answered: Accept');
   });
 
   it('returns a submission only with what to fix', async () => {
@@ -231,5 +234,29 @@ describe('PipelineTaskView panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await flush();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('markdown in the feed', () => {
+  it('post and ask bodies and a "what to fix" answer render as compact markdown', async () => {
+    const feed = sample();
+    feed.posts.push(post('## План\n\n- шаг **один**\n- шаг `два`\n\nСм. [сценарий](script@1).', { 'hopp.stage': 'script' }, { created_at: 600 }));
+    feed.asks.push(
+      ask('Готово?', { 'hopp.stage': 'script', 'hopp.kind': 'submission' }, {
+        created_at: 610, status: 'answered', choice: 'Return', answer: 'Исправить:\n- титры **крупнее**', closed_at: 620, options: ['Accept', 'Return'],
+      }),
+    );
+    await mount({}, feed);
+    const body = [...document.querySelectorAll('.entry-body.md-compact')].find((b) => b.querySelector('h2'))!;
+    expect(body.querySelector('h2')!.textContent).toBe('План');
+    expect(body.querySelector('li strong')!.textContent).toBe('один');
+    expect(body.querySelector('li code')!.textContent).toBe('два');
+    // A link naming an artifact of the task opens it in the viewer.
+    fireEvent.click(within(body as HTMLElement).getByRole('button', { name: 'сценарий' }));
+    await flush();
+    expect(screen.getByTestId('artifact-viewer')).toBeTruthy();
+    const answer = [...document.querySelectorAll('.entry-answer')].find((a) => a.textContent!.includes('Исправить'))!;
+    expect(answer.textContent).toContain('You answered: Return — ');
+    expect(answer.querySelector('li strong')!.textContent).toBe('крупнее');
   });
 });

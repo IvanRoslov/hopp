@@ -6,7 +6,8 @@ import type { Artifact, Pipeline, ShellBridge } from '../../shared/shell';
 import { LABEL } from '../../shared/shell';
 import type { Ask } from '../../shared/types';
 import { cleanError } from '../errors';
-import { artifactKind, latestByName, submittedRefs } from '../feed/model';
+import { artifactKind, isMarkdown, latestByName, resolveArtifactRef, submittedRefs } from '../feed/model';
+import { Markdown, type MarkdownLinks } from '../ui/Markdown';
 import { Dropdown } from '../ui/Dropdown';
 import { ArtifactTile } from './Tile';
 
@@ -82,6 +83,16 @@ function Viewer(props: {
   const opts = versions.map((x) => ({ value: String(x.id), label: label(x) }));
   const pick = (id: string) => props.artifacts.find((x) => String(x.id) === id) ?? null;
   const other = versions.find((x) => x.id !== a.id) ?? null;
+  // Markdown shows formatted by default; Source keeps the raw text. One
+  // switch for both panes of a comparison.
+  const [source, setSource] = useState(false);
+  const md = isMarkdown(a);
+  const links: MarkdownLinks = {
+    artifact: (ref) => {
+      const x = resolveArtifactRef(props.artifacts, ref);
+      return x ? { url: props.shell.artifactUrl(x.id), open: () => props.onView(x) } : null;
+    },
+  };
 
   return (
     <div className="arts viewer" data-testid="artifact-viewer">
@@ -93,6 +104,16 @@ function Viewer(props: {
           {a.name}
         </span>
         <Dropdown label={label(a)} testId="version-picker" options={opts} value={String(a.id)} onChange={(id) => props.onView(pick(id) ?? a)} />
+        {md && (
+          <span className="seg" role="group" aria-label="Markdown view">
+            <button type="button" className={'c-btn' + (!source ? ' on' : '')} aria-pressed={!source} onClick={() => setSource(false)}>
+              Rendered
+            </button>
+            <button type="button" className={'c-btn' + (source ? ' on' : '')} aria-pressed={source} onClick={() => setSource(true)}>
+              Source
+            </button>
+          </span>
+        )}
         {versions.length > 1 && (
           <button
             type="button"
@@ -110,12 +131,12 @@ function Viewer(props: {
             <figcaption>
               <Dropdown label={label(compare)} testId="compare-picker" options={opts.filter((o) => o.value !== String(a.id))} value={String(compare.id)} onChange={(id) => setCompare(pick(id))} />
             </figcaption>
-            <Show shell={props.shell} artifact={compare} />
+            <Show shell={props.shell} artifact={compare} source={source} links={links} />
           </figure>
         )}
         <figure className="viewer-pane">
           {compare && <figcaption>{label(a)}</figcaption>}
-          <Show shell={props.shell} artifact={a} />
+          <Show shell={props.shell} artifact={a} source={source} links={links} />
         </figure>
       </div>
       <div className="viewer-meta faint">
@@ -125,7 +146,7 @@ function Viewer(props: {
   );
 }
 
-function Show(props: { shell: ShellBridge; artifact: Artifact }) {
+function Show(props: { shell: ShellBridge; artifact: Artifact; source: boolean; links: MarkdownLinks }) {
   const a = props.artifact;
   const kind = artifactKind(a);
   const url = props.shell.artifactUrl(a.id);
@@ -134,11 +155,11 @@ function Show(props: { shell: ShellBridge; artifact: Artifact }) {
   if (kind === 'image') return <img className="viewer-img" src={url} alt={a.name} onError={() => setFailed(a.id)} />;
   if (kind === 'video') return <video className="viewer-video" src={url} controls preload="metadata" onError={() => setFailed(a.id)} />;
   if (kind === 'html') return <iframe className="viewer-frame" src={url} title={a.name} sandbox="" />;
-  if (kind === 'text') return <TextView shell={props.shell} artifact={a} />;
+  if (kind === 'text') return <TextView shell={props.shell} artifact={a} source={props.source} links={props.links} />;
   return <div className="q-empty">This file cannot be shown here.</div>;
 }
 
-function TextView(props: { shell: ShellBridge; artifact: Artifact }) {
+function TextView(props: { shell: ShellBridge; artifact: Artifact; source: boolean; links: MarkdownLinks }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -159,6 +180,13 @@ function TextView(props: { shell: ShellBridge; artifact: Artifact }) {
   }, [props.shell, props.artifact.id]);
   if (error) return <div className="q-empty" role="alert">{error}</div>;
   if (text === null) return <div className="q-empty">Loading…</div>;
+  if (isMarkdown(props.artifact) && !props.source) {
+    return (
+      <div className="viewer-md selectable" data-testid="viewer-markdown">
+        <Markdown text={text} links={props.links} />
+      </div>
+    );
+  }
   return <pre className="viewer-text selectable">{text}</pre>;
 }
 

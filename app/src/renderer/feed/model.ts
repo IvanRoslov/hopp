@@ -85,8 +85,31 @@ export function artifactKind(a: Pick<Artifact, 'mime' | 'filename'>): ArtifactKi
   if (m.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|avif)$/.test(f)) return 'image';
   if (m.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/.test(f)) return 'video';
   if (m === 'text/html' || /\.html?$/.test(f)) return 'html';
-  if (m.startsWith('text/') || /json|xml|yaml|javascript|markdown/.test(m) || /\.(md|txt|json|ya?ml|csv|ts|js|css|py|go|sh)$/.test(f)) return 'text';
+  if (m.startsWith('text/') || /json|xml|yaml|javascript|markdown/.test(m) || /\.(md|markdown|txt|json|ya?ml|csv|ts|js|css|py|go|sh)$/.test(f)) return 'text';
   return 'file';
+}
+
+// isMarkdown: a markdown artifact, by its type or its file name.
+export function isMarkdown(a: Pick<Artifact, 'mime' | 'filename'>): boolean {
+  return a.mime.toLowerCase().split(';')[0]!.trim() === 'text/markdown' || /\.(md|markdown)$/i.test(a.filename);
+}
+
+// resolveArtifactRef: the artifact a markdown link or image names, relative
+// to the others: `name@version`, `name` (its latest version), or a file name
+// (`./chart.png`, its latest version). null when it names none.
+export function resolveArtifactRef(artifacts: Artifact[], ref: string): Artifact | null {
+  let r = ref.trim().replace(/^\.\//, '').split(/[?#]/)[0]!;
+  try {
+    r = decodeURIComponent(r);
+  } catch {
+    // Keep it as written.
+  }
+  if (!r || r.includes('/')) return null;
+  const at = /^(.+)@(\d+)$/.exec(r);
+  if (at) return artifacts.find((a) => a.name === at[1] && a.version === Number(at[2])) ?? null;
+  const latest = (pick: (a: Artifact) => boolean) =>
+    artifacts.filter(pick).reduce<Artifact | null>((best, a) => (!best || a.version > best.version ? a : best), null);
+  return latest((a) => a.name === r) ?? latest((a) => a.filename === r);
 }
 
 export const KIND_WORD: Record<ArtifactKind, string> = { image: 'Image', video: 'Video', html: 'HTML page', text: 'Text', file: 'File' };

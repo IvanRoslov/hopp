@@ -1,6 +1,7 @@
 // StagesPanel: the pipeline's stages with their derived state, substages and
 // the artifacts of each substage. A row leads to its place in the feed; a
 // submitted stage leads to its submission block.
+import { Markdown } from '../ui/Markdown';
 import { useEffect, useState } from 'react';
 import type { Artifact, Pipeline, ShellBridge, StageState, StageStatus } from '../../shared/shell';
 import { LABEL } from '../../shared/shell';
@@ -91,7 +92,7 @@ export function StagesPanel(props: {
               </div>
               {isOpen && (
                 <div className="stage-body">
-                  {stage.does && <p className="stage-text">{stage.does}</p>}
+                  {stage.does && <Markdown variant="compact" className="stage-text" text={stage.does} />}
                   {loose.length > 0 && (
                     <div className="sub-arts loose">
                       {loose.map((a) => (
@@ -133,7 +134,10 @@ export function StagesPanel(props: {
                     </button>
                   )}
                   {st.status === 'returned' && st.lastAnswer?.answer && (
-                    <p className="stage-text">Returned: {st.lastAnswer.answer}</p>
+                    <div className="stage-text">
+                      Returned:
+                      <Markdown variant="compact" text={st.lastAnswer.answer} />
+                    </div>
                   )}
                   <p className="stage-flags">
                     {stage.approval ? 'Waits for approval.' : 'Passes without approval.'} The agent always asks before paid actions.
