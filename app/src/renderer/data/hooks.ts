@@ -110,5 +110,22 @@ export function useProfiles(shell: ShellBridge) {
     shell.listProfiles().then(setProfiles, (e) => setError(cleanError(e)));
   }, [shell]);
   useEffect(load, [load]);
+  // A change made in this app says so; one made with `hopp models` in a
+  // terminal does not, so the list is read again when the window comes back.
+  useEffect(() => {
+    // Before the shell layer is wired the bridge answers with a rejection.
+    let off: unknown;
+    try {
+      off = shell.onProfilesChanged(load);
+    } catch {
+      off = null;
+    }
+    if (off instanceof Promise) off.catch(() => {});
+    window.addEventListener('focus', load);
+    return () => {
+      if (typeof off === 'function') off();
+      window.removeEventListener('focus', load);
+    };
+  }, [shell, load]);
   return { profiles, error, reload: load };
 }

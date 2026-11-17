@@ -66,6 +66,11 @@ export interface ShellSeed {
   folders?: (string | null)[];
   feeds?: Record<string, TaskFeed>;
   artifactTexts?: Record<number, string>;
+  // Model profiles: what the catalog offers, what an import adds, which
+  // profiles a running session or task uses.
+  catalog?: HarnessCatalog[];
+  importResult?: ImportResult;
+  profilesInUse?: string[];
   // GitHub through gh: the status, the repositories, and what a clone does.
   github?: {
     status?: Partial<import('../src/shared/shell').GithubStatus>;
@@ -86,6 +91,11 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
   let tools: ToolCatalog = seed.tools ?? { tools: [], broken: [] };
   let rules: ToolRules = seed.rules ?? { text: '', modifiedAt: 0 };
   let lessons: Lesson[] = seed.lessons ?? [];
+  let profiles: ModelProfile[] = structuredClone(
+    seed.profiles ?? [makeProfile('claude-opus', { isDefault: true }), makeProfile('codex', { agent: 'codex', position: 1 })],
+  );
+  const profileCbs = new Set<() => void>();
+  const profilesChanged = () => profileCbs.forEach((cb) => cb());
   const ghStatus: import('../src/shared/shell').GithubStatus = {
     available: false, login: '', reason: 'gh is not set up in this test.', command: 'gh auth login', home: '/h', ...seed.github?.status,
   };
@@ -217,7 +227,10 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       return ok(null);
     }),
     pickFolder: vi.fn(async () => (folders.length ? folders.shift()! : null)),
-    listProfiles: vi.fn(async () => seed.profiles ?? [makeProfile('claude-opus'), makeProfile('codex', { agent: 'codex' })]),
+    // Enabled first, each group in position order, as the main process does.
+    listProfiles: vi.fn(async () =>
+      structuredClone(profiles).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.position - b.position),
+    ),
     createTask: vi.fn(async (input: Parameters<ShellBridge['createTask']>[0]) => {
       if (!input.brief.trim()) return fail('brief_required', 'Say what needs to be done.', 'brief');
       const title = input.title || input.brief.split('\n')[0]!.slice(0, 60);
@@ -302,14 +315,56 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       return ok({ path: `${ghStatus.home}/repos/${folder}` });
     }),
     // Model profiles (stubs added with the contract; replace as needed).
-    onProfilesChanged: vi.fn((_cb: () => void) => () => {}),
-    setProfileEnabled: vi.fn(async (_n: string, _e: boolean): Promise<Result<ModelProfile>> => fail('not_implemented', 'not in tests')),
-    updateProfile: vi.fn(async (_n: string, _u: ProfileUpdate): Promise<Result<ModelProfile>> => fail('not_implemented', 'not in tests')),
-    setDefaultProfile: vi.fn(async (_n: string) => ok(null)),
-    removeProfile: vi.fn(async (_n: string) => ok(null)),
-    moveProfile: vi.fn(async (_n: string, _p: number) => ok(null)),
-    modelCatalog: vi.fn(async () => ok([] as HarnessCatalog[])),
-    importModels: vi.fn(async () => ok({ added: [], skipped: 0, failed: [] } as ImportResult)),
+    onProfilesChanged: vi.fn((cb: () => void) => {
+      profileCbs.add(cb);
+      return () => profileCbs.delete(cb);
+    }),
+    setProfileEnabled: vi.fn(async (name: string, enabled: boolean): Promise<Result<ModelProfile>> => {
+      const p = profiles.find((x) => x.name === name);
+      if (!p) return fail('profile_not_found', `No profile ${name}`);
+      if (!enabled && p.isDefault) return fail('profile_is_default', `${name} is the default profile; make another one the default first.`);
+      p.enabled = enabled;
+      profilesChanged();
+      return ok(structuredClone(p));
+    }),
+    updateProfile: vi.fn(async (name: string, u: ProfileUpdate): Promise<Result<ModelProfile>> => {
+      const p = profiles.find((x) => x.name === name);
+      if (!p) return fail('profile_not_found', `No profile ${name}`);
+      if (u.effort === 'bogus') return fail('bad_effort', `The model does not take effort "bogus".`);
+      Object.assign(p, u);
+      profilesChanged();
+      return ok(structuredClone(p));
+    }),
+    setDefaultProfile: vi.fn(async (name: string): Promise<Result<null>> => {
+      const p = profiles.find((x) => x.name === name);
+      if (!p) return fail('profile_not_found', `No profile ${name}`);
+      if (!p.enabled) return fail('profile_disabled', `${name} is switched off.`);
+      for (const x of profiles) x.isDefault = x.name === name;
+      profilesChanged();
+      return ok(null);
+    }),
+    removeProfile: vi.fn(async (name: string): Promise<Result<null>> => {
+      if (seed.profilesInUse?.includes(name)) return fail('profile_in_use', `${name} is used by the running session lead.`);
+      profiles = profiles.filter((x) => x.name !== name);
+      profilesChanged();
+      return ok(null);
+    }),
+    moveProfile: vi.fn(async (name: string, position: number): Promise<Result<null>> => {
+      const order = [...profiles].sort((a, b) => a.position - b.position).filter((x) => x.name !== name);
+      const p = profiles.find((x) => x.name === name);
+      if (!p) return fail('profile_not_found', `No profile ${name}`);
+      order.splice(Math.max(0, Math.min(position, order.length)), 0, p);
+      order.forEach((x, i) => (x.position = i));
+      profilesChanged();
+      return ok(null);
+    }),
+    modelCatalog: vi.fn(async () => ok(structuredClone(seed.catalog ?? []))),
+    importModels: vi.fn(async (): Promise<Result<ImportResult>> => {
+      const r = seed.importResult ?? { added: [], skipped: 0, failed: [] };
+      profiles = [...profiles, ...structuredClone(r.added).filter((a) => !profiles.some((p) => p.name === a.name))];
+      if (r.added.length) profilesChanged();
+      return ok(structuredClone(r));
+    }),
   } satisfies ShellBridge;
 
   return {

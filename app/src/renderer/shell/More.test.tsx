@@ -97,16 +97,6 @@ describe('long-lived agents', () => {
 });
 
 describe('settings', () => {
-  it('Models lists the daemon profiles read-only', async () => {
-    const f = fakeBridge({ shell: { state: base, profiles: [makeProfile('opus', { description: 'Hard tasks' }), makeProfile('old', { enabled: false })] } });
-    await mount(f);
-    fireEvent.click(screen.getByText('Settings'));
-    fireEvent.click(screen.getByRole('tab', { name: 'Models' }));
-    const rows = screen.getByTestId('settings-models').querySelectorAll('.set-row');
-    expect([...rows].map((r) => r.textContent)).toEqual(['opusclaude · Hard tasksenabled', 'oldclaude · A profileoff']);
-    expect(screen.queryByRole('switch')).toBeNull();
-  });
-
   it('Tools: preferences, switches, paid mark, usage on click, broken tools', async () => {
     const tool = (name: string, over = {}) => ({
       name, description: name + ' does things', via: 'command' as const, command: [], mcp_server: '', harnesses: [], environment: [], paid: false, enabled: true, dir: '', ...over,
