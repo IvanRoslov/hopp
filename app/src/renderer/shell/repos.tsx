@@ -53,11 +53,10 @@ export function RepoLabel(props: { path: string; className?: string }) {
   );
 }
 
-// "updated 3 days ago", from an ISO time.
-export function updatedAgo(iso: string, now = Date.now()): string {
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return '';
-  const s = Math.round((t - now) / 1000);
+// "3 days ago" for a time in milliseconds.
+export function timeAgo(ms: number, now = Date.now()): string {
+  if (!Number.isFinite(ms)) return '';
+  const s = Math.round((ms - now) / 1000);
   const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
   const steps: [Intl.RelativeTimeFormatUnit, number][] = [
     ['year', 365 * 86400],
@@ -68,7 +67,14 @@ export function updatedAgo(iso: string, now = Date.now()): string {
     ['minute', 60],
   ];
   for (const [unit, size] of steps) {
-    if (Math.abs(s) >= size) return 'updated ' + rtf.format(Math.round(s / size), unit);
+    if (Math.abs(s) >= size) return rtf.format(Math.round(s / size), unit);
   }
-  return 'updated just now';
+  return 'just now';
+}
+
+// "updated 3 days ago", from an ISO time.
+export function updatedAgo(iso: string, now = Date.now()): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  return 'updated ' + timeAgo(t, now);
 }

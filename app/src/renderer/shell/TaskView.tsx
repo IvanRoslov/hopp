@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { RepoLabel } from './repos';
+import { BaseRows, BaseWarning } from './TaskBase';
 import type { HoppBridge } from '../../shared/bridge';
 import type { Project, Result, Task } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
@@ -41,6 +42,7 @@ export function TaskDetails(props: { task: Task; project?: Project }) {
           <dd className="mono">{task.branch}</dd>
         </>
       )}
+      <BaseRows task={task} project={props.project} />
       <dt>Orchestrator</dt>
       <dd>{task.orchestratorProfile}</dd>
       <dt>Workers</dt>
@@ -169,9 +171,12 @@ export function TaskView(props: {
     status = 'The agent exited. The terminal shows the shell it left.';
   }
 
+  // A start that may be behind GitHub is said on the task screen itself.
+  const baseWarning = task.base?.warning ? <BaseWarning key={task.id} task={task} project={props.project} /> : null;
   const statusLine =
-    status || error ? (
+    status || error || baseWarning ? (
       <>
+        {baseWarning}
         {status}
         {error && <span className="form-error" role="alert">! {error}</span>}
       </>
