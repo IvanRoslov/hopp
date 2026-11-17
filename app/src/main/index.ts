@@ -8,6 +8,7 @@ import { EventStream } from './daemon/stream';
 import { registerIpc } from './ipc';
 import { makeRunner } from './shell/exec';
 import { registerShellIpc } from './shell/ipc';
+import { serveShell, shellSocketPath, type ShellServer } from './shell/server';
 import { ShellService } from './shell/service';
 import { ShellStore } from './shell/store';
 import { ensureUtf8Locale, loginShellPath, mergePath, readPathCache, writePathCache } from './shellEnv';
@@ -82,9 +83,10 @@ const afterEnv = (r: typeof gitRunner): typeof gitRunner => async (args, opts) =
   await envReady;
   return r(args, opts);
 };
+const shellStore = new ShellStore(appHome);
 const shellService = new ShellService({
   home: hoppHome,
-  store: new ShellStore(appHome),
+  store: shellStore,
   client,
   git: afterEnv(gitRunner),
   hopp: afterEnv(hoppRunner),
@@ -116,6 +118,16 @@ app.whenReady().then(() => {
     }
   };
   registerShellIpc(ipcMain, shellService, send);
+  // `hopp task …` and the other commands of the app run here while the app
+  // is open; a change one of them made while the app was closed (or racing
+  // its start) is picked up by the watcher.
+  stopWatching = shellStore.watch();
+  serveShell(shellService, shellSocketPath(appHome)).then(
+    (s) => {
+      shellServer = s;
+    },
+    (err) => console.error('hopp: the shell socket for `hopp task` is not served:', (err as Error).message),
+  );
   stream.on('event', (e) => {
     const task = shellService.feedTaskOf(e);
     if (task) send(SHELL_FEED_CHANGED, task);
@@ -150,8 +162,13 @@ app.whenReady().then(() => {
   });
 });
 
+let shellServer: ShellServer | null = null;
+let stopWatching: (() => void) | null = null;
+
 // Quitting detaches too: tmux sessions keep running.
 app.on('before-quit', () => {
+  stopWatching?.();
+  void shellServer?.close();
   stream.stop();
   terminals.closeAll();
 });

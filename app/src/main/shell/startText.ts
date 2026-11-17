@@ -49,6 +49,8 @@ export interface OrchestratorContext {
   // Managed clones (from GitHub) and the ref their worktrees start from,
   // e.g. origin/main; plain repositories are absent.
   repoBases?: Record<string, string>;
+  // The agent session that started the task; absent when the human did.
+  startedBy?: string | null;
 }
 
 export interface WorkerContext {
@@ -128,6 +130,7 @@ export function orchestratorText(c: OrchestratorContext): string {
     '',
     `You lead the task "${c.title}" (task id \`${c.taskId}\`). Your folder is ${c.taskDir}. The human's request is your first message.`,
     ...baseLines(c.base),
+    ...startedByLines(c.startedBy),
     '',
     'Plan the work, split it into pieces, and launch workers for the pieces. You own the result: review what workers return and integrate it.',
     '',
@@ -192,9 +195,33 @@ export function workerText(c: WorkerContext): string {
   return join([hoppLayer(), role, projectLayer(c.project, false), toolsLayer(c.toolsPrompt)]);
 }
 
+// startedByLines: a task an agent started reports to that agent.
+export function startedByLines(startedBy?: string | null): string[] {
+  if (!startedBy) return [];
+  return [
+    '',
+    `This task was started by the agent ${startedBy}, not typed by the human. Send it your questions about the request and your progress reports with \`hopp send ${startedBy}\`; decisions that belong to the human and stage approvals still go to the human with \`hopp ask\` / the feed.`,
+  ];
+}
+
+// TASK_COMMANDS: how a long-lived agent finds projects and starts and follows
+// tasks. Orchestrators and workers do not get them: they do not start tasks.
+export const TASK_COMMANDS = [
+  '## Starting and following tasks',
+  '',
+  'The human keeps projects (a repository or a folder, with rules) and pipelines (stages a task goes through) in the hopp app. You can start a task in a project; it gets its own orchestrator, which reports to you.',
+  '',
+  '- `hopp project ls` and `hopp project show <project>` list the projects and what each is.',
+  '- `hopp pipeline ls` and `hopp pipeline show <pipeline>` list the pipelines and their stages.',
+  '- `hopp task new --project <project> --brief "<what needs to be done>" [--pipeline <pipeline>]` starts a task (`--file <path>` or stdin for a long brief) and prints its id and its orchestrator\'s session. The orchestrator sends its questions and reports to you as messages; write to it with `hopp send <orchestrator> "<text>"`.',
+  '- `hopp task ls`, `hopp task show <task>` and `hopp task feed <task>` follow tasks; `hopp task stop|resume|finish <task>` changes one.',
+  '',
+  'Add `--json` to any of them for machine-readable output.',
+].join('\n');
+
 export function agentText(c: AgentContext): string {
   const mail = 'Messages sent to you while your session was switched off wait in your mailbox: read them with `hopp inbox` (and `hopp inbox next`).';
-  return join([hoppLayer() + '\n\n' + mail, toolsLayer(c.toolsPrompt)]);
+  return join([hoppLayer() + '\n\n' + mail + '\n\n' + TASK_COMMANDS, toolsLayer(c.toolsPrompt)]);
 }
 
 function extra(text?: string): string | undefined {

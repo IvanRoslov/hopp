@@ -146,6 +146,7 @@ describe('ShellStore', () => {
     const t = (await new ShellStore(home).read()).tasks[0]!;
     expect(t.base).toBeNull();
     expect(t.pipeline).toBeNull();
+    expect(t.startedBy).toBeNull();
   });
 
   it('refuses a corrupt file and never overwrites it', async () => {
@@ -162,5 +163,57 @@ describe('ShellStore', () => {
     const st = await s.read();
     st.projects.push(project('x'));
     expect((await s.read()).projects).toEqual([]);
+  });
+
+  // Two ShellStores on one home stand for two processes (the app, and a
+  // `hopp task` run while it is closed): they share only the files.
+  describe('two writers', () => {
+    it('lose no change when they write at once', async () => {
+      const a = new ShellStore(home);
+      const b = new ShellStore(home);
+      await Promise.all(
+        Array.from({ length: 40 }, (_, i) => (i % 2 ? a : b).update((st) => {
+          st.projects.push(project('p' + i));
+        })),
+      );
+      const slugs = (await new ShellStore(home).read()).projects.map((p) => p.slug).sort();
+      expect(slugs).toHaveLength(40);
+      expect(new Set(slugs).size).toBe(40);
+      expect(existsSync(join(home, 'shell', 'state.lock'))).toBe(false);
+    });
+
+    it('a read sees what the other wrote, and watch tells the listeners', async () => {
+      const a = new ShellStore(home);
+      const b = new ShellStore(home);
+      expect((await a.read()).projects).toEqual([]);
+      const told: ShellState[] = [];
+      a.onChanged((s) => told.push(s));
+      const stop = a.watch(20);
+      try {
+        await b.update((st) => {
+          st.projects.push(project('from-b'));
+        });
+        await expect.poll(() => told.at(-1)?.projects.map((p) => p.slug)).toEqual(['from-b']);
+        expect((await a.read()).projects.map((p) => p.slug)).toEqual(['from-b']);
+        // a's next change starts from b's.
+        await a.update((st) => {
+          st.projects.push(project('from-a'));
+        });
+        expect((await b.read()).projects.map((p) => p.slug)).toEqual(['from-b', 'from-a']);
+      } finally {
+        stop();
+      }
+    });
+
+    it('seeds once even when both seed at once', async () => {
+      const a = new ShellStore(home);
+      const b = new ShellStore(home);
+      const seed = (s: ShellStore) => s.seedOnce('k', (st) => {
+        st.projects.push(project('seeded'));
+      });
+      const ran = await Promise.all([seed(a), seed(b)]);
+      expect(ran.filter(Boolean)).toHaveLength(1);
+      expect((await new ShellStore(home).read()).projects).toHaveLength(1);
+    });
   });
 });

@@ -9,7 +9,7 @@ verified: 2026-11-16 — make app-test on shell-page (30ab8ae); facts 7, 9 and 1
 
 # app
 
-The desktop app is a window onto the daemon: it lists the daemon's sessions, opens one in a real terminal, and shows and answers its questions. Its main process also keeps projects, tasks and long-lived agents and launches their sessions: [[docs/app/shell]]; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]]; what the window shows and how the human works in it: [[docs/app/page]]; repositories picked from GitHub: [[docs/app/github]]; model profiles: [[docs/app/models]].
+The desktop app is a window onto the daemon: it lists the daemon's sessions, opens one in a real terminal, and shows and answers its questions. Its main process also keeps projects, tasks and long-lived agents and launches their sessions: [[docs/app/shell]]; a task with a pipeline, its feed, stages and artifacts: [[docs/app/pipelines]]; what the window shows and how the human works in it: [[docs/app/page]]; repositories picked from GitHub: [[docs/app/github]]; model profiles: [[docs/app/models]]; the commands `hopp project`, `hopp pipeline` and `hopp task` an agent uses from its terminal: [[docs/app/cli]].
 
 ### How it talks to the daemon
 
@@ -29,6 +29,6 @@ The desktop app is a window onto the daemon: it lists the daemon's sessions, ope
 ### Questions, and running it
 
 10. The header button `Questions · N` counts the selected session's open asks plus one when its screen waits on a question; the column it opens answers both, the screen question through the daemon's quiz answer and asks through the ask answer, and a refused answer shows the daemon's message in place.
-11. `make app-install` installs it, `make app-dev` runs it, `make app-pack` builds an unsigned `hopp.app` under `app/dist/`, `make app-install-mac` builds it and puts it in `/Applications`, and `make app-test` type-checks it and runs its unit and end-to-end tests against a fake daemon on a temporary socket, never `~/.hopp`.
+11. `make app-install` installs it, `make app-dev` runs it, `make app-pack` builds an unsigned `hopp.app` under `app/dist/`, `make app-install-mac` builds it, puts it in `/Applications` and installs its commands into `$HOPP_HOME/bin`, and `make app-test` type-checks it and runs its unit and end-to-end tests against a fake daemon on a temporary socket, never `~/.hopp`.
 
 Code: [app](app)

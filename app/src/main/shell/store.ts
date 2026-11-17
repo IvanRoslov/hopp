@@ -5,9 +5,17 @@
 // be read (an empty file after a crash, a corrupt one) the store falls back
 // to the .bak, says so in `recovered`, and on its next write moves the broken
 // file to state.json.broken. A file from a newer app is never overwritten.
-import { copyFile, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+//
+// More than one process may use the same store: the app, and `hopp task`
+// run while the app is closed. Every change takes the lock file
+// state.lock and starts from the file on disk, so no write is lost; a read
+// notices when another process changed the file and reads it again, and
+// watch() announces such a change to the listeners.
+import { unwatchFile, watchFile } from 'node:fs';
+import { copyFile, mkdir, open, readFile, rename, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ShellState } from '../../shared/shell';
+import { withFileLock } from './lock';
 
 export const STORE_VERSION = 1;
 
@@ -28,14 +36,67 @@ export class ShellStore {
   private brokenPending = false;
   private queue: Promise<unknown> = Promise.resolve();
   private listeners = new Set<(s: ShellState) => void>();
+  // What state.json looked like when this process last read or wrote it,
+  // and when its listeners were last told.
+  private sig = '';
+  private toldSig = '';
 
   constructor(readonly home: string) {
     this.path = join(home, 'shell', 'state.json');
   }
 
+  get lockPath(): string {
+    return join(this.home, 'shell', 'state.lock');
+  }
+
   // read returns a copy of the current state.
   async read(): Promise<ShellState> {
     return structuredClone(await this.load());
+  }
+
+  // watch announces changes another process made to the file; it returns
+  // the function that stops watching.
+  watch(intervalMs = 500): () => void {
+    const check = () => {
+      void this.refresh().catch((err) => console.warn('hopp: could not re-read the store: ' + (err as Error).message));
+    };
+    watchFile(this.path, { interval: intervalMs }, check);
+    return () => unwatchFile(this.path, check);
+  }
+
+  // refresh runs in the queue of changes, so what it announces is never
+  // older than a change of this process.
+  private refresh(): Promise<void> {
+    const run = async () => {
+      // A read may have loaded the change already: what counts is whether
+      // the listeners have heard of it.
+      if (!this.state || (await this.fileSig()) === this.toldSig) return;
+      const next = await this.load();
+      this.toldSig = this.sig;
+      this.announce(next);
+    };
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => undefined);
+    return p;
+  }
+
+  private announce(s: ShellState): void {
+    for (const cb of this.listeners) {
+      try {
+        cb(structuredClone(s));
+      } catch {
+        // A listener's failure is not the store's.
+      }
+    }
+  }
+
+  private async fileSig(): Promise<string> {
+    try {
+      const st = await stat(this.path);
+      return `${st.ino}:${st.size}:${st.mtimeMs}`;
+    } catch {
+      return 'none';
+    }
   }
 
   onChanged(cb: (s: ShellState) => void): () => void {
@@ -48,17 +109,19 @@ export class ShellStore {
   // nothing changes.
   update<T>(fn: (s: ShellState) => T | Promise<T>): Promise<T> {
     const run = async (): Promise<T> => {
-      const next = structuredClone(await this.load());
-      const out = await fn(next);
-      await this.write(next);
-      this.state = next;
-      for (const cb of this.listeners) {
-        try {
-          cb(structuredClone(next));
-        } catch {
-          // A listener's failure is not the store's.
-        }
-      }
+      await mkdir(join(this.home, 'shell'), { recursive: true });
+      const { out, next } = await withFileLock(this.lockPath, async () => {
+        // Under the lock: start from the file, whoever wrote it last.
+        this.state = null;
+        const next = structuredClone(await this.load());
+        const out = await fn(next);
+        await this.write(next);
+        this.state = next;
+        this.sig = await this.fileSig();
+        this.toldSig = this.sig;
+        return { out, next };
+      });
+      this.announce(next);
       return out;
     };
     const p = this.queue.then(run, run);
@@ -82,13 +145,20 @@ export class ShellStore {
   }
 
   private async load(): Promise<ShellState> {
-    if (this.state) return this.state;
+    if (this.state) {
+      if ((await this.fileSig()) === this.sig) return this.state;
+      this.state = null; // another process changed it
+    }
+    const sig = await this.fileSig();
     let raw: Partial<FileShape>;
     try {
       raw = await this.parse(this.path);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         this.state = empty();
+        this.seeded = [];
+        this.sig = 'none';
+        if (!this.toldSig) this.toldSig = 'none';
         return this.state;
       }
       if (err instanceof NewerFile) throw err;
@@ -113,6 +183,8 @@ export class ShellStore {
     };
     this.seeded = Array.isArray(raw.seeded) ? raw.seeded.filter((x) => typeof x === 'string') : [];
     this.state = state;
+    this.sig = sig;
+    if (!this.toldSig) this.toldSig = sig; // the first read: nothing to tell
     return state;
   }
 

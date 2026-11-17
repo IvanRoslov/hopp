@@ -45,7 +45,8 @@ The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without wr
 - `make test` runs `go test ./...` inside `daemon/`, where the Go module lives (its module path stays `github.com/IvanRoslov/hopp`); run `go vet ./...` and `gofmt -l .` there too.
 - `make build` builds the program into `bin/hopp`.
 - `make app-pack` builds an unsigned `app/dist/hopp-darwin-arm64/hopp.app` for this Mac (not signed, not installed anywhere).
-- `make app-install-mac` runs `app-pack`, asks a running `hopp.app` to quit and replaces `/Applications/hopp.app`; the daemon is not touched.
+- `make app-install-mac` runs `app-pack`, asks a running `hopp.app` to quit and replaces `/Applications/hopp.app`, then installs its commands (`hopp-project`, `hopp-pipeline`, `hopp-task`) into `$HOPP_HOME/bin`; the daemon is not touched.
+- `make app-cli` installs those commands from this checkout instead (the bundle in `app/out/cli`, run by the checkout's Electron as Node), without packing.
 - `make app-test` type-checks the desktop app in `app/` and runs its vitest unit tests and its Playwright end-to-end tests (Electron), all against a fake daemon on a temporary socket; `make app-install` (`npm ci`) comes first, and `make app-dev` runs the app against the daemon of `HOPP_HOME`.
 - The Pi delivery extension tests run with `node --experimental-strip-types --test daemon/internal/agent/pi/delivery-extension.test.ts`; `go test` does not run them.
 
@@ -103,6 +104,18 @@ Artifacts, files kept in immutable versions (scope: the root of `$HOPP_SESSION_I
 bin/hopp artifact publish <file> [--name <n>] [--label k=v] [--scope <s>]   # prints name@version
 bin/hopp artifacts [--all-versions] [--label k=v] [--scope <s>]
 bin/hopp artifact get <name>[@<version>] [--scope <s>]                       # prints the stored path
+```
+
+Projects, pipelines and tasks of the app (external commands, installed by `make app-install-mac` or `make app-cli`; all take `--json`):
+
+```bash
+hopp project ls                        # projects; hopp project show <project>
+hopp pipeline ls                       # pipelines and their stages; hopp pipeline show <id or name>
+hopp task new --project <p> --brief "<text>" [--pipeline <id or name>] [--orchestrator <profile>] [--worker <profile>]...   # or --file, or stdin
+hopp task ls [--project <p>] [--all]   # active tasks, or all
+hopp task show <task>                  # state, sessions, branch, started from/by, stage, open asks
+hopp task feed <task>                  # posts, asks and artifacts in time order
+hopp task stop|resume|finish <task>
 ```
 
 Lessons, from an agent or the human:

@@ -1,4 +1,4 @@
-.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build app-pack app-install-mac
+.PHONY: lint-docs test-lint build test install start stop restart status app-install app-dev app-test app-build app-pack app-install-mac app-cli
 
 lint-docs:
 	python3 scripts/lint_docs.py .
@@ -75,3 +75,11 @@ app-install-mac: app-pack
 	rm -rf /Applications/hopp.app
 	ditto app/dist/hopp-darwin-arm64/hopp.app /Applications/hopp.app
 	@echo "installed /Applications/hopp.app"
+	node app/scripts/install-cli.mjs app
+
+# The app's commands (hopp project, hopp pipeline, hopp task) from this
+# checkout, without packing: $HOPP_HOME/bin/hopp-* run app/out/cli with the
+# checkout's Electron as Node. `make app-install-mac` installs the packed ones.
+app-cli:
+	cd app && npm run build:cli
+	node app/scripts/install-cli.mjs dev

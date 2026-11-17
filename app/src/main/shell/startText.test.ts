@@ -141,4 +141,22 @@ describe('agentText', () => {
     expect(t).not.toContain('# Your role');
     expect(t).not.toContain('# Project');
   });
+
+  it('names the task commands, which orchestrators and workers do not get', () => {
+    const t = agentText({ toolsPrompt: TOOLS });
+    for (const w of ['hopp project ls', 'hopp pipeline ls', 'hopp task new --project', 'hopp task show', 'hopp task feed']) expect(t).toContain(w);
+    expect(orch()).not.toContain('hopp task new');
+    expect(workerText({ project: project(), taskId: 'x', title: 'X', toolsPrompt: TOOLS })).not.toContain('hopp task new');
+  });
 });
+
+describe('a task started by an agent', () => {
+  it('tells the orchestrator whom to report to, and only then', () => {
+    const t = orch({ startedBy: 'cto' });
+    expect(t).toContain('This task was started by the agent cto, not typed by the human.');
+    expect(t).toContain('`hopp send cto`');
+    expect(t).toContain('stage approvals still go to the human');
+    expect(orch()).not.toContain('started by the agent');
+  });
+});
+

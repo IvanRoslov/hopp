@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (a01bc9a) and the live runs against ~/.hopp
+verified: 2026-11-17 — against the code on main (a01bc9a) and the live runs against ~/.hopp; fact 11 by go test on shell-cli and the packed app's commands run through it
 ---
 
 # What the daemon is and where it stops
@@ -18,6 +18,7 @@ The daemon and its CLI are one program; this leaf says what it owns, what it ref
 8. A model profile names a harness, a model and an effort; a launch names a profile or a harness, and without either it gets the one default profile, else the configured default harness. The first start seeds three starter profiles.
 9. Every lifecycle change of a session, and every step of a message, is appended to an event log in the database; `hopp events` reads it and `hopp events --follow` streams it live.
 10. A folder limit on a session (see [[docs/daemon/children]]) keeps an agent from wandering into folders it was not given; it is not a security boundary. The socket has no authentication, and a client that does not send its session id is not limited. The daemon compares folders only: it does not know which repository a folder belongs to.
-11. The daemon is ported from rocket, not written from scratch: message delivery and the reading of agent screens carry a long history of debugging against real agent CLIs. `daemon/internal/PORTED.md` records every change made to the ported code.
+11. A `hopp <word>` that is not one of hopp's own commands runs the program `hopp-<word>` from `$HOPP_HOME/bin` or else from `PATH`, with its arguments, the same environment and `HOPP_BIN` (this hopp binary), so a layer above adds commands the daemon knows nothing of. A built-in command is never shadowed, `hopp --help` lists the external commands it finds, and a missing one exits 3 saying where such commands are installed.
+12. The daemon is ported from rocket, not written from scratch: message delivery and the reading of agent screens carry a long history of debugging against real agent CLIs. `daemon/internal/PORTED.md` records every change made to the ported code.
 
 Code: [daemon](daemon/internal/daemon), [config](daemon/internal/config), [api](daemon/internal/api), [cli](daemon/internal/cli), [store](daemon/internal/store), [agent](daemon/internal/agent)

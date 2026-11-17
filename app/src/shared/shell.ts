@@ -267,6 +267,8 @@ export const LABEL = {
   substageTitle: 'hopp.substage_title',
   event: 'hopp.event',
   kind: 'hopp.kind',
+  // On a task's orchestrator: the agent session that started the task.
+  startedBy: 'hopp.started_by',
 } as const;
 
 // Values of hopp.event and hopp.kind.
