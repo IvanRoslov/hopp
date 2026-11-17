@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { RepoLabel } from './repos';
-import { BaseRows, BaseWarning } from './TaskBase';
+import { BaseRows, BaseWarning, useBaseDismissal } from './TaskBase';
 import type { HoppBridge } from '../../shared/bridge';
 import type { Project, Result, Task } from '../../shared/shell';
 import type { Session, StreamState } from '../../shared/types';
 import { cleanError } from '../errors';
 import { STARTING_GRACE_MS, taskSessions, toMs } from '../model/shellModel';
 import type { Go, Panel, PipelinePanel } from './route';
-import { ActionsMenu, TerminalArea, WorkView, type MenuItem } from './WorkView';
+import { ActionsMenu, ConfirmButton, TerminalArea, WorkView, type MenuItem } from './WorkView';
 import { PipelineTaskView } from '../feed/PipelineTaskView';
 
 function when(ms: number): string {
@@ -81,6 +81,7 @@ export function TaskView(props: {
   const selectedId = props.session && tree.some((s) => s.id === props.session) ? props.session : task.sessionId;
   const selected = tree.find((s) => s.id === selectedId) ?? null;
   const [busy, setBusy] = useState(false);
+  const dismissal = useBaseDismissal(task.id);
   const [error, setError] = useState<string | null>(null);
   const children = Math.max(0, tree.length - 1);
   const root = tree[0];
@@ -103,17 +104,6 @@ export function TaskView(props: {
   const resume = () => void act(() => shell.resumeTask(task.id));
 
   const items: MenuItem[] = [];
-  if (task.status === 'active' && rootLive) {
-    items.push({
-      label: 'Stop task',
-      confirm: {
-        text: `Stop ${task.title} and its child sessions (${children})?`,
-        action: 'Stop',
-      },
-      run: () => void act(() => shell.stopTask(task.id)),
-    });
-  }
-  if (task.status === 'active' && !rootLive) items.push({ label: 'Resume', run: resume });
   if (task.status === 'active') {
     items.push({
       label: 'Finish task',
@@ -138,47 +128,56 @@ export function TaskView(props: {
     run: () => go(task.pipeline ? { ...here, pipelinePanel: 'details' } : { ...here, panel: 'details' }),
   });
 
-  // The line above the terminal: what state the task is in and what to do.
-  let status: React.ReactNode = null;
+  // Stop or Resume, before Questions; Finish stays in the menu.
+  let action: React.ReactNode = null;
+  if (task.status === 'active' && rootLive) {
+    action = (
+      <ConfirmButton
+        label="Stop"
+        testId="task-stop"
+        disabled={busy}
+        confirm={{ text: `Stop ${task.title} and its child sessions (${children})?`, action: 'Stop' }}
+        run={() => void act(() => shell.stopTask(task.id))}
+      />
+    );
+  } else if (task.status === 'active' && (root || !young)) {
+    action = (
+      <button type="button" className="c-btn" disabled={busy} data-testid="task-resume" onClick={resume}>
+        Resume
+      </button>
+    );
+  }
+
+  // A quiet word about the state of the task or the selected session.
+  let status: string | null = null;
   let noTerminal: React.ReactNode = null;
   const isRoot = selectedId === task.sessionId;
   if (task.status === 'finished') {
     status = `Finished. The worktree is kept in ${task.dir}.`;
     noTerminal = 'This task is finished.';
   } else if (!root) {
-    status = young ? 'Starting…' : (
-      <>
-        The daemon has no session {task.sessionId}.
-        <button type="button" className="c-btn" disabled={busy} onClick={resume}>Resume</button>
-      </>
-    );
+    status = young ? 'Starting…' : `The daemon has no session ${task.sessionId}.`;
     noTerminal = young ? 'The terminal opens when the orchestrator is running.' : 'No terminal: the session is gone.';
   } else if (selected && selected.state === 'spawning') {
     status = 'Starting…';
     noTerminal = 'The terminal opens when the session is running.';
   } else if (selected && (selected.state === 'killed' || selected.state === 'done' || selected.state === 'errored')) {
     const word = selected.state === 'errored' ? 'failed' : selected.state === 'done' ? 'ended' : 'is stopped';
-    status = isRoot ? (
-      <>
-        {selected.state === 'errored' ? 'The orchestrator failed.' : `${task.title} ${word === 'is stopped' ? 'is stopped' : 'ended'}.`}
-        <button type="button" className="c-btn" disabled={busy} onClick={resume}>Resume</button>
-      </>
-    ) : (
-      `This session ${word}.`
-    );
+    status = isRoot ? (selected.state === 'errored' ? 'The orchestrator failed.' : word === 'is stopped' ? 'Stopped.' : 'Ended.') : `This session ${word}.`;
     noTerminal = 'No terminal: the session is not running.';
   } else if (selected && selected.activity === 'exited') {
     status = 'The agent exited. The terminal shows the shell it left.';
   }
 
-  // A start that may be behind GitHub is said on the task screen itself.
-  const baseWarning = task.base?.warning ? <BaseWarning key={task.id} task={task} project={props.project} /> : null;
-  const statusLine =
-    status || error || baseWarning ? (
+  // A start that may be behind GitHub is said on the task screen itself,
+  // on the second line with any error, only while it is there.
+  const baseWarning = task.base?.warning && !dismissal.gone ? <BaseWarning task={task} project={props.project} onDismiss={dismissal.dismiss} /> : null;
+  const errorLine = error && <span className="form-error" role="alert">! {error}</span>;
+  const alert =
+    baseWarning || errorLine ? (
       <>
         {baseWarning}
-        {status}
-        {error && <span className="form-error" role="alert">! {error}</span>}
+        {errorLine}
       </>
     ) : null;
 
@@ -191,19 +190,26 @@ export function TaskView(props: {
         bridge={bridge}
         task={task}
         menu={<ActionsMenu items={items} />}
+        action={action}
         terminal={
           <TerminalArea
             bridge={bridge}
             tree={tree}
             selectedId={selectedId}
             onSelect={(id) => go({ ...here, session: id, pipelinePanel })}
-            status={null}
             attachable={!!selected && selected.state === 'running'}
             noTerminal={noTerminal}
           />
         }
         details={<TaskDetails task={task} project={props.project} />}
-        status={statusLine}
+        status={
+          status || alert ? (
+            <>
+              {alert}
+              {status}
+            </>
+          ) : null
+        }
         panel={pipelinePanel}
         onPanel={(p) => go({ ...here, pipelinePanel: p })}
         focusAskId={props.focusAskId}
@@ -222,7 +228,9 @@ export function TaskView(props: {
       panel={props.panel}
       onPanel={(p) => go({ k: 'task', id: task.id, panel: p, session: selectedId })}
       menu={<ActionsMenu items={items} />}
-      status={statusLine}
+      action={action}
+      status={status}
+      alert={alert}
       attachable={!!selected && selected.state === 'running'}
       noTerminal={noTerminal}
       details={<TaskDetails task={task} project={props.project} />}

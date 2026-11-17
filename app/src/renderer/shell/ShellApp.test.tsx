@@ -251,11 +251,10 @@ describe('task view', () => {
     const f = setup();
     await mount(f);
     fireEvent.click(screen.getByTestId('task-row'));
-    fireEvent.click(screen.getByTestId('actions-menu'));
-    fireEvent.click(screen.getByText('Stop task'));
+    fireEvent.click(screen.getByTestId('task-stop'));
     expect(screen.getByRole('alertdialog').textContent).toContain('Stop Ship it and its child sessions (2)?');
     expect(f.shell!.stopTask).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Stop' }));
     await flush();
     expect(f.shell!.stopTask).toHaveBeenCalledWith('t');
   });
@@ -265,7 +264,7 @@ describe('task view', () => {
     await mount(f);
     fireEvent.click(screen.getByTestId('task-row'));
     expect(screen.queryByTestId('terminal')).toBeNull();
-    expect(screen.getByText(/Ship it is stopped/)).toBeTruthy();
+    expect(screen.getByTestId('work-status').textContent).toBe('Stopped.');
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
     await flush();
     expect(f.shell!.resumeTask).toHaveBeenCalledWith('t');

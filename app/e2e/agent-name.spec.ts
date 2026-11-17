@@ -1,8 +1,8 @@
 // An agent name that a live tmux session outside hopp holds (the fake daemon
 // plays that tmux session; no real one is touched): New agent refuses it next
 // to Name, Start says it in words with Rename and Remove beside it, a rename
-// keeps the letters under the old name, and the quiet Remove beside Start
-// takes the empty mailbox with it. Set SHOTS_DIR to keep screenshots.
+// keeps the letters under the old name, and Remove agent in the menu takes
+// the empty mailbox with it. Set SHOTS_DIR to keep screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -53,9 +53,9 @@ test('an agent name taken by tmux outside hopp: refused, renamed, removed', asyn
     w.d.mailboxes[0]!.total = 2;
     w.d.publish('mailbox.received', 'cto', { mailbox: 'cto' });
     await row.click();
-    await expect(page.getByText(/cto is off · 2 letters wait for it/)).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Start' }).first().click();
-    const alert = page.locator('.status-line').getByRole('alert');
+    await expect(page.getByTestId('work-status')).toHaveText('Off · 2 letters wait for it', { timeout: 10_000 });
+    await page.getByTestId('agent-start').click();
+    const alert = page.locator('.top-alert').getByRole('alert');
     await expect(alert).toContainText(TMUX);
     await expect(alert).not.toContainText('session id is taken');
     await shot(page, '02-start-refused');
@@ -75,9 +75,10 @@ test('an agent name taken by tmux outside hopp: refused, renamed, removed', asyn
     expect(w.d.mailboxes.map((b) => b.name).sort()).toEqual(['boss', 'cto']);
     await shot(page, '04-renamed');
 
-    // The quiet Remove beside Start asks, then removes; the empty mailbox goes.
-    await page.getByTestId('agent-remove').click();
-    const ask = page.locator('.status-line').getByRole('alertdialog');
+    // Remove agent in the menu asks, then removes; the empty mailbox goes.
+    await page.getByTestId('actions-menu').click();
+    await page.getByRole('menuitem', { name: 'Remove agent' }).click();
+    const ask = page.getByRole('alertdialog');
     await expect(ask).toContainText('Remove boss? Its folder stays as it is.');
     await shot(page, '05-remove-confirm');
     await ask.getByRole('button', { name: 'Remove' }).click();

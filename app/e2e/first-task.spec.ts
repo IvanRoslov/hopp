@@ -62,15 +62,14 @@ test('first run to a finished task', async () => {
     expect(w.d.asks[1]!.answer).toBe('The system font');
 
     // Stop, with a confirmation that names the task and its child sessions.
-    await page.getByTestId('actions-menu').click();
-    await page.getByRole('menuitem', { name: 'Stop task' }).click();
+    await page.getByTestId('task-stop').click();
     await expect(page.getByRole('alertdialog')).toContainText('Stop Fix the header and its child sessions (1)?');
     await page.getByRole('alertdialog').getByRole('button', { name: 'Stop' }).click();
     await expect.poll(() => w.d.sessions.map((s) => s.state)).toEqual(['killed', 'killed']);
     w.d.publish('session.state_changed', 'fix-the-header', { to: 'killed' });
 
     // Resume.
-    await page.getByRole('button', { name: 'Resume' }).first().click();
+    await page.getByTestId('task-resume').click();
     await expect.poll(() => w.d.sessions[0]!.state).toBe('running');
     w.d.publish('session.restored', 'fix-the-header');
 

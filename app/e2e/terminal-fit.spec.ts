@@ -75,12 +75,12 @@ test('the terminal fits its box: no pipeline, questions open and closed, several
     const page = await w.start();
     await page.getByText('Fit check').first().click();
     await expect(page.getByTestId('terminal')).toBeVisible();
-    for (const width of [1100, 1500, 2000]) {
+    for (const width of [1100, 1500, 2000, 900]) {
       await page.setViewportSize({ width, height: 900 });
       await expectFits(page, `questions closed at ${width}`);
     }
     await page.getByTestId('questions-button').click();
-    for (const width of [2000, 1300]) {
+    for (const width of [2000, 1300, 1000]) {
       await page.setViewportSize({ width, height: 800 });
       await expectFits(page, `questions open at ${width}`);
     }
@@ -112,6 +112,40 @@ test('the terminal fits its box in the right panel of a task with a pipeline', a
       await page.setViewportSize({ width, height: 900 });
       await expectFits(page, `pipeline panel at ${width}`);
     }
+  } finally {
+    await w.dispose();
+  }
+});
+
+test('the terminal refits when the header takes a second line and gives it back', async () => {
+  const w = new World();
+  w.d.defaultAttach = ['/bin/sh', '-c', SIZE_REPORTER];
+  w.seedTask('warn-task', 'A task whose title is long enough to be cut with an ellipsis in a narrow window, as Ivan saw');
+  const file = join(w.home, 'shell', 'state.json');
+  const st = JSON.parse(readFileSync(file, 'utf8'));
+  st.tasks[0].base = { ref: 'origin/main', commit: '4b2e7aa91c', committedAt: 1763400000, fetched: false, warning: 'git fetch: Could not resolve host: github.com' };
+  writeFileSync(file, JSON.stringify(st));
+  w.d.sessions = [makeSession('warn-task', { labels: { 'hopp.project': 'site', 'hopp.task': 'warn-task', 'hopp.role': 'orchestrator' } })];
+  try {
+    const page = await w.start();
+    await page.getByTestId('task-row').first().click();
+    await expect(page.getByTestId('base-warning')).toBeVisible();
+    const headerHeight = async () => (await page.locator('.task-top').boundingBox())!.height;
+    for (const width of [900, 1500]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectFits(page, `with the warning at ${width}`);
+      // The title is cut, not wrapped: the first row stays one control high.
+      const row = (await page.locator('.top-row').boundingBox())!;
+      expect(row.height, `row at ${width}`).toBeLessThanOrEqual(34);
+    }
+    const before = (await page.getByTestId('terminal').boundingBox())!;
+    const tall = await headerHeight();
+    await page.getByTestId('base-warning').getByRole('button', { name: 'Dismiss' }).click();
+    await expect(page.getByTestId('base-warning')).toHaveCount(0);
+    expect(await headerHeight()).toBeLessThan(tall);
+    await expectFits(page, 'after the warning went');
+    const after = (await page.getByTestId('terminal').boundingBox())!;
+    expect(after.height).toBeGreaterThan(before.height);
   } finally {
     await w.dispose();
   }

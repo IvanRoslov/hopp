@@ -202,17 +202,28 @@ button.set-row:hover .nm { text-decoration: underline; text-decoration-color: va
 
 /* ---------- task and agent views ---------- */
 .task {
-  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--top-h) minmax(0, 1fr);
+  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
 }
 .task.q-open { grid-template-columns: minmax(0, 583fr) 5px minmax(0, 584fr); }
-.task-top { grid-column: 1; grid-row: 1; }
+.task-top { grid-column: 1; grid-row: 1; height: auto; min-height: var(--top-h); flex-direction: column; align-items: stretch; justify-content: center; gap: 6px; padding-top: 10px; padding-bottom: 10px; }
+/* One row that never wraps: the title and the status give way first. */
+.top-row { display: flex; align-items: center; gap: 8px; min-width: 0; height: var(--control-h); }
+.top-row > .c-btn { flex: none; }
+.top-slot { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 0 auto; max-width: 40%; }
+.top-slot:empty { display: none; }
+.top-slot .c-btn { min-width: 0; }
+.top-status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-name); }
+.top-alert { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: var(--fs-name); line-height: 1.6; }
+.top-alert .base-warning { margin: 0; }
+.term-closed { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-name); white-space: nowrap; }
 .task-q { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; min-height: 0; }
 .task-div { grid-column: 2; grid-row: 1 / 3; position: relative; cursor: col-resize; outline: none; touch-action: none; }
 .task-div:hover::after, .task-div:focus-visible::after { background: var(--muted); }
 .task-div::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 1px; background: var(--line); }
-.task-term { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: var(--term-pad) var(--term-pad) var(--term-pad) var(--page-x); }
+.task-term { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 8px var(--term-pad) var(--term-pad) var(--page-x); }
 .task.q-open .task-term { grid-column: 3; grid-row: 1 / 3; background: var(--panel); padding: 0 var(--term-pad) var(--term-pad); }
-.term-label { height: var(--top-h); flex: none; display: flex; align-items: center; font-size: var(--fs-name); font-weight: 500; color: var(--muted); margin-bottom: var(--term-pad); }
+.term-label { height: var(--top-h); flex: none; display: flex; align-items: center; gap: 12px; min-width: 0; font-size: var(--fs-name); font-weight: 500; color: var(--muted); margin-bottom: 8px; }
+.term-label .top-slot { font-weight: 400; color: var(--text); }
 .term-bar { flex: none; display: flex; align-items: center; gap: 8px; margin-bottom: 14px; min-height: var(--control-h); }
 .term-box { flex: 1; min-height: 0; position: relative; background: var(--term); border-radius: var(--r-m); overflow: hidden; }
 .term-box .term-empty { padding: 16px 18px; }
@@ -398,7 +409,6 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .details .base-detail-warning { display: block; font-family: var(--font-ui); color: var(--text); margin-top: 4px; white-space: normal; }
 
 /* Long-lived agent: the quiet Remove, its confirmation, the rename form */
-.status-line .link-btn { margin-left: -4px; }
 .inline-confirm, .agent-error { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .inline-confirm > span:first-child { color: var(--text); }
 .details .name-row { display: inline-flex; align-items: center; gap: 10px; }

@@ -56,7 +56,7 @@ describe('long-lived agents', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     await flush();
     expect(f.shell!.createAgent).toHaveBeenCalledWith({ name: 'docs', profile: 'opus', dir: '/agents/docs' });
-    expect(screen.getByTestId('work-view').textContent).toContain('docs is off');
+    expect(screen.getByTestId('work-status').textContent).toBe('Off');
   });
 
   it('a taken name shows next to the name', async () => {
@@ -75,10 +75,10 @@ describe('long-lived agents', () => {
     const f = fakeBridge({ shell: { state: { ...base, agents: [makeAgent('docs')] }, mail: { docs: 3 } } });
     await mount(f);
     fireEvent.click(screen.getByTestId('agent-row'));
-    expect(screen.getByText(/docs is off · 3 letters wait for it/)).toBeTruthy();
+    expect(screen.getByTestId('work-status').textContent).toBe('Off · 3 letters wait for it');
     expect(screen.getByText('The terminal appears once the agent is started.')).toBeTruthy();
     expect(screen.queryByTestId('terminal')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByTestId('agent-start'));
     await flush();
     expect(f.shell!.startAgent).toHaveBeenCalledWith('docs');
   });
@@ -88,9 +88,8 @@ describe('long-lived agents', () => {
     await mount(f);
     fireEvent.click(screen.getByTestId('agent-row'));
     expect(screen.getByTestId('terminal').textContent).toBe('terminal:cto');
-    fireEvent.click(screen.getByTestId('actions-menu'));
-    fireEvent.click(screen.getByText('Stop agent'));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    fireEvent.click(screen.getByTestId('agent-stop'));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Stop' }));
     await flush();
     expect(f.shell!.stopAgent).toHaveBeenCalledWith('cto');
   });
