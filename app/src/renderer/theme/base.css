@@ -388,3 +388,11 @@ button.cb:focus-visible { outline: 2px solid var(--control-focus); outline-offse
 .mr-edit textarea { field-sizing: content; min-height: 72px; max-height: 50vh; resize: vertical; font-size: var(--fs-name); }
 .mr-edit-bar { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .profile-note { display: block; padding: 8px 8px 0; font-size: var(--fs-small); line-height: 1.6; color: var(--text); }
+
+/* ---------- what a task started from ---------- */
+.base-warning { flex: 1 1 100%; display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; border-radius: var(--r-m); background: var(--field); color: var(--text); font-size: var(--fs-small); line-height: 1.6; }
+.base-warning .bw-mark { flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; border: 1px solid var(--control-border); display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--muted); }
+.base-warning .bw-text { flex: 1; min-width: 0; display: grid; }
+.base-warning .bw-reason { color: var(--muted); overflow-wrap: anywhere; }
+.base-warning .link-btn { flex: none; }
+.details .base-detail-warning { display: block; font-family: var(--font-ui); color: var(--text); margin-top: 4px; white-space: normal; }
