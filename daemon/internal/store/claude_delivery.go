@@ -309,6 +309,43 @@ func (s *Store) SetClaudePhase(id int64, wire string, target claudeinstance.Iden
 	}
 	return true, nil
 }
+
+// ReleaseClaudeNotSent undoes a claim whose socket send ended before any byte
+// was written (outcome not_sent): the Claude row is removed and the message is
+// queued again as if never claimed, so a later pass prepares a fresh send. It
+// changes nothing unless the claim is exactly this one and still in
+// possible_write; it reports whether the message was released.
+func (s *Store) ReleaseClaudeNotSent(id int64, wire string, target claudeinstance.Identity) (bool, error) {
+	tx, e := s.db.Begin()
+	if e != nil {
+		return false, e
+	}
+	defer tx.Rollback()
+	res, e := tx.Exec(`UPDATE messages SET status=status WHERE id=? AND delivery_transport=? AND status='delivering' AND attempts=1`, id, claudeTransport)
+	if e != nil {
+		return false, e
+	}
+	if n, e := res.RowsAffected(); e != nil || n == 0 {
+		return false, e
+	}
+	v, e := scanClaude(tx.QueryRow(`SELECT `+claudeDeliveryColumns+` FROM claude_deliveries WHERE message_id=?`, id))
+	if e != nil {
+		return false, e
+	}
+	if v.Snapshot.WireID != wire || v.Snapshot.Phase != "possible_write" || !claudeinstance.SameIdentity(v.Snapshot.Target, target) || v.Record.Valid {
+		return false, nil
+	}
+	if _, e = tx.Exec(`DELETE FROM claude_deliveries WHERE message_id=?`, id); e != nil {
+		return false, e
+	}
+	if _, e = tx.Exec(`UPDATE messages SET status='queued',attempts=0,delivery_transport='',inject_at=0,reason=NULL WHERE id=?`, id); e != nil {
+		return false, e
+	}
+	if e = tx.Commit(); e != nil {
+		return false, e
+	}
+	return true, nil
+}
 func (s *Store) ExpireClaudeMessage(id int64, now time.Time) (bool, error) {
 	tx, e := s.db.Begin()
 	if e != nil {
