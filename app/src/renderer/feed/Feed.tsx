@@ -352,7 +352,7 @@ function ChoiceBlock(props: FeedProps & { ask: Ask; options: string[]; primary: 
       {props.options.length > 0 ? (
         <div className="btns">
           {props.options.map((o, i) => (
-            <button key={o} type="button" className={'c-btn' + (i === props.primary ? ' primary' : '')} disabled={busy} onClick={() => void send({ choice: o })}>
+            <button key={o} type="button" className={'c-btn wrap' + (i === props.primary ? ' primary' : '')} disabled={busy} onClick={() => void send({ choice: o })}>
               {o}
             </button>
           ))}

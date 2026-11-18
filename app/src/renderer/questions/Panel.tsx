@@ -136,7 +136,7 @@ function HarnessQuestion(props: { daemon: DaemonBridge; sessionId: string; q: Se
                   type="button"
                   title={o.description}
                   disabled={busy || sent}
-                  className={'c-btn' + (props.lead && oneClick && oi === 0 ? ' primary' : '') + (picked[qi]?.includes(oi) ? ' on' : '')}
+                  className={'c-btn wrap' + (props.lead && oneClick && oi === 0 ? ' primary' : '') + (picked[qi]?.includes(oi) ? ' on' : '')}
                   onClick={() => pick(qi, oi)}
                 >
                   {o.label}
@@ -218,7 +218,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; le
         {options.length > 0 ? (
           <div className="btns">
             {options.map((o, i) => (
-              <button key={o} type="button" className={'c-btn' + (props.lead && i === 0 ? ' primary' : '')} disabled={busy} onClick={() => void answer({ choice: o })}>
+              <button key={o} type="button" className={'c-btn wrap' + (props.lead && i === 0 ? ' primary' : '')} disabled={busy} onClick={() => void answer({ choice: o })}>
                 {o}
               </button>
             ))}
