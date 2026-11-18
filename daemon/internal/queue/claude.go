@@ -106,11 +106,63 @@ func (q *Queue) deliverClaude(ctx context.Context, msg store.Message, sess store
 	default:
 		outcome = SocketUnknown
 	}
-	if _, e = q.st.SetClaudePhase(msg.ID, snapshot.WireID, snapshot.Target, string(outcome), q.now()); e != nil {
+	if outcome == SocketNotSent && !claudeAgeExpired(snapshot.Deadline, q.now()) && q.retryNotSent(msg.ID) {
+		// Nothing reached the socket, so a fresh send cannot duplicate it.
+		released, e := q.st.ReleaseClaudeNotSent(msg.ID, snapshot.WireID, snapshot.Target)
+		if e != nil {
+			slog.Warn("queue: release unsent Claude claim", "id", msg.ID, "error", e)
+		}
+		if released {
+			slog.Info("queue: Claude send not made; retrying", "id", msg.ID, "to", msg.ToSession)
+			return false, claudeWaitNotSentRetry
+		}
+	}
+	ok, e = q.st.SetClaudePhase(msg.ID, snapshot.WireID, snapshot.Target, string(outcome), q.now())
+	if e != nil {
 		slog.Warn("queue: Claude outcome persistence uncertain; retaining claim", "id", msg.ID, "error", e)
+	}
+	q.forgetNotSent(msg.ID)
+	if ok {
+		if reason := claudeFailReason(outcome); reason != "" {
+			q.announceFailure(msg, reason)
+		}
 	}
 	q.kickConfirmer()
 	return true, ""
+}
+
+// claudeNotSentTries bounds the sends of one message that end before any
+// byte is written (a recheck right before the write refused, or the socket
+// did not accept the connection); the last one fails the message.
+const claudeNotSentTries = 3
+
+// claudeWaitNotSentRetry is the wait reason of a message whose send was not
+// made and is tried again.
+const claudeWaitNotSentRetry = "claude_not_sent_retry"
+
+// retryNotSent counts one unsent send of id and reports whether another
+// send is allowed.
+func (q *Queue) retryNotSent(id int64) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.notSent[id]++
+	return q.notSent[id] < claudeNotSentTries
+}
+
+func (q *Queue) forgetNotSent(id int64) {
+	q.mu.Lock()
+	delete(q.notSent, id)
+	q.mu.Unlock()
+}
+
+// claudeFailReason is the message reason a terminal socket outcome writes
+// (see store.SetClaudePhase), or "" when the outcome does not fail it.
+func claudeFailReason(o SocketOutcome) string {
+	switch o {
+	case SocketNotSent, SocketDenied, SocketExpired:
+		return "claude_" + string(o)
+	}
+	return ""
 }
 
 // claudePrepareClass names a Prepare failure for a wait reason: a fixed

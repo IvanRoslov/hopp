@@ -1130,10 +1130,10 @@ func TestQueue_DeliveryFailureNotifiesSender(t *testing.T) {
 	}
 
 	// Verify the notice content.
-	if !strings.Contains(noticeMsg.Body, "delivery FAILED") {
-		t.Errorf("notice body = %q, want it to contain 'delivery FAILED'", noticeMsg.Body)
+	if !strings.Contains(noticeMsg.Body, "was not delivered") {
+		t.Errorf("notice body = %q, want it to contain 'was not delivered'", noticeMsg.Body)
 	}
-	if !strings.Contains(noticeMsg.Body, "message #1") {
+	if !strings.Contains(noticeMsg.Body, "Message 1 ") {
 		t.Errorf("notice body = %q, want it to contain message ID", noticeMsg.Body)
 	}
 	if !strings.Contains(noticeMsg.Body, "recv") {

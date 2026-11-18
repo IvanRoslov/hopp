@@ -43,6 +43,8 @@ type ClaudeSocketSender struct {
 	resolveAgent func(string) (agent.Agent, error)
 	probe        claudeinstance.Probe
 	heldWait     time.Duration
+	// failed is told about a message a receipt failed (denied, expired).
+	failed func(id int64, reason string)
 }
 
 func NewClaudeSocketSender(dir string) *ClaudeSocketSender {
@@ -52,6 +54,7 @@ func (s *ClaudeSocketSender) SetStore(st *store.Store) { s.st = st }
 func (s *ClaudeSocketSender) SetAgentResolver(resolve func(string) (agent.Agent, error)) {
 	s.resolveAgent = resolve
 }
+func (s *ClaudeSocketSender) SetFailureHandler(f func(id int64, reason string)) { s.failed = f }
 func (s *ClaudeSocketSender) SetReceipts(r *socketmsg.Receipts) {
 	s.receipts = r
 	if r != nil {
@@ -262,5 +265,8 @@ func (s *ClaudeSocketSender) handleReceipt(m socketmsg.Message) {
 	if phase == SocketUnknown {
 		return
 	}
-	_, _ = s.st.SetClaudePhase(v.MessageID, v.WireID, v.Target, string(phase), time.Now())
+	ok, _ := s.st.SetClaudePhase(v.MessageID, v.WireID, v.Target, string(phase), time.Now())
+	if reason := claudeFailReason(phase); ok && reason != "" && s.failed != nil {
+		s.failed(v.MessageID, reason)
+	}
 }

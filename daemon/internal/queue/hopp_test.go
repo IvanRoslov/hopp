@@ -54,7 +54,7 @@ func TestRecipientTerminalFailsAtOnceAndTellsSender(t *testing.T) {
 		}
 		return false
 	}, "failure notice queued to the sender")
-	if !strings.HasPrefix(notice.Body, "[hopp] delivery FAILED") || !strings.Contains(notice.Body, "recipient_gone") ||
+	if !strings.HasPrefix(notice.Body, "[hopp] Message 1 to recv was not delivered: recipient_gone.") || !strings.Contains(notice.Body, "recipient_gone") ||
 		!strings.Contains(notice.Body, "hopp send --wait") {
 		t.Errorf("notice = %q", notice.Body)
 	}

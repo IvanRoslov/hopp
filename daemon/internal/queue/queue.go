@@ -100,6 +100,9 @@ type Queue struct {
 
 	mu      sync.Mutex
 	workers map[string]bool
+	// notSent counts, per message, the Claude sends released after a
+	// not_sent outcome (see deliverClaude); guarded by mu.
+	notSent map[int64]int
 
 	ctxMu sync.RWMutex
 	// runCtx is the context passed to Run, stored so Wake-spawned delivery
@@ -124,6 +127,7 @@ func New(st *store.Store, b *bus.Bus, rt runtime.Runtime, cfg *config.Config, ge
 		confirmTimeout: nativeConfirmTimeout,
 		confirmKick:    make(chan struct{}, 1),
 		workers:        make(map[string]bool),
+		notSent:        make(map[int64]int),
 	}
 }
 
@@ -196,7 +200,23 @@ func (q *Queue) injectOpts(sess store.Session) runtime.InjectOpts {
 // SetSocketSender installs the Claude transport before Recover/Run. A nil
 // sender leaves selected Claude traffic unavailable without changing route.
 // It must not be called concurrently with delivery.
-func (q *Queue) SetSocketSender(s SocketSender) { q.socket = s }
+func (q *Queue) SetSocketSender(s SocketSender) {
+	q.socket = s
+	if r, ok := s.(interface{ SetFailureHandler(func(int64, string)) }); ok {
+		r.SetFailureHandler(q.announceFailureByID)
+	}
+}
+
+// announceFailureByID announces a message that a receipt failed after its
+// send (the recipient denied it or let it expire).
+func (q *Queue) announceFailureByID(id int64, reason string) {
+	msg, err := q.st.GetMessage(id)
+	if err != nil {
+		slog.Warn("queue: read failed message for notice", "id", id, "error", err)
+		return
+	}
+	q.announceFailure(msg, reason)
+}
 
 // claudeSelected chooses the route before any sender/probe availability check.
 func (q *Queue) claudeSelected(sess store.Session) bool {
@@ -940,6 +960,7 @@ func (q *Queue) fail(msg store.Message, reason string) {
 // announceFailure publishes message.failed and notifies a live sender; the
 // status itself has already been written by the caller.
 func (q *Queue) announceFailure(msg store.Message, reason string) {
+	q.forgetNotSent(msg.ID)
 	q.bus.Publish("message.failed", msg.ToSession, map[string]any{
 		"id":     msg.ID,
 		"to":     msg.ToSession,
@@ -975,7 +996,7 @@ func (q *Queue) notifySenderOfFailure(msg store.Message, reason string) {
 		FromSession: "", // system message — this prevents recursive notifications
 		ToSession:   msg.FromSession,
 		Body: fmt.Sprintf(
-			"[hopp] delivery FAILED: message #%d to %s (%s). The body is preserved in message history; use hopp send --wait for critical messages.",
+			"[hopp] Message %d to %s was not delivered: %s. Its text is kept in the message history; use hopp send --wait for critical messages.",
 			msg.ID, msg.ToSession, reason,
 		),
 	}
