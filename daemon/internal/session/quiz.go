@@ -345,7 +345,7 @@ func (m *Manager) AnswerQuiz(ctx context.Context, id string, answers []QuizAnswe
 		return validationErr("prompt_changed", "the question on the pane changed or closed; re-read the session")
 	}
 
-	go m.runQuizAnswer(id, h, steps, nil, nil)
+	m.startQuizAnswer(id, h, steps, nil, nil)
 
 	return nil
 }
@@ -382,13 +382,24 @@ func (m *Manager) clearQuizInFlight(id string) {
 	delete(m.quizInFlight, id)
 }
 
-// runQuizAnswer subscribes to the bus BEFORE sending any keystrokes — not
-// after, as an earlier version did — so a session.quiz_resolved that
-// arrives while the injector is still typing (or even before it starts) is
-// never missed: a background goroutine watches the subscription for it and
-// closes resolved, which sendQuizKeys checks between every keystroke to
-// abort early (see its doc comment) and which the final wait below also
-// honors immediately if already closed.
+// startQuizAnswer subscribes to the bus and only then starts runQuizAnswer
+// in its own goroutine. The subscription is made before the caller returns,
+// not inside the goroutine: a session.quiz_resolved published right after
+// AnswerQuiz returns (before the goroutine was scheduled) would otherwise be
+// missed, and the in-flight flag would stay set until the unconfirmed
+// timeout.
+func (m *Manager) startQuizAnswer(id string, h runtime.Handle, steps []keyStep, onSent, onSendFail func()) {
+	ch, cancel := m.bus.Subscribe()
+	go m.runQuizAnswer(id, h, steps, onSent, onSendFail, ch, cancel)
+}
+
+// runQuizAnswer gets a subscription made before any keystroke is sent (see
+// startQuizAnswer), so a session.quiz_resolved that arrives while the
+// injector is still typing (or even before it starts) is never missed: a
+// background goroutine watches the subscription for it and closes
+// resolved, which sendQuizKeys checks between every keystroke to abort
+// early (see its doc comment) and which the final wait below also honors
+// immediately if already closed.
 //
 // It sends steps to h (best-effort — a failure here is logged but does not
 // stop the resolved/unconfirmed wait, since even a partially-failed
@@ -401,10 +412,8 @@ func (m *Manager) clearQuizInFlight(id string) {
 // runs when the injection fails. The permission path uses them to record
 // when its keypress landed and to withdraw the journal's "answered from
 // chat" mark.
-func (m *Manager) runQuizAnswer(id string, h runtime.Handle, steps []keyStep, onSent, onSendFail func()) {
+func (m *Manager) runQuizAnswer(id string, h runtime.Handle, steps []keyStep, onSent, onSendFail func(), ch <-chan store.Event, cancel func()) {
 	defer m.clearQuizInFlight(id)
-
-	ch, cancel := m.bus.Subscribe()
 	defer cancel()
 
 	resolved := make(chan struct{})
