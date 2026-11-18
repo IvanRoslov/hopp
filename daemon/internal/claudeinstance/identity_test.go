@@ -80,12 +80,35 @@ func TestResolveNormalizesTimezone(t *testing.T) {
 	}
 }
 
-func TestJournalSlugPreservesOtherPathCharacters(t *testing.T) {
+func TestJournalSlugReplacesEveryOtherPathCharacter(t *testing.T) {
+	// Claude Code turns every character but ASCII letters and digits into
+	// "-", "_" included (see projectdir_test.go).
 	l, r, p := fixture()
 	r[0].CWD = "/work/project_name.v2"
 	got := Resolve(context.Background(), l, nil, r, p, "/tmp/projects")
-	if got.State != Verified || got.Identity.JournalPath != "/tmp/projects/-work-project_name-v2/329baa3b-27eb-40ed-82e1-1d9f3dde01e5.jsonl" {
+	if got.State != Verified || got.Identity.JournalPath != "/tmp/projects/-work-project-name-v2/329baa3b-27eb-40ed-82e1-1d9f3dde01e5.jsonl" {
 		t.Fatalf("wrong exact journal path: %+v", got)
+	}
+}
+
+// A worker's folder is <HOPP_HOME>/worktrees/<project>/<session id>. With a
+// 100-character id under a long HOPP_HOME the folder name passes 200
+// characters, and Claude Code cuts it and adds a hash; the journal must be
+// found in that folder. want is the folder Claude Code 2.1.327 made for this
+// exact path on 2026-11-18.
+func TestJournalFoundForA100CharacterIDUnderALongHome(t *testing.T) {
+	const home = "/private/tmp/claude-501/-Users-ivanroslov-projects-rocket2/1a6e86e2-5c2c-4ed5-b767-a67778f1d895/scratchpad/ccslug/hopp-home"
+	const project = "zepillo-app-prototype-with-a-long-name-x"
+	const id = "delaem-prototip-zepillo-app-vsya-informa-ui-audio-delaem-prototip-zepillo-app-vsya-informa-ui-audioz"
+	const want = "-private-tmp-claude-501--Users-ivanroslov-projects-rocket2-1a6e86e2-5c2c-4ed5-b767-a67778f1d895-scratchpad-ccslug-hopp-home-worktrees-zepillo-app-prototype-with-a-long-name-x-delaem-prototip-zepillo-a-d6wlp4"
+	if len(id) != 100 || len(project) != 40 {
+		t.Fatalf("fixture: id %d, project %d characters", len(id), len(project))
+	}
+	l, r, p := fixture()
+	r[0].CWD = home + "/worktrees/" + project + "/" + id
+	got := Resolve(context.Background(), l, nil, r, p, "/tmp/projects")
+	if got.State != Verified || got.Identity.JournalPath != "/tmp/projects/"+want+"/329baa3b-27eb-40ed-82e1-1d9f3dde01e5.jsonl" {
+		t.Fatalf("journal path %q, want it in %q", got.Identity.JournalPath, want)
 	}
 }
 

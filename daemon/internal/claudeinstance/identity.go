@@ -55,7 +55,6 @@ type Probe interface {
 }
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-var projectSlug = strings.NewReplacer("/", "-", ".", "-")
 
 func Resolve(ctx context.Context, launch Launch, pinned *Identity, registry []socketmsg.Session, probe Probe, projectsDir string) Resolution {
 	result := func(state Liveness, reason string) Resolution { return Resolution{State: state, Reason: reason} }
@@ -149,7 +148,7 @@ func Resolve(ctx context.Context, launch Launch, pinned *Identity, registry []so
 	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
 		cwd = resolved
 	}
-	id := Identity{HoppSessionID: launch.HoppSessionID, LaunchGeneration: launch.Generation, ClaudeSessionID: r.SessionID, PID: r.PID, ProcessStart: start.UTC(), PaneIdentity: r.Tmux, PeerProtocol: r.PeerProtocol, Kind: r.Kind, SocketPath: r.MessagingSocketPath, JournalPath: filepath.Join(projectsDir, projectSlug.Replace(cwd), r.SessionID+".jsonl")}
+	id := Identity{HoppSessionID: launch.HoppSessionID, LaunchGeneration: launch.Generation, ClaudeSessionID: r.SessionID, PID: r.PID, ProcessStart: start.UTC(), PaneIdentity: r.Tmux, PeerProtocol: r.PeerProtocol, Kind: r.Kind, SocketPath: r.MessagingSocketPath, JournalPath: filepath.Join(projectsDir, ProjectDirName(cwd), r.SessionID+".jsonl")}
 	if pinned != nil && !SameIdentity(*pinned, id) {
 		prior := *pinned
 		prior.ClaudeSessionID = id.ClaudeSessionID

@@ -1,14 +1,14 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-18 — fact 8 against the code on main (be30b99) and a live codex-cli 0.166.0 run; the rest 2026-11-15 against main (1ddc9bd) and the live runs of all five harnesses against ~/.hopp
+verified: 2026-11-18 — fact 1 against the code on main (a2c307c) on branch session-id-100; fact 8 against the code on main (be30b99) and a live codex-cli 0.166.0 run; the rest 2026-11-15 against main (1ddc9bd) and the live runs of all five harnesses against ~/.hopp
 ---
 
 # Sessions: launch, stop, restore, reconcile, remove
 
 A session is one tmux session running one agent in one folder. This leaf says how its life goes and which rules keep hopp off other people's tmux sessions.
 
-1. A launch takes an absolute path to an existing folder and either an id or none; without one, the id is made from the folder's name and gets `-2`, `-3`, … until it is free. A bad folder or a taken id refuses the launch before anything is recorded.
+1. A launch takes an absolute path to an existing folder and either an id (a-z, 0-9 and dashes, at most 100 characters) or none; without one, the id is made from the folder's name, cut to 40 characters, and gets `-2`, `-3`, … until it is free. A bad folder or a taken id refuses the launch before anything is recorded.
 2. The tmux session name equals the session id. The ported Claude Code delivery code finds an agent's pane by its session id, so a separate tmux name would mean editing the most carefully debugged code.
 3. An id counts as taken when hopp's own store has it in any state or a live tmux session already uses it, so hopp never picks the name of a rocket or human session and never adopts a tmux session it finds. An ended session's record keeps its id taken until `hopp rm` removes it; then the id can be used again. `GET /v1/session-ids/<id>` answers, without launching anything, whether an id is taken and whether a hopp session or a tmux session holds it.
 4. Before destroying a tmux session, hopp checks that the session's tmux environment carries the hopp session id. A tmux session that fails the check is left running, and the hopp session becomes `errored` with reason `tmux_not_owned`.

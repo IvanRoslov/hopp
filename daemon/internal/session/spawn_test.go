@@ -103,14 +103,14 @@ func TestSpawnIDTakenByForeignTmux(t *testing.T) {
 func TestSpawnRejectsBadID(t *testing.T) {
 	e := testManager(t)
 	dir := mkdir(t, "work")
-	for _, id := range []string{"Bad", "a b", "a_b", strings.Repeat("a", 61)} {
+	for _, id := range []string{"Bad", "a b", "a_b", strings.Repeat("a", 101)} {
 		_, err := e.m.Spawn(context.Background(), SpawnReq{ID: id, Dir: dir, Profile: fakeProfile()})
 		if validationCode(err) != "invalid_id" {
 			t.Errorf("id %q: err = %v, want invalid_id", id, err)
 		}
 	}
-	if _, err := e.m.Spawn(context.Background(), SpawnReq{ID: strings.Repeat("a", 60), Dir: dir, Profile: fakeProfile()}); err != nil {
-		t.Errorf("60-character id rejected: %v", err)
+	if _, err := e.m.Spawn(context.Background(), SpawnReq{ID: strings.Repeat("a", 100), Dir: dir, Profile: fakeProfile()}); err != nil {
+		t.Errorf("100-character id rejected: %v", err)
 	}
 }
 
