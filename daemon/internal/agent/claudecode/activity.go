@@ -12,6 +12,7 @@ import (
 
 	"github.com/IvanRoslov/hopp/internal/activity"
 	"github.com/IvanRoslov/hopp/internal/agent"
+	"github.com/IvanRoslov/hopp/internal/claudeinstance"
 )
 
 // freshWindow is how recent a transcript's mtime must be for the session to
@@ -22,19 +23,10 @@ const freshWindow = 30 * time.Second
 // when looking for the last JSONL record.
 const tailReadSize = 64 * 1024
 
-// slugify converts a worktree path into the directory name Claude Code uses
-// under ~/.claude/projects/. Observed scheme on this machine: every '/' and
-// '.' character in the path is replaced with '-', one-for-one (consecutive
-// separators are not collapsed). E.g.
-//
-//	/Users/ivanroslov/projects/rocket/.claude/worktrees/phase-2-activity
-//
-// becomes
-//
-//	-Users-ivanroslov-projects-rocket--claude-worktrees-phase-2-activity
+// slugify is the directory name Claude Code uses under <config>/projects/
+// for a worktree path (see claudeinstance.ProjectDirName for the rule).
 func slugify(worktreePath string) string {
-	replacer := strings.NewReplacer("/", "-", ".", "-")
-	return replacer.Replace(worktreePath)
+	return claudeinstance.ProjectDirName(worktreePath)
 }
 
 // configDir returns the base Claude Code config directory, honoring the

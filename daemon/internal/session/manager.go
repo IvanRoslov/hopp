@@ -20,8 +20,11 @@ import (
 // idPattern validates session ids: lowercase alphanumerics and hyphens only.
 var idPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 
-// maxIDLen is the longest session id; the id is also the tmux session name.
-const maxIDLen = 60
+// maxIDLen is the longest session id; the id is also the tmux session name
+// and the last part of a worker's folder. A Claude Code project folder name
+// over 200 characters is cut and hashed, which claudeinstance.ProjectDirName
+// follows, so a long id under a long HOPP_HOME still finds its journal.
+const maxIDLen = 100
 
 // ValidationError is returned by Manager methods for request-shaped
 // failures (bad input, unknown references, disallowed state transitions).

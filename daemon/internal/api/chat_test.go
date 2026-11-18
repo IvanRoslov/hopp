@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/IvanRoslov/hopp/internal/claudeinstance"
 	"io"
 	"net/http"
 	"net/url"
@@ -292,12 +293,10 @@ func appendChatLine(t *testing.T, path, line string) {
 	}
 }
 
-// chatSlugify mirrors claudecode's unexported slugify: every '/' and '.' in
-// the worktree path is replaced with '-', one-for-one. Used only to locate
-// the transcript file this test itself wrote.
+// chatSlugify is the Claude Code project folder name claudecode looks in,
+// used only to place the transcript file this test itself writes.
 func chatSlugify(worktreePath string) string {
-	replacer := strings.NewReplacer("/", "-", ".", "-")
-	return replacer.Replace(worktreePath)
+	return claudeinstance.ProjectDirName(worktreePath)
 }
 
 var _ = claudecode.New // keep the import (and its init() registration) live

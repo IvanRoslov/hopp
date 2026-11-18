@@ -3,10 +3,10 @@ package deepseek
 import (
 	"context"
 	"fmt"
+	"github.com/IvanRoslov/hopp/internal/claudeinstance"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +21,7 @@ func writeUsageFixture(t *testing.T, worktree, usage string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	slug := strings.NewReplacer("/", "-", ".", "-").Replace(resolved)
+	slug := claudeinstance.ProjectDirName(resolved)
 	dir := filepath.Join(configDir, "projects", slug)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
