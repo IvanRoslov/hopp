@@ -343,7 +343,8 @@ async function taskNew(ctx: CliContext, args: string[]): Promise<void> {
   const input: TaskInput = { projectSlug: project.slug, brief, orchestratorProfile: orch, workerProfiles: workers, pipelineId: pipeline?.id ?? null };
   if (typeof values.title === 'string' && values.title.trim()) input.title = values.title;
   if (starter) input.startedBy = starter;
-  const task = unwrap(await api.createTask(input));
+  // The launch's steps go to stderr, so --json output stays one document.
+  const task = unwrap(await api.createTask(input, (line) => ctx.err('hopp: ' + line)));
   if (values.json) {
     return ctx.out(JSON.stringify({ task: task.id, orchestrator: task.sessionId, orchestratorProfile: orch, workerProfiles: workers, pipeline: pipeline?.id ?? null, startedBy: task.startedBy, dir: task.dir, branch: task.branch }, null, 2));
   }

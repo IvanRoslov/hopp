@@ -69,6 +69,23 @@ async function breakIfStale(path: string): Promise<void> {
   await unlink(aside).catch(() => undefined);
 }
 
+// KeyedQueue runs the calls of one key one at a time, in the order they
+// came; calls of different keys do not wait for each other.
+export class KeyedQueue {
+  private tails = new Map<string, Promise<unknown>>();
+
+  run<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.tails.get(key) ?? Promise.resolve();
+    const p = prev.then(fn, fn);
+    const tail = p.catch(() => undefined);
+    this.tails.set(key, tail);
+    void tail.then(() => {
+      if (this.tails.get(key) === tail) this.tails.delete(key);
+    });
+    return p;
+  }
+}
+
 export async function withFileLock<T>(path: string, fn: () => Promise<T>, timeoutMs = 30_000): Promise<T> {
   const token = randomBytes(8).toString('hex');
   const body = `${process.pid} ${token}\n`;

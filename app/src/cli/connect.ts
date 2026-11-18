@@ -5,7 +5,7 @@
 import { request } from 'node:http';
 import { DaemonClient, resolveHoppHome, resolveSocketPath } from '../main/daemon/client';
 import { makeRunner } from '../main/shell/exec';
-import { privateDirOk, shellSocketPath, type CliMethod } from '../main/shell/server';
+import { privateDirOk, PROGRESS_HEADER, shellSocketPath, type CliMethod } from '../main/shell/server';
 import { ShellService } from '../main/shell/service';
 import { ShellStore } from '../main/shell/store';
 import type { ModelProfile, Result, ShellState, Task, TaskFeed, TaskInput } from '../shared/shell';
@@ -13,7 +13,8 @@ import type { ModelProfile, Result, ShellState, Task, TaskFeed, TaskInput } from
 export interface ShellApi {
   state(): Promise<ShellState>;
   listProfiles(): Promise<ModelProfile[]>;
-  createTask(input: TaskInput): Promise<Result<Task>>;
+  // say hears a line on each slow step of the launch.
+  createTask(input: TaskInput, say?: (line: string) => void): Promise<Result<Task>>;
   stopTask(id: string): Promise<Result<null>>;
   resumeTask(id: string): Promise<Result<null>>;
   finishTask(id: string): Promise<Result<null>>;
@@ -37,6 +38,8 @@ export function homes(env: Env): Homes {
 }
 
 export class AppError extends Error {}
+
+const LAUNCH_TIMEOUT_MS = 10 * 60_000;
 
 // RemoteShell calls the app over its socket.
 export class RemoteShell implements ShellApi {
@@ -74,8 +77,57 @@ export class RemoteShell implements ShellApi {
 
   state = () => this.call<ShellState>('state', []);
   listProfiles = () => this.call<ModelProfile[]>('listProfiles', []);
-  // A launch fetches (up to 60 s) and waits for the spawn (up to 120 s).
-  createTask = (input: TaskInput) => this.call<Result<Task>>('createTask', [input], 10 * 60_000);
+  // A launch fetches (up to 60 s a clone) and waits for the spawn (up to
+  // 120 s). With say, the app sends the launch's steps as it goes.
+  createTask = (input: TaskInput, say?: (line: string) => void) =>
+    say ? this.launch(input, say) : this.call<Result<Task>>('createTask', [input], LAUNCH_TIMEOUT_MS);
+
+  private launch(input: TaskInput, say: (line: string) => void): Promise<Result<Task>> {
+    return new Promise((resolve, reject) => {
+      const body = JSON.stringify({ args: [input] });
+      const req = request(
+        {
+          socketPath: this.socketPath, path: '/v1/shell/createTask', method: 'POST', timeout: LAUNCH_TIMEOUT_MS,
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), [PROGRESS_HEADER]: '1' },
+        },
+        (res) => {
+          const streamed = String(res.headers['content-type'] ?? '').startsWith('application/x-ndjson');
+          let buf = '';
+          let answer: { value?: Result<Task>; error?: { message?: string } } | undefined;
+          const take = (line: string) => {
+            if (!line.trim()) return;
+            let o: { progress?: unknown; value?: Result<Task>; error?: { message?: string } };
+            try {
+              o = JSON.parse(line);
+            } catch {
+              reject(new AppError('the app answered createTask with something that is not JSON'));
+              return;
+            }
+            if (streamed && typeof o.progress === 'string') say(o.progress);
+            else answer = o;
+          };
+          res.setEncoding('utf8');
+          res.on('data', (c: string) => {
+            buf += c;
+            if (!streamed) return;
+            let i: number;
+            while ((i = buf.indexOf('\n')) >= 0) {
+              take(buf.slice(0, i));
+              buf = buf.slice(i + 1);
+            }
+          });
+          res.on('end', () => {
+            take(buf);
+            if (res.statusCode === 200 && answer && 'value' in answer) resolve(answer.value as Result<Task>);
+            else reject(new AppError(answer?.error?.message ?? `the app answered createTask with status ${res.statusCode}`));
+          });
+        },
+      );
+      req.on('timeout', () => req.destroy(new AppError(`the app did not answer createTask within ${Math.round(LAUNCH_TIMEOUT_MS / 60_000)} min`)));
+      req.on('error', (err) => reject(err instanceof AppError ? err : new AppError(`the app's socket failed: ${err.message}`)));
+      req.end(body);
+    });
+  }
   stopTask = (id: string) => this.call<Result<null>>('stopTask', [id], 60_000);
   resumeTask = (id: string) => this.call<Result<null>>('resumeTask', [id], 3 * 60_000);
   finishTask = (id: string) => this.call<Result<null>>('finishTask', [id], 60_000);
