@@ -8,7 +8,9 @@ import type { Ask } from '../../shared/types';
 import { ArtifactTile } from '../artifacts/Tile';
 import { cleanError } from '../errors';
 import { Dropdown } from '../ui/Dropdown';
+import { AttachButton, AttachedPaths, AttachmentChips, useAttachments } from '../ui/Attachments';
 import { UpIcon } from '../ui/icons';
+import { splitAttachments } from '../../shared/attachments';
 import { Markdown, type MarkdownLinks } from '../ui/Markdown';
 import { plainLine } from '../ui/plainText';
 import { DismissAsk, OwnAnswer } from '../questions/AskActions';
@@ -118,6 +120,18 @@ export function Feed(props: FeedProps) {
   );
 }
 
+// HumanText: what the human wrote, with its Attached block drawn as chips
+// that open the files instead of as raw lines.
+function HumanText(props: { text: string; bridge: HoppBridge; links?: MarkdownLinks; className?: string }) {
+  const { text, items } = splitAttachments(props.text);
+  return (
+    <div className={props.className}>
+      {text && <Markdown variant="compact" text={text} links={props.links} />}
+      {items.length > 0 && <AttachedPaths items={items} files={props.bridge.shell} />}
+    </div>
+  );
+}
+
 function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) {
   const { entry: e, task } = props;
   // A link or image naming another artifact of the task opens it.
@@ -131,7 +145,7 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
     return (
       <article className="entry">
         <Meta who="You" ts={e.ts} tag="" />
-        <Markdown variant="compact" className="entry-body selectable" text={e.body} />
+        <HumanText className="entry-body selectable" text={e.body} bridge={props.bridge} />
       </article>
     );
   }
@@ -141,7 +155,11 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
     return (
       <article className="entry" data-stage={p.labels['hopp.stage'] ?? undefined}>
         <Meta who={author(p.from, task)} ts={p.created_at} tag={tag} />
-        <Markdown variant="compact" className="entry-body selectable" text={p.body} links={links} />
+        {p.from === '' ? (
+          <HumanText className="entry-body selectable" text={p.body} bridge={props.bridge} links={links} />
+        ) : (
+          <Markdown variant="compact" className="entry-body selectable" text={p.body} links={links} />
+        )}
         <Attachments refs={p.attachments} {...props} />
       </article>
     );
@@ -160,7 +178,7 @@ function EntryView(props: FeedProps & { entry: Entry; focused: number | null }) 
             {a.status !== 'withdrawn' && a.answer?.trim() ? (
               <>
                 {'You answered: ' + (a.choice?.trim() ? a.choice + ' — ' : '')}
-                <Markdown variant="compact" text={a.answer} links={links} />
+                <HumanText text={a.answer} bridge={props.bridge} links={links} />
               </>
             ) : (
               answerLine(a)
@@ -399,21 +417,27 @@ function Composer(props: { bridge: HoppBridge; task: Task; asks: Ask[]; stageFil
   const only = open.length === 1 ? open[0]! : null;
   const [notAnswerTo, setNotAnswerTo] = useState<number | null>(null);
   const asAnswer = only !== null && notAnswerTo !== only.id;
+  const att = useAttachments(props.bridge.shell);
+  const finished = props.task.status === 'finished';
   const send = async () => {
-    const t = text.trim();
-    if (!t || busy) return;
+    if ((!text.trim() && att.items.length === 0) || busy) return;
     setBusy(true);
     setError(null);
     try {
+      // A path that is gone stops the send; its chip says so.
+      if (!(await att.check())) return;
+      const t = att.compose(text);
       if (asAnswer && only) {
         await props.bridge.daemon.answerAsk(only.id, { answer: t });
         setText('');
+        att.clear();
         props.onSent();
         return;
       }
       const r = await props.bridge.shell.postToTask(props.task.id, t, props.stageFilter || undefined);
       if (r.ok) {
         setText('');
+        att.clear();
         props.onSent();
       } else setError(r.error.message);
     } catch (err) {
@@ -429,17 +453,25 @@ function Composer(props: { bridge: HoppBridge; task: Task; asks: Ask[]; stageFil
     }
   };
   return (
-    <div className="composer">
+    <div
+      className={'composer' + (att.dragging && !finished ? ' drop-on' : '')}
+      onDragOver={finished ? undefined : att.field.onDragOver}
+      onDragLeave={att.field.onDragLeave}
+      onDrop={finished ? undefined : att.field.onDrop}
+    >
       <textarea
         aria-label="Write to the orchestrator"
         placeholder="Write to the orchestrator"
         value={text}
         rows={2}
         onChange={(e) => setText(e.target.value)}
+        onPaste={att.field.onPaste}
         onKeyDown={onKey}
-        disabled={props.task.status === 'finished'}
+        disabled={finished}
       />
+      <AttachmentChips state={att} />
       <div className="composer-bar">
+        <AttachButton onClick={() => void att.pick()} disabled={finished} />
         {only && (
           <label className="as-answer" title={only.body}>
             <input type="checkbox" checked={asAnswer} onChange={(e) => setNotAnswerTo(e.target.checked ? null : only.id)} />
@@ -452,7 +484,7 @@ function Composer(props: { bridge: HoppBridge; task: Task; asks: Ask[]; stageFil
           </span>
         )}
         <span className="sp" />
-        <button type="button" className="c-btn send" aria-label="Send" disabled={busy || !text.trim()} onClick={() => void send()}>
+        <button type="button" className="c-btn send" aria-label="Send" disabled={busy || finished || (!text.trim() && att.items.length === 0)} onClick={() => void send()}>
           <UpIcon />
         </button>
       </div>

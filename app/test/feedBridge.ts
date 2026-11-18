@@ -3,6 +3,7 @@
 import { vi } from 'vitest';
 import type { HoppBridge } from '../src/shared/bridge';
 import type { Artifact, Pipeline, Post, Result, SubmissionAnswer, Task, TaskFeed } from '../src/shared/shell';
+import type { AttachmentInfo, PasteResult } from '../src/shared/attachments';
 import type { Ask } from '../src/shared/types';
 
 export const PIPELINE: Pipeline = {
@@ -61,8 +62,16 @@ export function feedBridge(feed: TaskFeed) {
       return x;
     }),
     artifactText: vi.fn(async (id: number): Promise<Result<string>> => ({ ok: true, value: `text of ${id}` })),
+    // Attachments: state.paths is what exists; state.picks is what each
+    // open dialog returns.
+    pickAttachments: vi.fn(async () => describe(state.picks.shift() ?? [])),
+    pasteAttachments: vi.fn(async (): Promise<PasteResult> => ({ kind: 'none', items: [] })),
+    describePaths: vi.fn(async (list: string[]) => describe(list)),
+    openAttachment: vi.fn(async (_path: string, _reveal: boolean) => ''),
   };
-  const state = { feed: structuredClone(feed), postFails: '' as string };
+  const describe = (list: string[]): AttachmentInfo[] =>
+    list.map((p) => (state.paths[p] ? { path: p, dir: state.paths[p] === 'dir' } : { path: p, dir: false, missing: true }));
+  const state = { feed: structuredClone(feed), postFails: '' as string, paths: {} as Record<string, 'file' | 'dir'>, picks: [] as string[][] };
   const bridge = {
     daemon: { answerAsk: calls.answerAsk, dismissAsk: calls.dismissAsk },
     terminal: {},
@@ -76,6 +85,11 @@ export function feedBridge(feed: TaskFeed) {
       answerSubmission: calls.answerSubmission,
       artifactUrl: (id: number) => `hopp-artifact://${id}`,
       artifactText: calls.artifactText,
+      pickAttachments: calls.pickAttachments,
+      pasteAttachments: calls.pasteAttachments,
+      describePaths: calls.describePaths,
+      openAttachment: calls.openAttachment,
+      pathForFile: (f: File) => '/dropped/' + f.name,
     },
   } as unknown as HoppBridge;
   return { bridge, calls, state, emit: (id: string) => listeners.forEach((l) => l(id)) };
