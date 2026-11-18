@@ -288,7 +288,7 @@ func (m *Manager) answerPermission(ctx context.Context, sess store.Session, quiz
 	}
 
 	started = true
-	go m.runQuizAnswer(sess.ID, h, steps, sent, withdraw)
+	m.startQuizAnswer(sess.ID, h, steps, sent, withdraw)
 	return nil
 }
 

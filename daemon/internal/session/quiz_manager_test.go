@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -149,7 +150,9 @@ func TestAnswerQuiz_SecondCallWhileInFlightIs409ThenClearsAfterResolved(t *testi
 	m, st, b, _ := quizTestManager(t)
 	// A real (short) sleep between keystrokes, so the first injection is
 	// still in flight when we fire the second AnswerQuiz call right after.
-	m.SetQuizTiming(func(time.Duration) { time.Sleep(20 * time.Millisecond) }, 2*time.Second)
+	// The unconfirmed timeout is far longer than the wait below, so only
+	// the resolved event can clear the flag in time.
+	m.SetQuizTiming(func(time.Duration) { time.Sleep(20 * time.Millisecond) }, time.Minute)
 	seedRunningSession(t, st, "sess1")
 	if err := st.SetPendingQuiz("sess1", quizManagerPendingJSON); err != nil {
 		t.Fatalf("SetPendingQuiz: %v", err)
@@ -164,25 +167,49 @@ func TestAnswerQuiz_SecondCallWhileInFlightIs409ThenClearsAfterResolved(t *testi
 
 	// Resolve the first injection so its in-flight flag clears.
 	b.Publish("session.quiz_resolved", "sess1", map[string]any{})
+	waitQuizAnswerAccepted(t, m, "sess1")
+}
 
-	// Poll AnswerQuiz until it stops returning quiz_answer_in_flight,
-	// proving the flag was cleared once the injection goroutine observed
-	// the resolved event and returned.
-	deadline := time.Now().Add(2 * time.Second)
+// waitQuizAnswerAccepted polls AnswerQuiz until it stops returning
+// quiz_answer_in_flight. The bound only catches a hang: callers set an
+// unconfirmed timeout far beyond it, so passing proves the resolved event,
+// not the timer, cleared the flag.
+func waitQuizAnswerAccepted(t *testing.T, m *Manager, id string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
 	for {
-		err := m.AnswerQuiz(context.Background(), "sess1", []QuizAnswer{{QuestionIndex: 0, OptionIndices: []int{0}}})
+		err := m.AnswerQuiz(context.Background(), id, []QuizAnswer{{QuestionIndex: 0, OptionIndices: []int{0}}})
 		if err == nil {
-			return // in-flight cleared, new quiz answer accepted
+			return
 		}
 		var verr *ValidationError
 		if !errors.As(err, &verr) || verr.Code != "quiz_answer_in_flight" {
 			t.Fatalf("unexpected error while polling: %v", err)
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for in-flight flag to clear after resolved")
+			t.Fatal("the in-flight flag did not clear after quiz_resolved: the event was missed")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// A quiz_resolved published right after AnswerQuiz returns, before the
+// injector goroutine had a chance to run, is not missed: AnswerQuiz
+// subscribes before it returns. With one P the goroutine cannot run before
+// the test publishes.
+func TestAnswerQuiz_ResolvedRightAfterReturnIsNotMissed(t *testing.T) {
+	m, st, b, _ := quizTestManager(t)
+	m.SetQuizTiming(func(time.Duration) {}, time.Minute)
+	seedRunningSession(t, st, "sess1")
+	if err := st.SetPendingQuiz("sess1", quizManagerPendingJSON); err != nil {
+		t.Fatalf("SetPendingQuiz: %v", err)
+	}
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	if err := m.AnswerQuiz(context.Background(), "sess1", []QuizAnswer{{QuestionIndex: 0, OptionIndices: []int{0}}}); err != nil {
+		t.Fatalf("AnswerQuiz: %v", err)
+	}
+	b.Publish("session.quiz_resolved", "sess1", map[string]any{})
+	waitQuizAnswerAccepted(t, m, "sess1")
 }
 
 // TestAnswerQuiz_ResolveMidInjectionAbortsRemainingKeys verifies MEDIUM
