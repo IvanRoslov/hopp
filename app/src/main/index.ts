@@ -6,6 +6,7 @@ import { DaemonClient, resolveHoppHome, resolveSocketPath } from './daemon/clien
 import { startDaemon } from './daemon/start';
 import { EventStream } from './daemon/stream';
 import { installCommands, installLine } from './cliInstall';
+import { electronFiles } from './attachments';
 import { registerIpc } from './ipc';
 import { makeRunner } from './shell/exec';
 import { registerShellIpc } from './shell/ipc';
@@ -92,6 +93,8 @@ const shellService = new ShellService({
   git: afterEnv(gitRunner),
   hopp: afterEnv(hoppRunner),
   gh: afterEnv(ghRunner),
+  files: electronFiles,
+  attachmentsDir: join(appHome, 'attachments'),
   pickFolder: async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const opts = { properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] };

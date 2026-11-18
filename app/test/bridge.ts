@@ -4,6 +4,7 @@
 import { copyProfileName, newProfileName } from '../src/shared/profileNames';
 import { vi } from 'vitest';
 import type { HoppBridge } from '../src/shared/bridge';
+import type { AttachmentInfo, PasteResult } from '../src/shared/attachments';
 import type {
   CopyProfileInput,
   NewProfileInput,
@@ -84,6 +85,11 @@ export interface ShellSeed {
     // Answers addGithubRepo; default: a managed clone under <home>/repos.
     add?: (fullName: string) => Promise<Result<{ path: string }>>;
   };
+  // Attachments: the paths that exist ('dir' for a folder), what each open
+  // dialog returns, and what each paste does.
+  paths?: Record<string, 'file' | 'dir'>;
+  picks?: string[][];
+  pastes?: PasteResult[];
 }
 
 // fakeShell keeps a ShellState in memory and applies changes the way the main
@@ -94,6 +100,11 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
   const snapshot = (): ShellState => structuredClone(st);
   const changed = () => cbs.forEach((cb) => cb(snapshot()));
   const folders = [...(seed.folders ?? [])];
+  const paths: Record<string, 'file' | 'dir'> = { ...seed.paths };
+  const picks = [...(seed.picks ?? [])];
+  const pastes = [...(seed.pastes ?? [])];
+  const describe = (list: string[]): AttachmentInfo[] =>
+    list.map((p) => (paths[p] ? { path: p, dir: paths[p] === 'dir' } : { path: p, dir: false, missing: true }));
   let tools: ToolCatalog = seed.tools ?? { tools: [], broken: [] };
   let rules: ToolRules = seed.rules ?? { text: '', modifiedAt: 0 };
   let lessons: Lesson[] = seed.lessons ?? [];
@@ -233,6 +244,11 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
       return ok(null);
     }),
     pickFolder: vi.fn(async () => (folders.length ? folders.shift()! : null)),
+    pickAttachments: vi.fn(async () => describe(picks.shift() ?? [])),
+    pasteAttachments: vi.fn(async (): Promise<PasteResult> => pastes.shift() ?? { kind: 'none', items: [] }),
+    describePaths: vi.fn(async (list: string[]) => describe(list)),
+    openAttachment: vi.fn(async (_path: string, _reveal: boolean) => ''),
+    pathForFile: vi.fn((file: File) => '/dropped/' + file.name),
     // Enabled first, each group in position order, as the main process does.
     listProfiles: vi.fn(async () =>
       structuredClone(profiles).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.position - b.position),
@@ -446,6 +462,11 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
     st,
     feeds,
     feedChanged,
+    // Which paths exist, for attachments (a file deleted before sending).
+    setPath(p: string, kind: 'file' | 'dir' | null) {
+      if (kind) paths[p] = kind;
+      else delete paths[p];
+    },
     set(next: Partial<ShellState>) {
       Object.assign(st, next);
       changed();
@@ -512,6 +533,7 @@ export function fakeBridge(
     feeds: fs?.feeds,
     feedChanged: fs?.feedChanged,
     setShell: fs?.set,
+    setPath: fs?.setPath,
     setState(s: StreamState) {
       db.state = s;
       stateCbs.forEach((cb) => cb(s));

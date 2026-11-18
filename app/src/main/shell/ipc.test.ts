@@ -30,7 +30,7 @@ afterEach(async () => {
 });
 
 describe('shell IPC', () => {
-  it('covers every bridge method but the listeners and artifactUrl', () => {
+  it('covers every bridge method but the listeners, artifactUrl and pathForFile', () => {
     const bridgeKeys: (keyof ShellBridge)[] = [
       'state', 'onChanged', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
       'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
@@ -38,8 +38,9 @@ describe('shell IPC', () => {
       'listLessons', 'closeLesson', 'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
       'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText', 'githubStatus', 'listGithubRepos', 'addGithubRepo', 'onProfilesChanged', 'setProfileEnabled', 'updateProfile',
       'setDefaultProfile', 'removeProfile', 'moveProfile', 'modelCatalog', 'importModels', 'addProfile', 'copyProfile',
+      'pickAttachments', 'pasteAttachments', 'describePaths', 'openAttachment', 'pathForFile',
     ];
-    const local = ['onChanged', 'onFeedChanged', 'onProfilesChanged', 'artifactUrl'];
+    const local = ['onChanged', 'onFeedChanged', 'onProfilesChanged', 'artifactUrl', 'pathForFile'];
     expect([...SHELL_METHODS].sort()).toEqual(bridgeKeys.filter((k) => !local.includes(k)).sort());
   });
 

@@ -55,6 +55,8 @@ import {
   type WorkerFile,
 } from './startText';
 import type { ShellStore } from './store';
+import { Attachments, type FileDeps } from './attachments';
+import { attachmentName, splitAttachments, type AttachmentInfo, type PasteResult } from '../../shared/attachments';
 
 export interface ShellDeps {
   home: string;
@@ -68,6 +70,12 @@ export interface ShellDeps {
   gh?: Runner;
   // Bound of the fetch before a task on a managed clone (default 60 s).
   fetchTimeoutMs?: number;
+  // The dialog, clipboard and previews for attachments; absent outside
+  // the app (the CLI's socket never offers them).
+  files?: FileDeps;
+  // Where a pasted image is saved (default <home>/attachments; the app
+  // passes <app home>/attachments).
+  attachmentsDir?: string;
 }
 
 const LIVE = new Set(['spawning', 'running']);
@@ -130,7 +138,10 @@ async function writeAtomic(path: string, text: string): Promise<void> {
 export function taskTitle(input: Pick<TaskInput, 'title' | 'brief'>): string {
   const t = (input.title ?? '').trim();
   if (t) return t.split('\n')[0]!.slice(0, 200);
-  const first = [...(input.brief ?? '').trim().split('\n')[0]!.trim()];
+  // A brief that is only attachments is named after the first of them.
+  const { text, items } = splitAttachments((input.brief ?? '').trim());
+  const firstLine = text ? text.split('\n')[0]!.trim() : items.length ? attachmentName(items[0]!.path) : '';
+  const first = [...firstLine];
   if (first.length <= TITLE_MAX) return first.join('');
   // Room for the ellipsis; back up to the last space if there is one.
   const head = first.slice(0, TITLE_MAX - 1).join('');
@@ -156,9 +167,11 @@ export class ShellService {
 
   private readonly github: Github;
   private readonly profileListeners = new Set<() => void>();
+  private readonly attachments: Attachments;
 
   constructor(private readonly d: ShellDeps) {
     this.now = d.now ?? (() => Math.floor(Date.now() / 1000));
+    this.attachments = new Attachments(d.files, d.attachmentsDir ?? join(d.home, 'attachments'));
     const noGh: Runner = async () => {
       throw Object.assign(new RunError('program not found on PATH'), { code: 'ENOENT' });
     };
@@ -179,6 +192,29 @@ export class ShellService {
 
   pickFolder(): Promise<string | null> {
     return this.d.pickFolder();
+  }
+
+  // ---- attachments ----------------------------------------------------------
+
+  // The open dialog for attachments: files and folders, several at once.
+  pickAttachments(): Promise<AttachmentInfo[]> {
+    return this.attachments.pick();
+  }
+
+  // What a paste attaches: copied files and folders, or a pasted image saved
+  // under <app home>/attachments.
+  pasteAttachments(): Promise<PasteResult> {
+    return this.attachments.paste();
+  }
+
+  // Each path as it is now: a folder or a file, missing or not.
+  describePaths(paths: string[]): Promise<AttachmentInfo[]> {
+    return this.attachments.describe(paths);
+  }
+
+  // Opens an attached path (reveal: shows it in Finder); '' or a message.
+  openAttachment(path: string, reveal: boolean): Promise<string> {
+    return this.attachments.open(path, reveal);
   }
 
   // ---- projects -----------------------------------------------------------

@@ -160,6 +160,47 @@ describe('new task', () => {
     expect(within(field).getByRole('alert').textContent).toBe('A session named fix-it exists.');
   });
 
+  it('attaches files and folders to the brief, and starts with them as its Attached block', async () => {
+    const f = fakeBridge({
+      shell: {
+        state: { projects: [makeProject('hopp', { name: 'hopp', orchestratorRepo: '/repos/hopp' })] },
+        profiles: [makeProfile('opus')],
+        paths: { '/Users/me/spec.md': 'file', '/Users/me/designs': 'dir' },
+        picks: [['/Users/me/spec.md', '/Users/me/designs']],
+      },
+    });
+    await mount(f);
+    fireEvent.click(screen.getByRole('button', { name: 'Attach files or folders' }));
+    await flush();
+    expect(within(screen.getByTestId('attachments')).getAllByRole('button', { name: /^Remove / }).length).toBe(2);
+    // Attachments alone are enough to start.
+    fireEvent.click(screen.getByRole('button', { name: 'Start the task' }));
+    await flush();
+    expect(f.shell!.createTask).toHaveBeenCalledWith({
+      projectSlug: 'hopp', brief: 'Attached:\n- /Users/me/spec.md\n- /Users/me/designs/', orchestratorProfile: 'opus', workerProfiles: ['opus'],
+    });
+  });
+
+  it('does not start when an attached file is gone, and says which', async () => {
+    const f = fakeBridge({
+      shell: {
+        state: { projects: [makeProject('hopp', { name: 'hopp', orchestratorRepo: '/repos/hopp' })] },
+        profiles: [makeProfile('opus')],
+        paths: { '/Users/me/spec.md': 'file' },
+        picks: [['/Users/me/spec.md']],
+      },
+    });
+    await mount(f);
+    type(screen.getByLabelText('What needs to be done?'), 'Do it');
+    fireEvent.click(screen.getByRole('button', { name: 'Attach files or folders' }));
+    await flush();
+    f.setPath!('/Users/me/spec.md', null);
+    fireEvent.click(screen.getByRole('button', { name: 'Start the task' }));
+    await flush();
+    expect(f.shell!.createTask).not.toHaveBeenCalled();
+    expect(within(screen.getByTestId('attachments')).getByRole('alert').textContent).toMatch(/spec\.md is not there any more/);
+  });
+
   it('Cmd+Enter starts the task', async () => {
     const f = seed();
     await mount(f);

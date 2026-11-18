@@ -8,7 +8,9 @@ import { cleanError } from '../errors';
 import { Checkbox } from '../ui/Checkbox';
 import { Dropdown } from '../ui/Dropdown';
 import { Field } from '../ui/Field';
+import { AttachButton, AttachmentChips, useAttachments } from '../ui/Attachments';
 import { UpIcon } from '../ui/icons';
+import { attachmentName } from '../../shared/attachments';
 import { RepoLabel, useRepoName } from './repos';
 
 const MORE_FIELDS = new Set(['title', 'sessionName', 'extraSystemPrompt']);
@@ -56,6 +58,7 @@ export function NewTask(props: {
   const firstProject = props.projects.find((p) => p.slug === props.initialProject) ?? props.projects.find((p) => p.slug === last.project) ?? props.projects[0];
 
   const [brief, setBrief] = useState(props.initialBrief ?? '');
+  const att = useAttachments(props.shell);
   const [project, setProject] = useState(firstProject?.slug ?? '');
   const [orchestrator, setOrchestrator] = useState('');
   const [workers, setWorkers] = useState<string[] | null>(null);
@@ -93,16 +96,30 @@ export function NewTask(props: {
 
   const proj = props.projects.find((p) => p.slug === project);
   const pipeline = props.pipelines.find((p) => p.id === pipelineId) ?? null;
-  const effectiveTitle = title.trim() || titleFrom(brief);
+  // A task of attachments only is named after the first of them.
+  const briefTitle = titleFrom(brief) || (att.items[0] ? attachmentName(att.items[0].path) : '');
+  const effectiveTitle = title.trim() || briefTitle;
   const fieldError = (f: string) => (error?.field === f ? error.message : undefined);
-  const ready = brief.trim() !== '' && !!proj && !!orchestrator && !busy;
+  const ready = (brief.trim() !== '' || att.items.length > 0) && !!proj && !!orchestrator && !busy;
 
   const submit = async () => {
     if (!ready || !proj || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError(null);
-    const input: TaskInput = { projectSlug: proj.slug, brief: brief.trim(), orchestratorProfile: orchestrator, workerProfiles: workers ?? [] };
+    // A path that is gone stops the start; its chip says so.
+    let present = false;
+    try {
+      present = await att.check();
+    } catch (err) {
+      setError({ code: 'failed', message: cleanError(err) });
+    }
+    if (!present) {
+      inFlight.current = false;
+      setBusy(false);
+      return;
+    }
+    const input: TaskInput = { projectSlug: proj.slug, brief: att.compose(brief), orchestratorProfile: orchestrator, workerProfiles: workers ?? [] };
     if (title.trim()) input.title = title.trim();
     if (sessionName.trim()) input.sessionName = sessionName.trim();
     if (extra.trim()) input.extraSystemPrompt = extra.trim();
@@ -143,13 +160,19 @@ export function NewTask(props: {
             void submit();
           }}
         >
-          <div className="newbox">
+          <div
+            className={'newbox' + (att.dragging ? ' drop-on' : '')}
+            onDragOver={att.field.onDragOver}
+            onDragLeave={att.field.onDragLeave}
+            onDrop={att.field.onDrop}
+          >
             <textarea
               aria-label="What needs to be done?"
               placeholder="What needs to be done?"
               value={brief}
               autoFocus
               onChange={(e) => setBrief(e.target.value)}
+              onPaste={att.field.onPaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
@@ -157,6 +180,7 @@ export function NewTask(props: {
                 }
               }}
             />
+            <AttachmentChips state={att} />
             <div className="bar">
               <div className="picks">
               <Dropdown
@@ -192,6 +216,7 @@ export function NewTask(props: {
                 onChange={setPipelineId}
               />
               </div>
+              <AttachButton onClick={() => void att.pick()} />
               <button type="button" className={'c-btn' + (more ? ' on' : '')} aria-expanded={more} onClick={() => setMore((m) => !m)}>
                 More
               </button>
@@ -228,7 +253,7 @@ export function NewTask(props: {
               <Field
                 label="Title"
                 value={title}
-                placeholder={titleFrom(brief) || 'The first line of the task'}
+                placeholder={briefTitle || 'The first line of the task'}
                 error={fieldError('title')}
                 onChange={(e) => setTitle(e.target.value)}
               />

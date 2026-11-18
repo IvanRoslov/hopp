@@ -3,6 +3,7 @@
 // sessions. This file is the contract between the main process (which
 // implements ShellBridge) and the page (which only calls it).
 
+import type { AttachmentInfo, PasteResult } from './attachments';
 import type { Ask, Waiting } from './types';
 
 // ---- results ---------------------------------------------------------------
@@ -424,6 +425,22 @@ export interface ShellBridge {
   removeProject(slug: string): Promise<Result<null>>;
   // Opens the native folder dialog; null when cancelled.
   pickFolder(): Promise<string | null>;
+
+  // Attachments (see shared/attachments.ts): absolute paths, never copied.
+  // The open dialog for files and folders, several at once; [] if cancelled.
+  pickAttachments(): Promise<AttachmentInfo[]>;
+  // What a paste attaches: copied files and folders, else a pasted image
+  // saved under <app home>/attachments/ and kept there; 'none' leaves the
+  // paste to the page.
+  pasteAttachments(): Promise<PasteResult>;
+  // Each path as it is now: a folder or a file, missing or not, a preview
+  // for an image.
+  describePaths(paths: string[]): Promise<AttachmentInfo[]>;
+  // Opens a path in its app (a folder in Finder), or with reveal shows it in
+  // Finder; resolves to '' or a message saying why it could not.
+  openAttachment(path: string, reveal: boolean): Promise<string>;
+  // The path of a file or folder dropped on the page (no IPC).
+  pathForFile(file: File): string;
 
   // Enabled profiles first, in the daemon's order.
   listProfiles(): Promise<ModelProfile[]>;

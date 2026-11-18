@@ -487,6 +487,10 @@ describe('task launch', () => {
     expect(taskTitle({ brief: 'a'.repeat(60) })).toBe('a'.repeat(60));
     expect(taskTitle({ brief: 'Fix the header, then the footer' })).toBe('Fix the header, then the footer');
     expect(taskTitle({ title: ' Given ', brief: 'x' })).toBe('Given');
+    // A brief of attachments only is named after the first one; with text,
+    // the text's first line names it.
+    expect(taskTitle({ brief: 'Attached:\n- /Users/me/shot.png\n- /Users/me/src/' })).toBe('shot.png');
+    expect(taskTitle({ brief: 'Read this\n\nAttached:\n- /a/b.md' })).toBe('Read this');
     const long = 'x'.repeat(45);
     expect(await uniqueId(long, (c) => c === 'x'.repeat(40))).toBe('x'.repeat(38) + '-2');
     expect(await uniqueId('a-b-', () => false)).toBe('a-b');
