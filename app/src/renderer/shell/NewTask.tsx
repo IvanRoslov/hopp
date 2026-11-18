@@ -158,6 +158,7 @@ export function NewTask(props: {
               }}
             />
             <div className="bar">
+              <div className="picks">
               <Dropdown
                 label={`Project: ${proj?.name ?? 'choose'}`}
                 testId="pick-project"
@@ -190,7 +191,7 @@ export function NewTask(props: {
                 value={pipelineId}
                 onChange={setPipelineId}
               />
-              <span className="sp" />
+              </div>
               <button type="button" className={'c-btn' + (more ? ' on' : '')} aria-expanded={more} onClick={() => setMore((m) => !m)}>
                 More
               </button>
