@@ -142,6 +142,9 @@ app.whenReady().then(() => {
   );
   void shellService.seedPipelines().catch((err) => console.error('hopp: could not add the starter pipelines:', err));
   // Only files inside $HOPP_HOME/artifacts are served; anything else is 404.
+  // An HTML artifact may run its own inline scripts (a prototype needs them)
+  // in an origin of its own: no network, no scripts from elsewhere, no access
+  // to the app.
   protocol.handle(ARTIFACT_SCHEME, async (req) => {
     const id = artifactIdOf(req.url);
     if (id === null) return new Response('not found', { status: 404 });
@@ -151,7 +154,7 @@ app.whenReady().then(() => {
       const headers = new Headers(r.headers);
       headers.set('Content-Type', f.mime);
       headers.set('X-Content-Type-Options', 'nosniff');
-      headers.set('Content-Security-Policy', "default-src 'none'; img-src hopp-artifact: data:; media-src hopp-artifact:; style-src 'unsafe-inline'; sandbox");
+      headers.set('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; img-src hopp-artifact: data: blob:; media-src hopp-artifact: data: blob:; font-src data:; style-src 'unsafe-inline'; sandbox allow-scripts");
       return new Response(r.body, { status: r.status, headers });
     } catch (err) {
       console.warn(`hopp: artifact ${id} not served: ${(err as Error).message}`);

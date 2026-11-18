@@ -26,6 +26,11 @@ export function createWindow(): BrowserWindow {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
+  // An HTML artifact runs its scripts in a frame; the frame may move only
+  // between artifacts, so a script cannot carry data out by navigating.
+  win.webContents.on('will-frame-navigate', (e) => {
+    if (!e.url.startsWith('hopp-artifact:')) e.preventDefault();
+  });
 
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
   if (devUrl) void win.loadURL(devUrl);

@@ -154,7 +154,7 @@ function Show(props: { shell: ShellBridge; artifact: Artifact; source: boolean; 
   if (failed === a.id) return <div className="q-empty">The file of {a.name}@{a.version} could not be loaded.</div>;
   if (kind === 'image') return <img className="viewer-img" src={url} alt={a.name} onError={() => setFailed(a.id)} />;
   if (kind === 'video') return <video className="viewer-video" src={url} controls preload="metadata" onError={() => setFailed(a.id)} />;
-  if (kind === 'html') return <iframe className="viewer-frame" src={url} title={a.name} sandbox="" />;
+  if (kind === 'html') return <iframe className="viewer-frame" src={url} title={a.name} sandbox="allow-scripts" />;
   if (kind === 'text') return <TextView shell={props.shell} artifact={a} source={props.source} links={props.links} />;
   return <div className="q-empty">This file cannot be shown here.</div>;
 }
