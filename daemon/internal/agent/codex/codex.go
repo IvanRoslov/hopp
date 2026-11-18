@@ -235,10 +235,21 @@ func lockFile(lockPath string) (func(), error) {
 // hide the session's HOPP_* variables (feature #5707, Q1).
 // `-c check_for_update_on_startup=false` removes the interactive update
 // screen that would otherwise swallow the first message.
+//
+// `-c allow_login_shell=false` makes codex run each command in a plain
+// shell (`zsh -c`) instead of a login shell (`zsh -lc`), its default. A
+// login shell reads the user's whole profile on every command, which took
+// about 20 seconds per command on the author's machine (codex-cli 0.166.0,
+// checked live: `/bin/zsh -lc` without the setting, `/bin/zsh -c` with it).
+// The command inherits the session's environment (the tmux server's, plus
+// the HOPP_* variables), which found codex itself on PATH; hopp sessions
+// that ran commands with login:false found hopp on PATH and HOPP_PARENT_ID
+// set (hopp lessons #8, #13, #14, #41). A call that still asks for
+// login=true is refused by codex with a message saying to drop it.
 func (c *Codex) LaunchCommand(spec agent.LaunchSpec) []string {
 	cmd := []string{
 		"codex", "--no-alt-screen", "--sandbox", "danger-full-access", "--ask-for-approval", "never",
-		"--no-daemon", "-c", "check_for_update_on_startup=false",
+		"--no-daemon", "-c", "check_for_update_on_startup=false", "-c", "allow_login_shell=false",
 	}
 
 	if spec.Model != "" {
