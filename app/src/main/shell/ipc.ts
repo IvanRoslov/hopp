@@ -2,7 +2,7 @@
 // page are checked here; a malformed call gets an error back (a Result error
 // for methods that return a Result, a rejected promise for the others) and
 // never throws in the main process.
-import type { CopyProfileInput, LongAgentInput, NewProfileInput, PipelineInput, PipelineStageInput, ProfileUpdate, ProjectInput, Result, SubmissionAnswer, TaskInput } from '../../shared/shell';
+import type { CopyProfileInput, LongAgentInput, NewProfileInput, PipelineInput, PipelineStageInput, ProfileUpdate, ProjectInput, Result, SubmissionAnswer, Task, TaskInput } from '../../shared/shell';
 import { SHELL_CHANGED, SHELL_METHODS, SHELL_PROFILES_CHANGED, shellChannel, type ShellMethod } from '../../shared/ipc';
 import { errorResult, type ShellService } from './service';
 
@@ -224,6 +224,17 @@ export async function callShell(svc: ShellService, method: string, args: unknown
   } catch (err) {
     if (!h.result) throw err instanceof Error ? err : new Error(String(err));
     if (err instanceof ArgError) return { ok: false, error: { code: 'bad_request', message: err.message } } satisfies Result<never>;
+    return errorResult(err);
+  }
+}
+
+// createTaskSaying is createTask as callShell runs it, with say hearing the
+// launch's steps.
+export async function createTaskSaying(svc: ShellService, args: unknown[], say: (line: string) => void): Promise<Result<Task>> {
+  try {
+    return await svc.createTask(taskInput(args[0]), say);
+  } catch (err) {
+    if (err instanceof ArgError) return { ok: false, error: { code: 'bad_request', message: err.message } };
     return errorResult(err);
   }
 }

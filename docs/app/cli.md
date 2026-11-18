@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — against the code on main (670ba12): app/src/cli (EXIT 1/2/3, the role refusal, the worker defaults), main/shell/server.ts (shell.sock 0600, /tmp/hopp-<uid>/), main/cliInstall.ts (ELECTRON_RUN_AS_NODE), startText.ts (started by)
+verified: 2026-11-18 — fact 5 by make app-test on task-new-latency (launchQueue.test.ts); the rest against the code on main (670ba12): app/src/cli (EXIT 1/2/3, the role refusal, the worker defaults), main/shell/server.ts (shell.sock 0600, /tmp/hopp-<uid>/), main/cliInstall.ts (ELECTRON_RUN_AS_NODE), startText.ts (started by)
 ---
 
 # The app's commands: hopp project, hopp pipeline, hopp task
@@ -15,7 +15,7 @@ A long-lived agent uses projects, pipelines and tasks the way the human does in 
 
 ### Starting a task
 
-5. `hopp task new --project <p>` takes the brief from `--brief`, `--file` or stdin and prints the task, its orchestrator's session and the profiles it chose. The orchestrator gets the daemon's default profile unless one is given; workers get the worker profiles of the project's last task when all are still enabled, else the orchestrator's profile.
+5. `hopp task new --project <p>` takes the brief from `--brief`, `--file` or stdin, says each slow step on stderr while it runs (fetching the clones, making the worktree, starting the orchestrator; an app older than this command answers without them) and prints the task, its orchestrator's session and the profiles it chose. The orchestrator gets the daemon's default profile unless one is given; workers get the worker profiles of the project's last task when all are still enabled, else the orchestrator's profile.
 6. Run inside a hopp session, `task new` records that session (`$HOPP_SESSION_ID`) as the task's starter and labels the orchestrator `hopp.started_by`. The orchestrator is told to send the starter its questions about the request and its progress reports with `hopp send`, while the human's decisions and stage approvals still go to the human; the command tells the starter the same, and the app's task details show "Started by".
 7. A session labelled `hopp.role=orchestrator` or `hopp.role=worker` cannot start a task: the command and the app's service both refuse, since tasks are not started from inside tasks. Only a long-lived agent's start text lists these commands.
 

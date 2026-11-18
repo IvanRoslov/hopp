@@ -41,6 +41,7 @@ import type { Ask, DaemonEvent, Session, Waiting } from '../../shared/types';
 import { DaemonError, DaemonUnavailable, type DaemonClient } from '../daemon/client';
 import { RunError, type Runner } from './exec';
 import { Github } from './github';
+import { KeyedQueue } from './lock';
 import { copyProfileName, importProfileName, newProfileName, PROFILE_NAME_RE, uniqueProfileName } from './profiles';
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
@@ -88,6 +89,19 @@ function looksText(mime: string, buf: Buffer): boolean {
   return !buf.subarray(0, 8192).includes(0);
 }
 export const MAX_ID = 40;
+// How many managed clones a launch fetches at once.
+const FETCHES_AT_ONCE = 6;
+// The queue key of id choices; clone paths are absolute, so it is never one.
+const CLAIM = 'claim';
+
+// eachLimited runs fn over items, at most n at a time.
+async function eachLimited<T>(items: T[], n: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) await fn(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, lane));
+}
 export const TITLE_MAX = 60;
 
 const ok = <T>(value: T): Result<T> => ({ ok: true, value });
@@ -266,17 +280,25 @@ export class ShellService {
 
   // ---- tasks --------------------------------------------------------------
 
-  // Launches run one at a time, so two launches never pick the same id.
-  private launches: Promise<unknown> = Promise.resolve();
+  // Launches run side by side. What must not overlap waits in a queue: the
+  // choice of an id (the CLAIM key), and git writes in one clone (its path:
+  // a fetch, a worktree add and their undo), so the slow git work of one
+  // task never holds a read or a task in another repository.
+  private queues = new KeyedQueue();
 
-  createTask(input: TaskInput): Promise<Result<Task>> {
-    const run = () => guard(() => this.launchTask(input));
-    const p = this.launches.then(run, run);
-    this.launches = p.catch(() => undefined);
-    return p;
+  // say, when given, hears a line on each slow step of the launch.
+  createTask(input: TaskInput, say?: (line: string) => void): Promise<Result<Task>> {
+    const tell = (line: string) => {
+      try {
+        say?.(line);
+      } catch {
+        // A listener's failure is not the launch's.
+      }
+    };
+    return guard(() => this.launchTask(input, tell));
   }
 
-  private async launchTask(input: TaskInput): Promise<Result<Task>> {
+  private async launchTask(input: TaskInput, say: (line: string) => void): Promise<Result<Task>> {
     const st = await this.d.store.read();
     const project = st.projects.find((p) => p.slug === input.projectSlug);
     if (!project) return fail('project_not_found', 'Choose a project', 'projectSlug');
@@ -338,7 +360,6 @@ export class ShellService {
       if (project.orchestratorRepo) return this.branchExists(project.orchestratorRepo, 'hopp/' + c);
       return false;
     };
-    let id = await uniqueId(base, isTaken);
 
     // Tools sections, one per harness, before anything is written.
     const harnesses = [...new Set([orch.agent, ...workers.map((w) => w.agent)])];
@@ -347,37 +368,47 @@ export class ShellService {
 
     // Managed clones: fetched first, so the task and its workers start from
     // the remote's default branch; a plain folder starts from its HEAD.
+    // Several clones are fetched at once.
     let worktreeBase = 'HEAD';
     let orchFetch: { fetched: boolean; warning: string } = { fetched: false, warning: '' };
     const repoBases: Record<string, string> = {};
-    for (const repo of allowedRepos(project)) {
-      if (!this.github.isManaged(repo)) continue;
+    const managed = allowedRepos(project).filter((r) => this.github.isManaged(r));
+    let orchError = '';
+    const fetchStart = Date.now();
+    if (managed.length) say(`fetching ${managed.length === 1 ? 'the clone' : `${managed.length} clones`} of the project from GitHub…`);
+    await eachLimited(managed, FETCHES_AT_ONCE, async (repo) => {
       try {
-        const prep = await this.github.prepare(repo);
+        const prep = await this.github.prepare(repo, this.queues);
         if (prep.warning) console.warn('hopp: ' + prep.warning);
         repoBases[repo] = prep.base;
         if (repo === project.orchestratorRepo) orchFetch = { fetched: prep.fetched, warning: prep.warning };
       } catch (err) {
-        if (repo === project.orchestratorRepo) return fail('repo_empty', (err as Error).message);
-        console.warn('hopp: ' + (err as Error).message);
+        if (repo === project.orchestratorRepo) orchError = (err as Error).message;
+        else console.warn('hopp: ' + (err as Error).message);
       }
-    }
+    });
+    if (managed.length) say(`fetched in ${Math.round((Date.now() - fetchStart) / 1000)} s`);
+    if (orchError) return fail('repo_empty', orchError);
     if (project.orchestratorRepo && repoBases[project.orchestratorRepo]) worktreeBase = repoBases[project.orchestratorRepo]!;
 
     // The id is taken by making its texts folder: mkdir is atomic, so of two
-    // launches (in two processes) picking the same id only one gets it.
+    // launches (in two processes) picking the same id only one gets it; in
+    // this process the choices take turns, so they do not race at all.
     const tasksDir = join(this.d.home, 'shell', 'tasks');
-    await mkdir(tasksDir, { recursive: true });
-    for (let tries = 0; ; tries++) {
-      try {
-        await mkdir(join(tasksDir, id));
-        break;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || tries >= 20) throw err;
-        used.add(id);
-        id = await uniqueId(base, isTaken);
+    const id = await this.queues.run(CLAIM, async () => {
+      await mkdir(tasksDir, { recursive: true });
+      let c = await uniqueId(base, isTaken);
+      for (let tries = 0; ; tries++) {
+        try {
+          await mkdir(join(tasksDir, c));
+          return c;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'EEXIST' || tries >= 20) throw err;
+          used.add(c);
+          c = await uniqueId(base, isTaken);
+        }
       }
-    }
+    });
     const dir = workDir(id);
     const textsDir = join(tasksDir, id);
     const made = { worktree: false, folder: false, texts: true };
@@ -386,18 +417,22 @@ export class ShellService {
     try {
       await mkdir(worktreesDir, { recursive: true });
       if (project.orchestratorRepo) {
-        try {
-          await this.d.git(['-C', project.orchestratorRepo, 'worktree', 'add', '-b', 'hopp/' + id, dir, worktreeBase]);
-        } catch (err) {
-          // git may have made the branch before the checkout failed; the
-          // branch is new (uniqueId saw none), so it is this launch's.
-          if (await this.branchExists(project.orchestratorRepo, 'hopp/' + id)) {
-            await this.d.git(['-C', project.orchestratorRepo, 'branch', '-D', 'hopp/' + id]).catch((e) =>
-              console.warn(`hopp: could not delete branch hopp/${id} in ${project.orchestratorRepo}: ${(e as Error).message}`),
-            );
+        const repo = project.orchestratorRepo;
+        say(`making the worktree ${dir} from ${worktreeBase}…`);
+        await this.queues.run(repo, async () => {
+          try {
+            await this.d.git(['-C', repo, 'worktree', 'add', '-b', 'hopp/' + id, dir, worktreeBase]);
+          } catch (err) {
+            // git may have made the branch before the checkout failed; the
+            // branch is new (uniqueId saw none), so it is this launch's.
+            if (await this.branchExists(repo, 'hopp/' + id)) {
+              await this.d.git(['-C', repo, 'branch', '-D', 'hopp/' + id]).catch((e) =>
+                console.warn(`hopp: could not delete branch hopp/${id} in ${repo}: ${(e as Error).message}`),
+              );
+            }
+            throw err;
           }
-          throw err;
-        }
+        });
         made.worktree = true;
         taskBase = await this.baseOf(dir, project.orchestratorRepo, repoBases[project.orchestratorRepo] ?? null, orchFetch);
       } else {
@@ -425,6 +460,7 @@ export class ShellService {
       const spawnDirs = [...new Set([...allowedRepos(project), worktreesDir, dir])];
       const labels: Record<string, string> = { [LABEL.project]: project.slug, [LABEL.task]: id, [LABEL.role]: 'orchestrator' };
       if (startedBy) labels[LABEL.startedBy] = startedBy;
+      say(`starting the orchestrator ${id}…`);
       spawnSent = true;
       await this.d.client.createSession({
         dir, id, profile: orch.name,
@@ -518,8 +554,11 @@ export class ShellService {
       }
     };
     if (made.worktree && project.orchestratorRepo) {
-      await quiet(`remove the worktree ${dir}`, () => this.d.git(['-C', project.orchestratorRepo!, 'worktree', 'remove', '--force', dir]));
-      await quiet(`delete the branch hopp/${id}`, () => this.d.git(['-C', project.orchestratorRepo!, 'branch', '-D', 'hopp/' + id]));
+      const repo = project.orchestratorRepo;
+      await this.queues.run(repo, async () => {
+        await quiet(`remove the worktree ${dir}`, () => this.d.git(['-C', repo, 'worktree', 'remove', '--force', dir]));
+        await quiet(`delete the branch hopp/${id}`, () => this.d.git(['-C', repo, 'branch', '-D', 'hopp/' + id]));
+      });
     }
     if (made.folder) await quiet(`remove the folder ${dir}`, () => rm(dir, { recursive: true, force: true }));
     if (made.texts) await quiet(`remove ${textsDir}`, () => rm(textsDir, { recursive: true, force: true }));

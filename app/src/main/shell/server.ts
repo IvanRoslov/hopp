@@ -8,7 +8,7 @@ import { chmod, lstat, mkdir, unlink } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { connect } from 'node:net';
 import { basename, dirname, join } from 'node:path';
-import { ArgError, callShell } from './ipc';
+import { ArgError, callShell, createTaskSaying } from './ipc';
 import type { ShellService } from './service';
 
 // The methods a CLI may call. pickFolder (a dialog) and everything that
@@ -72,6 +72,21 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+// A CLI that sends this header with createTask gets the launch's steps as
+// they happen: lines of JSON, each {"progress": "<text>"}, and last the
+// answer, {"value": …}. An app without this answers plain JSON as before.
+export const PROGRESS_HEADER = 'x-hopp-progress';
+
+async function streamLaunch(svc: ShellService, args: unknown[], res: ServerResponse): Promise<void> {
+  res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+  const line = (o: unknown) => {
+    if (!res.writableEnded) res.write(JSON.stringify(o) + '\n');
+  };
+  const value = await createTaskSaying(svc, args, (progress) => line({ progress }));
+  line({ value });
+  res.end();
+}
+
 async function handle(svc: ShellService, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url ?? '';
   if (req.method === 'GET' && url === '/v1/health') return send(res, 200, { ok: true, pid: process.pid });
@@ -87,6 +102,7 @@ async function handle(svc: ShellService, req: IncomingMessage, res: ServerRespon
   } catch (err) {
     return send(res, 400, { error: { code: 'bad_request', message: err instanceof ArgError ? err.message : 'the body is not JSON' } });
   }
+  if (m[1] === 'createTask' && req.headers[PROGRESS_HEADER] === '1') return streamLaunch(svc, args, res);
   try {
     const value = await callShell(svc, m[1]!, args);
     send(res, 200, { value: value ?? null });

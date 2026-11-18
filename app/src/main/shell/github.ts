@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type { GithubRepo, GithubStatus, Result } from '../../shared/shell';
 import { managedRepoFolder, managedRepoName, REPOS_DIR } from '../../shared/repos';
 import { RunError, type Runner } from './exec';
+import type { KeyedQueue } from './lock';
 import { fail } from './projects';
 
 const LIST_TTL_MS = 5 * 60_000;
@@ -24,6 +25,7 @@ interface ApiRepo {
 export class Github {
   private cache: { at: number; repos: Omit<GithubRepo, 'cloned'>[] } | null = null;
   private clones = new Map<string, Promise<Result<{ path: string }>>>();
+  private preparing = new Map<string, Promise<{ base: string; warning: string; fetched: boolean }>>();
 
   constructor(
     private readonly home: string,
@@ -145,7 +147,19 @@ export class Github {
   // prepare fetches a managed clone (best effort) and returns the ref a new
   // worktree should start from: origin/<default branch>. warning says why
   // the fetch failed, when it did. A clone without any commit is an error.
-  async prepare(repo: string): Promise<{ base: string; warning: string; fetched: boolean }> {
+  // Launches that want the same clone at once share one fetch; it runs in
+  // the clone's turn of repoQueue, so it never overlaps another launch's git
+  // write there.
+  prepare(repo: string, repoQueue?: KeyedQueue): Promise<{ base: string; warning: string; fetched: boolean }> {
+    const running = this.preparing.get(repo);
+    if (running) return running;
+    const work = () => this.prepareNow(repo);
+    const p = (repoQueue ? repoQueue.run(repo, work) : work()).finally(() => this.preparing.delete(repo));
+    this.preparing.set(repo, p);
+    return p;
+  }
+
+  private async prepareNow(repo: string): Promise<{ base: string; warning: string; fetched: boolean }> {
     let warning = '';
     let fetched = false;
     try {
