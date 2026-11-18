@@ -41,7 +41,7 @@ func TestLaunchCommandMinimal(t *testing.T) {
 	cmd := c.LaunchCommand(spec)
 	want := []string{
 		"codex", "--no-alt-screen", "--sandbox", "danger-full-access", "--ask-for-approval", "never",
-		"--no-daemon", "-c", "check_for_update_on_startup=false",
+		"--no-daemon", "-c", "check_for_update_on_startup=false", "-c", "allow_login_shell=false",
 	}
 	if len(cmd) != len(want) {
 		t.Fatalf("expected %d args, got %d: %v", len(want), len(cmd), cmd)
@@ -65,7 +65,7 @@ func TestLaunchCommandFull(t *testing.T) {
 	cmd := c.LaunchCommand(spec)
 	want := []string{
 		"codex", "--no-alt-screen", "--sandbox", "danger-full-access", "--ask-for-approval", "never",
-		"--no-daemon", "-c", "check_for_update_on_startup=false",
+		"--no-daemon", "-c", "check_for_update_on_startup=false", "-c", "allow_login_shell=false",
 		"-m", "gpt-5-codex",
 		"--", "Help me write a function.",
 	}
@@ -91,7 +91,7 @@ func TestLaunchCommandFirstMessageStartingWithDashIsSeparated(t *testing.T) {
 	cmd := c.LaunchCommand(spec)
 	want := []string{
 		"codex", "--no-alt-screen", "--sandbox", "danger-full-access", "--ask-for-approval", "never",
-		"--no-daemon", "-c", "check_for_update_on_startup=false",
+		"--no-daemon", "-c", "check_for_update_on_startup=false", "-c", "allow_login_shell=false",
 		"--", "-fix the login bug",
 	}
 	if len(cmd) != len(want) {
@@ -102,6 +102,20 @@ func TestLaunchCommandFirstMessageStartingWithDashIsSeparated(t *testing.T) {
 			t.Errorf("cmd[%d] = %q, want %q (full: %v)", i, cmd[i], want[i], cmd)
 		}
 	}
+}
+
+func TestLaunchCommandRunsCommandsWithoutLoginShell(t *testing.T) {
+	// codex runs each command through a login shell by default (`zsh -lc`),
+	// which pays the user's whole shell profile on every command (~20s on
+	// the author's machine). The session's environment already holds the
+	// PATH a login shell would give, so the adapter turns login shells off.
+	cmd := New().LaunchCommand(agent.LaunchSpec{FirstMessage: "hi"})
+	for i := 0; i+1 < len(cmd) && cmd[i] != "--"; i++ {
+		if cmd[i] == "-c" && cmd[i+1] == "allow_login_shell=false" {
+			return
+		}
+	}
+	t.Fatalf("LaunchCommand does not pass -c allow_login_shell=false before `--`: %v", cmd)
 }
 
 func TestLaunchCommandNoAltScreenPrecedesPromptSeparator(t *testing.T) {
