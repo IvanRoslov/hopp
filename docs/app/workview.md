@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — against the code on main (670ba12): WorkView, TaskView, Agents, TaskBase, questions/Panel and AskActions (Other…, Not relevant), the terminal; make app-test there
+verified: 2026-11-20 — fact 3 against the code on add-task-workers (d57becf): TaskView (TaskDetails, AddWorkers); the rest against the code on main (670ba12): WorkView, TaskView, Agents, TaskBase, questions/Panel and AskActions (Other…, Not relevant), the terminal; make app-test there
 ---
 
 # A task's or an agent's screen
@@ -12,7 +12,7 @@ What the human sees while working with one task (without a pipeline; a pipeline 
 
 1. The header is one row: the title (cut with an ellipsis), Stop (which asks first; for a task it names the number of child sessions) or Start or Resume, `Questions · N`, the session picker naming each session's state, a quiet status cut with its whole text in the tooltip, and the `···` menu.
 2. An error, or the warning that a clone could not be fetched before the task started (with the reason, until dismissed for that task), takes a second header line only while it is there; the terminal starts right under the header.
-3. A task's menu holds Finish, Remove from list (once its orchestrator's session no longer runs) and Task details; the details say what the worktree started from (`origin/main · 9d10cd1 · 5 minutes ago`, or `HEAD (<branch>)` for a folder).
+3. A task's menu holds Finish, Remove from list (once its orchestrator's session no longer runs) and Task details; the details say what the worktree started from (`origin/main · 9d10cd1 · 5 minutes ago`, or `HEAD (<branch>)` for a folder), and let the human add enabled worker profiles to a task that is not finished.
 4. A long-lived agent shows Start with the status "Off" and the number of letters waiting for it, and Stop when it runs; Rename and Remove agent are in its menu while it is off. A Start refused for a tmux session outside hopp offers Rename and Remove agent beside the reason.
 
 ### The terminal

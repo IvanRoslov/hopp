@@ -115,6 +115,7 @@ hopp task ls [--project <p>] [--all]   # active tasks, or all
 hopp task show <task>                  # state, sessions, branch, started from/by, stage, open asks
 hopp task feed <task>                  # posts, asks and artifacts in time order
 hopp task stop|resume|finish <task>
+hopp task add-worker <task> --worker <profile>...   # more worker profiles; the orchestrator is told
 ```
 
 Lessons, from an agent or the human:

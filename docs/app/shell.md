@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — against the code on main (e9468d7): store.ts, service.ts (createTask, uniqueId, the launch and its cleanup), startText.ts
+verified: 2026-11-20 — against the code on add-task-workers (d57becf): store.ts, service.ts (createTask, uniqueId, the launch and its cleanup, addTaskWorkers, resumeTask), startText.ts; facts 1–8, 10, 11 earlier against main (e9468d7)
 ---
 
 # Projects, tasks and long-lived agents
@@ -24,7 +24,7 @@ The daemon knows sessions, folders and labels; the app adds projects, tasks and 
 
 ### After the launch
 
-9. Stop kills the task's session tree, Resume restores the orchestrator and sends it a message to find where the work stands (a restored agent starts with no conversation), and Finish ends the tree as done and moves the task to Recent; a finished task cannot be resumed, and a running one cannot be removed from the list.
+9. Stop kills the task's session tree, Resume restores the orchestrator and sends it a message to find where the work stands (a restored agent starts with no conversation), and Finish ends the tree as done and moves the task to Recent; a finished task cannot be resumed, and a running one cannot be removed from the list. Worker profiles can be added to a task that is not finished: the app writes the start text of a new harness, tells a running orchestrator at once, and repeats the added profiles in the Resume message, since a restored orchestrator starts with its original text.
 10. The tool catalog is read with `hopp tools … --json` under the app's `HOPP_HOME`, so the app and the agents see the same tools; the app writes the rules file itself.
 11. Every call from the page is checked in the main process: a malformed call gets an error back and never throws there.
 
