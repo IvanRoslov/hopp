@@ -33,7 +33,7 @@ describe('shell IPC', () => {
   it('covers every bridge method but the listeners, artifactUrl and pathForFile', () => {
     const bridgeKeys: (keyof ShellBridge)[] = [
       'state', 'onChanged', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
-      'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
+      'createTask', 'stopTask', 'resumeTask', 'addTaskWorkers', 'finishTask', 'hideTask', 'createAgent', 'startAgent', 'stopAgent',
       'removeAgent', 'renameAgent', 'agentMail', 'waiting', 'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules',
       'listLessons', 'closeLesson', 'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief', 'createPipeline', 'updatePipeline', 'removePipeline', 'taskFeed', 'onFeedChanged',
       'postToTask', 'answerSubmission', 'artifactUrl', 'artifactText', 'githubStatus', 'listGithubRepos', 'addGithubRepo', 'onProfilesChanged', 'setProfileEnabled', 'updateProfile',
@@ -52,6 +52,9 @@ describe('shell IPC', () => {
       ['createTask', [{ projectSlug: 'x' }]],
       ['createTask', [{ projectSlug: 'x', brief: 'b', orchestratorProfile: 'p', workerProfiles: [1] }]],
       ['stopTask', [{}]],
+      ['addTaskWorkers', ['t', 'opus']],
+      ['addTaskWorkers', ['t', [1]]],
+      ['addTaskWorkers', [5, ['opus']]],
       ['setToolEnabled', ['t', 'yes']],
       ['closeLesson', ['1']],
       ['closeLesson', [1.5]],
@@ -113,6 +116,7 @@ describe('shell IPC', () => {
       ['postToTask', ['t', 'text', 'stage']],
       ['answerSubmission', [1, { choice: 'Return', text: 'fix' }]],
       ['setToolEnabled', ['t', false]],
+      ['addTaskWorkers', ['t', ['opus', 'sonnet']]],
     ];
     for (const [m, args] of cases) {
       await callShell(spy, m, args);

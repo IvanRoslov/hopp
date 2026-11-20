@@ -13,7 +13,7 @@ import type { ShellService } from './service';
 
 // The methods a CLI may call. pickFolder (a dialog) and everything that
 // edits projects, pipelines, agents or profiles stay with the page.
-export const CLI_METHODS = ['state', 'listProfiles', 'createTask', 'stopTask', 'resumeTask', 'finishTask', 'taskFeed'] as const;
+export const CLI_METHODS = ['state', 'listProfiles', 'createTask', 'stopTask', 'resumeTask', 'addTaskWorkers', 'finishTask', 'taskFeed'] as const;
 export type CliMethod = (typeof CLI_METHODS)[number];
 
 const BODY_MAX = 8 * 1024 * 1024;

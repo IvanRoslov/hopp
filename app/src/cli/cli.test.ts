@@ -267,6 +267,34 @@ describe('task show, ls, feed and changes', () => {
     expect(resume.err).toMatch(/finished task cannot be resumed/);
   });
 
+  it('add-worker adds profiles to a task, says which were new, and refuses no --worker', async () => {
+    await run(app, ['task', 'new', '--project', 'site', '--brief', 'Fix it']);
+    const add = await run(app, ['task', 'add-worker', 'fix-it', '--worker', 'cheap']);
+    expect(add.code, add.err).toBe(0);
+    expect(add.out).toBe('added to fix-it: cheap');
+    expect((await stateOf()).tasks[0]!).toMatchObject({ workerProfiles: ['sonnet', 'cheap'], addedWorkerProfiles: ['cheap'] });
+    expect(d.messages.filter((m) => m.to === 'fix-it').at(-1)!.body).toContain('`cheap` (deepseek)');
+    const again = await run(app, ['task', 'add-worker', 'fix-it', '--worker', 'cheap']);
+    expect(again.out).toBe('fix-it already has: cheap');
+    // Through the open app, with --json.
+    const remote = await serve();
+    const json = await run(remote, ['task', 'add-worker', 'fix-it', '--worker', 'cheap', '--worker', 'sonnet', '--json']);
+    expect(json.code, json.err).toBe(0);
+    expect(JSON.parse(json.out)).toEqual({ task: 'fix-it', added: [], workerProfiles: ['sonnet', 'cheap'] });
+    const usage = await run(app, ['task', 'add-worker', 'fix-it']);
+    expect(usage.code).toBe(3);
+    expect(usage.err).toMatch(/--worker/);
+    const off = await run(app, ['task', 'add-worker', 'fix-it', '--worker', 'off']);
+    expect(off.code).toBe(1);
+    expect(off.err).toMatch(/"off" is not an enabled profile/);
+  });
+
+  it('add-worker --json lists the added profiles', async () => {
+    await run(app, ['task', 'new', '--project', 'site', '--brief', 'Fix it']);
+    const json = await run(app, ['task', 'add-worker', 'fix-it', '--worker', 'cheap', '--json']);
+    expect(JSON.parse(json.out)).toEqual({ task: 'fix-it', added: ['cheap'], workerProfiles: ['sonnet', 'cheap'] });
+  });
+
   it('says the daemon is not running with exit 2', async () => {
     await d.stop();
     const r = await run(app, ['task', 'ls']);

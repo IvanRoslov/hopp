@@ -171,6 +171,7 @@ const handlers: Record<ShellMethod, { result: boolean; run: Handler }> = {
   createTask: { result: true, run: (s, a) => s.createTask(taskInput(a[0])) },
   stopTask: { result: true, run: (s, a) => s.stopTask(str(a[0], 'task id', 200)) },
   resumeTask: { result: true, run: (s, a) => s.resumeTask(str(a[0], 'task id', 200)) },
+  addTaskWorkers: { result: true, run: (s, a) => s.addTaskWorkers(str(a[0], 'task id', 200), strList(a[1], 'workerProfiles')) },
   finishTask: { result: true, run: (s, a) => s.finishTask(str(a[0], 'task id', 200)) },
   hideTask: { result: true, run: (s, a) => s.hideTask(str(a[0], 'task id', 200)) },
   createAgent: { result: true, run: (s, a) => s.createAgent(agentInput(a[0])) },

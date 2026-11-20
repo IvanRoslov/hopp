@@ -17,6 +17,7 @@ export interface ShellApi {
   createTask(input: TaskInput, say?: (line: string) => void): Promise<Result<Task>>;
   stopTask(id: string): Promise<Result<null>>;
   resumeTask(id: string): Promise<Result<null>>;
+  addTaskWorkers(id: string, profiles: string[]): Promise<Result<Task>>;
   finishTask(id: string): Promise<Result<null>>;
   taskFeed(id: string): Promise<TaskFeed>;
 }
@@ -130,6 +131,7 @@ export class RemoteShell implements ShellApi {
   }
   stopTask = (id: string) => this.call<Result<null>>('stopTask', [id], 60_000);
   resumeTask = (id: string) => this.call<Result<null>>('resumeTask', [id], 3 * 60_000);
+  addTaskWorkers = (id: string, profiles: string[]) => this.call<Result<Task>>('addTaskWorkers', [id, profiles], 3 * 60_000);
   finishTask = (id: string) => this.call<Result<null>>('finishTask', [id], 60_000);
   taskFeed = (id: string) => this.call<TaskFeed>('taskFeed', [id], 60_000);
 }
