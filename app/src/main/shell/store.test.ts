@@ -147,6 +147,7 @@ describe('ShellStore', () => {
     expect(t.base).toBeNull();
     expect(t.pipeline).toBeNull();
     expect(t.startedBy).toBeNull();
+    expect(t.addedWorkerProfiles).toEqual([]);
   });
 
   it('refuses a corrupt file and never overwrites it', async () => {

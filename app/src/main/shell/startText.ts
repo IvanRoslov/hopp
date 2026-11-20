@@ -132,7 +132,7 @@ export function orchestratorText(c: OrchestratorContext): string {
             (anyBase ? ' For a repository listed with a base, fetch it first and put that base at the end; for the others, leave it out.' : ''),
         ]
       : [`   mkdir -p ${dir}`];
-  const profiles = c.workers.map((w) => `   - \`${w.profile}\` (${w.harness}): \`--system-prompt-file ${w.file}\``);
+  const profiles = workerProfileLines(c.workers);
   const role = [
     '# Your role: orchestrator',
     '',
@@ -188,6 +188,25 @@ export function orchestratorText(c: OrchestratorContext): string {
     toolsLayer(c.toolsPrompt),
     extra(c.extraSystemPrompt),
   ]);
+}
+
+// workerProfileLines: one line per worker profile, with its harness and the
+// start-text file to launch it with. The start text, the message about added
+// profiles and the resume message all use these lines.
+export function workerProfileLines(workers: WorkerFile[]): string[] {
+  return workers.map((w) => `   - \`${w.profile}\` (${w.harness}): \`--system-prompt-file ${w.file}\``);
+}
+
+// addedWorkersMessage: what a running orchestrator is told when the human
+// adds worker profiles to its task.
+export function addedWorkersMessage(workers: WorkerFile[]): string {
+  return [
+    'The human allowed more worker profiles for this task, in addition to the ones in your instructions:',
+    '',
+    ...workerProfileLines(workers),
+    '',
+    'Launch workers with them the same way. Workers that already run keep their models.',
+  ].join('\n');
 }
 
 export function workerText(c: WorkerContext): string {
@@ -362,6 +381,12 @@ export function pipelineLayer(p: Pipeline): string {
 // text and an empty conversation (no harness restores it).
 export const RESUMED_ORCHESTRATOR =
   'You were restarted and your earlier conversation is gone. Follow "After a restart" in your instructions: find where the work stands (your branch, `hopp ls --mine`, `hopp messages $HOPP_SESSION_ID`), then continue the task. Do not redo what is done.';
+// resumedOrchestrator: RESUMED_ORCHESTRATOR, plus the worker profiles added
+// after the launch, which the restored start text does not list.
+export function resumedOrchestrator(added: WorkerFile[]): string {
+  if (added.length === 0) return RESUMED_ORCHESTRATOR;
+  return RESUMED_ORCHESTRATOR + '\n\nAfter you started, the human allowed more worker profiles, which your instructions do not list:\n\n' + workerProfileLines(added).join('\n');
+}
 export const RESUMED_AGENT =
   'Your session was restarted and your earlier conversation is gone. Read what waits for you with `hopp inbox`, see what was said with `hopp messages $HOPP_SESSION_ID`, then carry on.';
 
