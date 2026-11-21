@@ -70,6 +70,9 @@ Why: [[docs/lessons/live-check-the-path-the-old-system-never-took]]
 **Live-check the desktop app the way the human starts it.** A launch from a shell inherits the shell's locale and `PATH`; one launch of the packed app from Finder or `open` is part of every live check of the app.
 Why: [[docs/lessons/check-the-desktop-app-as-the-human-starts-it]]
 
+**Prove a start text on live agents of every harness.** Text written for a model is tested by what models do with it: run one small task with an agent of each harness that will read the text, and read each agent's own transcript for what it did and did not do. Tests of the wording prove only the wording.
+Why: [[docs/lessons/a-start-text-is-proven-on-live-agents-of-every-harness]]
+
 **Every check needs a case on which it must go red.** A check that only ever reports "clean" cannot be told apart from one that measures nothing. Keep the red case next to the check as a test. Never accept a proxy as evidence.
 Why: [checks that are empty by construction](https://github.com/lepsto/lepsto-mail-docs/blob/main/docs/lessons/checks-that-are-empty-by-construction.md)
 

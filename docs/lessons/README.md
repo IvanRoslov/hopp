@@ -47,3 +47,4 @@ New lessons are added here as they are written.
 | [[docs/lessons/a-session-id-is-a-name-in-every-tmux-on-the-machine]] | 2026-11-17 | [[docs/daemon/README]], [[docs/app/README]] |
 | [[docs/lessons/a-command-that-reads-stdin-refuses-an-empty-body]] | 2026-11-17 | [[docs/daemon/README]] |
 | [[docs/lessons/a-freshly-written-executable-starts-slowly-under-load]] | 2026-11-17 | [[docs/app/README]] |
+| [[docs/lessons/a-start-text-is-proven-on-live-agents-of-every-harness]] | 2026-11-21 | [[docs/app/README]] |
