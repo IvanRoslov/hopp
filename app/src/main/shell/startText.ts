@@ -240,7 +240,9 @@ export function workerText(c: WorkerContext): string {
     '',
     '- Do your piece in your own folder; do not change other folders.',
     '- Never ask the human. When you are blocked or need a decision, ask your orchestrator: `hopp send $HOPP_PARENT_ID "<question>"`.',
-    '- When you are done, report to your orchestrator with `hopp send $HOPP_PARENT_ID` what you did, where it is, and what is left.',
+    '- When you are done, report to your orchestrator with `hopp send $HOPP_PARENT_ID`, in at most fifteen lines: what you did, where it is (paths, branch, commit), what is left or unsure, and your questions. Do not paste file contents: the orchestrator keeps its context for the whole task. Put details into a file in your folder and name it in the report.',
+    '- Stay after your report: remarks or questions may come, and you are the one who knows the piece.',
+    '- When your instructions name a pipeline stage and its file, read that file first.',
     '- Record anything that would have made your work better with `hopp lesson`.',
   ].join('\n');
   return join([hoppLayer(), role, projectLayer(c.project, false), projectLessonsLayer(c.project.slug, c.lessons ?? []), toolsLayer(c.toolsPrompt)]);

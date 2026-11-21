@@ -160,6 +160,12 @@ describe('workerText', () => {
     expect(t).not.toContain('ready for review');
   });
 
+  it('reports briefly and by file, stays after its report, and reads its stage file first', () => {
+    expect(t).toContain('- When you are done, report to your orchestrator with `hopp send $HOPP_PARENT_ID`, in at most fifteen lines: what you did, where it is (paths, branch, commit), what is left or unsure, and your questions. Do not paste file contents: the orchestrator keeps its context for the whole task. Put details into a file in your folder and name it in the report.');
+    expect(t).toContain('- Stay after your report: remarks or questions may come, and you are the one who knows the piece.');
+    expect(t).toContain('- When your instructions name a pipeline stage and its file, read that file first.');
+  });
+
   it('carries the project and its guardrails, but not where workers may run', () => {
     expect(t).toContain('# Project: Site');
     expect(t).toContain('Never push to main.');
