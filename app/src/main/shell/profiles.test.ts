@@ -45,6 +45,8 @@ describe('profile names, as rocket made them', () => {
     expect(importProfileName('kimi-code', 'kimi-code/k3-turbo')).toBe('kimi-k3-turbo');
     expect(importProfileName('pi', 'deepseek/deepseek-flash')).toBe('pi-deepseek-flash');
     expect(importProfileName('deepseek', 'deepseek-flash[1m]')).toBe('deepseek-flash-1m');
+    expect(importProfileName('agy', 'gemini-3.8-flash-low')).toBe('agy-gemini-3-8-flash-low');
+    expect(importProfileName('agy', 'claude-opus-5-5-high')).toBe('agy-claude-opus-5-5-high');
     expect(uniqueProfileName('a', new Set(['a', 'a-2']))).toBe('a-3');
     expect(uniqueProfileName('x'.repeat(45), new Set(['x'.repeat(40)]))).toBe('x'.repeat(38) + '-2');
   });

@@ -15,11 +15,12 @@ var commandBinaries = map[string]string{
 	"claude-code": "claude-code",
 	"codex":       "codex",
 	"pi":          "pi",
+	"agy":         "agy",
 }
 
 // DetectFromCommand guesses the adapter a launcher command starts, by its
 // leading binary: "kimi" → kimi-code, "claude"/"claude-code" → claude-code,
-// "codex" → codex, "pi" → pi. Claude with an explicit DeepSeek base URL
+// "codex" → codex, "pi" → pi, "agy" → agy. Claude with an explicit DeepSeek base URL
 // resolves to deepseek. It understands an env(1) prefix and leading KEY=VAL
 // shell assignments, strips directories, extensions and quotes, and returns
 // "" for anything else — wrappers like "bash -c ..." hide the binary and

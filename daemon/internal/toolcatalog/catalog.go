@@ -31,7 +31,7 @@ const (
 
 // Harnesses are the harness names a tool may be limited to: the adapters'
 // Name() values.
-var Harnesses = []string{"claude-code", "codex", "deepseek", "kimi-code", "pi"}
+var Harnesses = []string{"agy", "claude-code", "codex", "deepseek", "kimi-code", "pi"}
 
 // Tool is one catalog entry. Dir is its folder and Usage the content of its
 // USAGE.md.

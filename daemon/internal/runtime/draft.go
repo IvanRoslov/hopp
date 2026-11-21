@@ -52,11 +52,14 @@ const draftRuleGlyphs = "─━-╌═╭╮╰╯└┘┌┐│  "
 //     ────────────────
 //     ⏵⏵ bypass permissions on …
 //   - Claude Code, boxed style — "│ > … │" inside a ╭─…╯ box.
+//   - agy — a "> " line at column 0 between two horizontal rules, with the
+//     rows of a multi-line draft indented below it (agy 1.5.14, 2026-11-21).
 //
 // Everything else — notably codex, whose composer rendering has not been
 // verified — is deliberately NOT recognized: adding a shape here is how
-// support for another agent gets extended. A bare "> text" at column 0 is
-// also not recognized; it is indistinguishable from ordinary agent output.
+// support for another agent gets extended. A bare "> text" at column 0
+// without a rule right above it is also not recognized; it is
+// indistinguishable from ordinary agent output.
 //
 // The answer is only ever acted on in the conservative direction: a true
 // answer defers a delivery (recoverable — the queue retries, and the
@@ -77,6 +80,8 @@ func LooksLikeUserDraft(pane string) bool {
 	for i, line := range lines {
 		if b, ok := composerPromptLine(line.text()); ok {
 			start, boxed = i, b
+		} else if i > 0 && agyPromptLine(line.text()) && isComposerRule(lines[i-1].text()) {
+			start, boxed = i, false
 		}
 	}
 	if start < 0 {
@@ -116,7 +121,23 @@ func LooksLikeUserDraft(pane string) bool {
 			return false
 		}
 	}
+	if strings.HasSuffix(content, agyModeHint) {
+		return false
+	}
 	return true
+}
+
+// agyModeHint ends the hint agy shows in its empty composer, e.g. «Auto
+// mode: edits & safe commands auto-approved (shift+tab to cycle)». agy paints
+// it grey, not dim, so only the text tells it from a draft.
+const agyModeHint = "(shift+tab to cycle)"
+
+// agyPromptLine reports whether line could be agy's composer row: «>» at
+// column 0, alone or followed by a space. The caller also requires a rule
+// right above it, which ordinary «> quoted» output does not have.
+func agyPromptLine(line string) bool {
+	rest, found := strings.CutPrefix(line, ">")
+	return found && startsWithSpace(rest)
 }
 
 // composerPromptLine reports whether line is a composer's prompt line, and
@@ -183,7 +204,7 @@ func composerContent(l paneLine, boxed bool) (text string, ok bool) {
 		}
 		return l.normalIntensity(from, to), true
 	}
-	if to > 0 && l.runes[0] == '❯' {
+	if to > 0 && (l.runes[0] == '❯' || l.runes[0] == '>') {
 		return l.normalIntensity(1, to), true
 	}
 	// A continuation row of a multi-line draft: indented plain text. A

@@ -468,10 +468,10 @@ func TestLogsReadsTheFileWithoutTheDaemon(t *testing.T) {
 	}
 }
 
-func TestDoctorListsFiveAdapters(t *testing.T) {
+func TestDoctorListsEveryAdapter(t *testing.T) {
 	f := newFakeAPI(t)
 	out, _, _ := runCLI(t, f, "doctor")
-	for _, name := range []string{"claude-code", "codex", "deepseek", "kimi-code", "pi"} {
+	for _, name := range []string{"agy", "claude-code", "codex", "deepseek", "kimi-code", "pi"} {
 		if !strings.Contains(out, "agent:"+name+":") {
 			t.Errorf("doctor output lacks %s:\n%s", name, out)
 		}
@@ -481,8 +481,8 @@ func TestDoctorListsFiveAdapters(t *testing.T) {
 			t.Errorf("doctor output lacks %q:\n%s", want, out)
 		}
 	}
-	if strings.Count(out, "agent:") != 5 {
-		t.Errorf("doctor lists %d agents, want 5:\n%s", strings.Count(out, "agent:"), out)
+	if strings.Count(out, "agent:") != 6 {
+		t.Errorf("doctor lists %d agents, want 6:\n%s", strings.Count(out, "agent:"), out)
 	}
 }
 

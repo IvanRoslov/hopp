@@ -22,7 +22,7 @@ make build          # builds bin/hopp
 make start          # builds, starts the daemon, prints its status
 make restart        # builds, then stops and starts the daemon
 make stop           # stops the daemon and waits until it has exited
-bin/hopp doctor     # tmux, the state directory, the daemon, the five harnesses, the external hopp-<name> commands
+bin/hopp doctor     # tmux, the state directory, the daemon, the six harnesses, the external hopp-<name> commands
 bin/hopp logs -n 50 # the daemon log, read from disk without starting the daemon
 make install        # links /opt/homebrew/bin/hopp to bin/hopp (a symlink, never a copy)
 ```
@@ -37,7 +37,7 @@ There is no deployment: hopp runs from `bin/hopp` on the author's machine, and a
 
 ## 3. Domain-specific tooling
 
-The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without writing while the daemon runs with `sqlite3 -readonly ~/.hopp/hopp.db '<query>'`; when the daemon is stopped, open it as `sqlite3 "file:$HOME/.hopp/hopp.db?immutable=1"`. The tables that explain a delivery are `messages` (status, attempts, reason, `delivery_transport`), `claude_deliveries` (the pinned journal boundary and phase of a Claude Code send) and `claude_consumed_records`. An agent's own journal is the evidence of what it received: Claude Code and DeepSeek under `~/.claude/projects/<folder slug>/<session id>.jsonl`, Codex under `~/.codex/sessions/`, Kimi Code under `~/.kimi-code/sessions/`, Pi under `~/.pi/agent/sessions/`.
+The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without writing while the daemon runs with `sqlite3 -readonly ~/.hopp/hopp.db '<query>'`; when the daemon is stopped, open it as `sqlite3 "file:$HOME/.hopp/hopp.db?immutable=1"`. The tables that explain a delivery are `messages` (status, attempts, reason, `delivery_transport`), `claude_deliveries` (the pinned journal boundary and phase of a Claude Code send) and `claude_consumed_records`. An agent's own journal is the evidence of what it received: Claude Code and DeepSeek under `~/.claude/projects/<folder slug>/<session id>.jsonl`, Codex under `~/.codex/sessions/`, Kimi Code under `~/.kimi-code/sessions/`, Pi under `~/.pi/agent/sessions/`, agy under `~/.gemini/antigravity-cli/brain/<conversation id>/.system_generated/logs/transcript.jsonl` (the folder's current conversation id is in `~/.gemini/antigravity-cli/cache/last_conversations.json`).
 
 ## 4. Tests
 

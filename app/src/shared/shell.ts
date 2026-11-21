@@ -228,7 +228,7 @@ export interface ImportResult {
 // (one block; addProfile and copyProfile are on the bridge below.)
 
 // The harnesses hopp launches.
-export const HARNESSES = ['claude-code', 'codex', 'kimi-code', 'pi', 'deepseek'] as const;
+export const HARNESSES = ['claude-code', 'codex', 'kimi-code', 'pi', 'deepseek', 'agy'] as const;
 
 // The effort levels each harness accepts for a model its catalog does not
 // list (the daemon's agent Efforts(), which also checks them on create).
@@ -238,6 +238,8 @@ export const HARNESS_EFFORTS: Record<string, string[]> = {
   'kimi-code': ['low', 'high', 'max'],
   pi: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
   deepseek: ['low', 'medium', 'high', 'xhigh', 'max'],
+  // agy has no effort knob: its model ids name the thinking level.
+  agy: [],
 };
 
 export interface NewProfileInput {

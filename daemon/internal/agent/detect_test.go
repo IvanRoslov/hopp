@@ -29,6 +29,8 @@ func TestDetectFromCommand(t *testing.T) {
 		{"deepseek quoted env assignment", `env ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic" claude`, "deepseek"},
 		{"claude with unrelated base URL", "ANTHROPIC_BASE_URL=https://example.com claude", "claude-code"},
 		{"unrelated binary", "zsh", ""},
+		{"bare agy", "agy", "agy"},
+		{"agy absolute path with flags", "/Users/u/.local/bin/agy --dangerously-skip-permissions --model gemini-4-neon-high", "agy"},
 		{"shell wrapper hides the binary", "bash -c 'kimi --auto'", ""},
 		{"pi shell wrapper stays unknown", "bash -c 'pi'", ""},
 		{"env running something else", "env FOO=1 zsh", ""},

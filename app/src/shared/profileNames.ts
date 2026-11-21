@@ -8,10 +8,13 @@ export const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 // importProfileName: the model id for claude-code and deepseek, "codex-" +
 // id for codex, "kimi-" + the id without "kimi-code/" for kimi-code (no
 // doubled "kimi-"), "pi-" + provider/model for pi without a repeated
-// provider; then lowercase, anything outside [a-z0-9-] becomes "-".
+// provider, "agy-" + id for agy (it also offers Claude models, whose ids
+// are claude-code's own profile names); then lowercase, anything outside
+// [a-z0-9-] becomes "-".
 export function importProfileName(agent: string, modelId: string): string {
   let base = modelId;
   if (agent === 'codex') base = 'codex-' + modelId;
+  else if (agent === 'agy') base = 'agy-' + modelId;
   else if (agent === 'kimi-code') {
     base = modelId.replace(/^kimi-code\//, '');
     if (!base.startsWith('kimi-')) base = 'kimi-' + base;
