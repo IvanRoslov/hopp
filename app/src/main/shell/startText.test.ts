@@ -123,6 +123,30 @@ describe('orchestratorText', () => {
   it('never depends on an agent name', () => {
     expect(orch()).not.toMatch(/\bcto\b/i);
   });
+
+  // Live runs, 2026-11-21: orchestrators of two harnesses did every stage
+  // themselves; their context filled and the human's early decisions were lost.
+  it('gives the work to workers and keeps the orchestrator to the human, the plan and the reports', () => {
+    const t = orch();
+    const at = (s: string) => t.indexOf(s);
+    expect(at('## What you do, and what workers do')).toBeGreaterThan(at('# Your role: orchestrator'));
+    expect(at('the work itself is done by workers')).toBeGreaterThan(at('## What you do, and what workers do'));
+    expect(at('## Launching a worker')).toBeGreaterThan(at('the work itself is done by workers'));
+    expect(t).toContain('"It is quicker to do it myself" is not a reason');
+    expect(t).toContain('- checking a result: launch a fresh worker that has not seen the work, and give it the result and what it must meet;');
+    expect(t).not.toContain('Plan the work, split it into pieces, and launch workers for the pieces.');
+    expect(t).not.toContain('Go on with your own part');
+  });
+
+  it('says what a brief holds, passes a long one by file, and keeps a worker until the human accepts', () => {
+    const t = orch();
+    expect(t).toContain('A worker starts knowing nothing of this task. Its first message is its whole brief');
+    expect(t).toContain('`--message-file <file>`');
+    expect(t).toContain('Meanwhile brief the next piece, or wait');
+    expect(t).toContain('ask the worker with `hopp send <worker session> "<question>"` rather than open its files');
+    expect(t).toContain('4. Keep a worker until the human has accepted the work its piece is part of');
+    expect(t).not.toContain('Once a worker\'s piece is reviewed and in your branch');
+  });
 });
 
 describe('workerText', () => {
