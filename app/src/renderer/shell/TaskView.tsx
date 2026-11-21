@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RepoLabel } from './repos';
 import { BaseRows, BaseWarning, useBaseDismissal } from './TaskBase';
 import type { HoppBridge } from '../../shared/bridge';
-import type { Project, Result, Task } from '../../shared/shell';
+import type { ModelProfile, Project, Result, Task } from '../../shared/shell';
+import { useModelCatalog } from '../data/hooks';
+import { Dropdown } from '../ui/Dropdown';
+import { profileEffortTag } from '../ui/effort';
 import type { Session, StreamState } from '../../shared/types';
 import { cleanError } from '../errors';
 import { STARTING_GRACE_MS, taskSessions, toMs } from '../model/shellModel';
@@ -16,8 +19,62 @@ function when(ms: number): string {
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export function TaskDetails(props: { task: Task; project?: Project }) {
+// AddWorkers: more worker profiles for an active task, picked from the
+// enabled profiles it does not have yet. The task's row updates by itself
+// once the store changes.
+function AddWorkers(props: { task: Task; shell: HoppBridge['shell'] }) {
+  const { task, shell } = props;
+  const [profiles, setProfiles] = useState<ModelProfile[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const effortsFor = useModelCatalog(shell);
+  useEffect(() => {
+    let live = true;
+    shell.listProfiles().then(
+      (list) => live && setProfiles(list),
+      () => live && setProfiles([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [shell]);
+  const options = profiles
+    .filter((p) => p.enabled && !task.workerProfiles.includes(p.name))
+    .map((p) => ({ value: p.name, label: p.name, tag: profileEffortTag(p, effortsFor(p.agent, p.model)) ?? undefined, hint: p.description || p.agent }));
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await shell.addTaskWorkers(task.id, picked);
+      if (r.ok) setPicked([]);
+      else setError(r.error.message);
+    } catch (err) {
+      setError(cleanError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Dropdown multiple label="Add" testId="add-workers" options={options} empty="No other enabled profiles" value={picked} onChange={setPicked} disabled={busy} />
+      {picked.length > 0 && (
+        <button type="button" className="c-btn" data-testid="add-workers-confirm" disabled={busy} onClick={() => void add()}>
+          Add {picked.length}
+        </button>
+      )}
+      {error && (
+        <span className="form-error" role="alert" data-testid="add-workers-error">
+          ! {error}
+        </span>
+      )}
+    </>
+  );
+}
+
+export function TaskDetails(props: { task: Task; project?: Project; shell?: HoppBridge['shell'] }) {
   const { task } = props;
+  const workers = task.workerProfiles.length ? task.workerProfiles.join(', ') : 'none';
   return (
     <dl className="details" data-testid="task-details">
       <dt>Project</dt>
@@ -46,7 +103,16 @@ export function TaskDetails(props: { task: Task; project?: Project }) {
       <dt>Orchestrator</dt>
       <dd>{task.orchestratorProfile}</dd>
       <dt>Workers</dt>
-      <dd>{task.workerProfiles.length ? task.workerProfiles.join(', ') : 'none'}</dd>
+      <dd>
+        {props.shell && task.status === 'active' ? (
+          <span className="name-row">
+            {workers}
+            <AddWorkers task={task} shell={props.shell} />
+          </span>
+        ) : (
+          workers
+        )}
+      </dd>
       <dt>Started</dt>
       <dd>{when(task.createdAt)}</dd>
       {task.startedBy && (
@@ -209,7 +275,7 @@ export function TaskView(props: {
             noTerminal={noTerminal}
           />
         }
-        details={<TaskDetails task={task} project={props.project} />}
+        details={<TaskDetails task={task} project={props.project} shell={shell} />}
         status={
           status || alert ? (
             <>
@@ -241,7 +307,7 @@ export function TaskView(props: {
       alert={alert}
       attachable={!!selected && selected.state === 'running'}
       noTerminal={noTerminal}
-      details={<TaskDetails task={task} project={props.project} />}
+      details={<TaskDetails task={task} project={props.project} shell={shell} />}
       refreshSession={props.refreshSession}
     />
   );

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Project } from '../../shared/shell';
-import { agentText, allowedRepos, hoppLayer, orchestratorText, workerText } from './startText';
+import {
+  addedWorkersMessage, agentText, allowedRepos, hoppLayer, orchestratorText, RESUMED_ORCHESTRATOR, resumedOrchestrator, workerProfileLines, workerText,
+} from './startText';
 
 const project = (over: Partial<Project> = {}): Project => ({
   slug: 'site', name: 'Site', description: 'The marketing site.', orchestratorRepo: '/r/site',
@@ -170,3 +172,32 @@ describe('a task started by an agent', () => {
   });
 });
 
+
+describe('workers added after the launch', () => {
+  const opus = { profile: 'opus-max', harness: 'claude-code', file: '/h/shell/tasks/t1/worker-claude-code.md' };
+  const line = "- `opus-max` (claude-code): `--system-prompt-file /h/shell/tasks/t1/worker-claude-code.md`";
+
+  it('the start text lists the profiles with the same lines as before', () => {
+    const t = orch();
+    expect(t).toContain(
+      '   - `cheap` (deepseek): `--system-prompt-file /h/shell/tasks/fix-header/worker-deepseek.md`\n' +
+        '   - `codex-high` (codex): `--system-prompt-file /h/shell/tasks/fix-header/worker-codex.md`\n',
+    );
+    expect(workerProfileLines([opus])).toEqual(['   ' + line]);
+  });
+
+  it('the message to a running orchestrator names each profile and its file', () => {
+    const m = addedWorkersMessage([opus]);
+    expect(m).toContain(line);
+    expect(m).toContain('in addition to the ones in your instructions');
+    expect(m).toContain('Workers that already run keep their models.');
+  });
+
+  it('the resume message repeats the added profiles, and is unchanged without them', () => {
+    expect(resumedOrchestrator([])).toBe(RESUMED_ORCHESTRATOR);
+    const m = resumedOrchestrator([opus]);
+    expect(m.startsWith(RESUMED_ORCHESTRATOR)).toBe(true);
+    expect(m).toContain(line);
+    expect(m).toContain('which your instructions do not list');
+  });
+});

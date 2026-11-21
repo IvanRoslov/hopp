@@ -25,7 +25,7 @@ export const IPC = {
 export const SHELL_METHODS = [
   'state', 'createProject', 'updateProject', 'removeProject', 'pickFolder', 'listProfiles',
   'pickAttachments', 'pasteAttachments', 'describePaths', 'openAttachment',
-  'createTask', 'stopTask', 'resumeTask', 'finishTask', 'hideTask',
+  'createTask', 'stopTask', 'resumeTask', 'addTaskWorkers', 'finishTask', 'hideTask',
   'createAgent', 'startAgent', 'stopAgent', 'removeAgent', 'renameAgent', 'agentMail', 'waiting',
   'listTools', 'toolUsage', 'setToolEnabled', 'toolRules', 'setToolRules', 'listLessons', 'closeLesson',
   'setLessonAbout', 'setLessonProject', 'lessonToGuardrails', 'triageLessonsBrief',

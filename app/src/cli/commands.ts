@@ -59,11 +59,13 @@ export const USAGE: Record<string, string> = {
     '                     [--title <title>] [--orchestrator <profile>] [--worker <profile>]...',
     '                     [--pipeline <id or name>] [--json]',
     '       hopp task stop|resume|finish <task> [--json]',
+    '       hopp task add-worker <task> --worker <profile>... [--json]',
     '',
     'Tasks of the hopp app. `task new` starts an orchestrator in the project; run inside a hopp',
     'session, the task reports to that session ($HOPP_SESSION_ID). Defaults: the orchestrator runs',
     'the daemon\'s default profile; workers use the profiles of the project\'s last task, or the',
-    'orchestrator\'s profile.',
+    'orchestrator\'s profile. `task add-worker` allows more worker profiles in a task that is not',
+    'finished and tells its orchestrator.',
   ].join('\n'),
 };
 
@@ -381,6 +383,20 @@ async function taskChange(ctx: CliContext, verb: 'stop' | 'resume' | 'finish', a
   ctx.out({ stop: `stopped ${t.id}; \`hopp task resume ${t.id}\` continues it`, resume: `resumed ${t.id}`, finish: `finished ${t.id}` }[verb]);
 }
 
+// taskAddWorker: more worker profiles for a task; prints the ones that were new.
+async function taskAddWorker(ctx: CliContext, args: string[]): Promise<void> {
+  const { values, positionals } = parse(args, { worker: { type: 'string', multiple: true } });
+  if (positionals.length !== 1) throw new UsageError(USAGE['task']!);
+  const workers = (values.worker as string[] | undefined) ?? [];
+  if (!workers.length) throw new UsageError('--worker <profile> is required, once per profile; `hopp task show` lists the task\'s workers');
+  const api = await ctx.shell();
+  const t = findTask(await api.state(), positionals[0]!);
+  const after = unwrap(await api.addTaskWorkers(t.id, workers));
+  const added = after.workerProfiles.filter((w) => !t.workerProfiles.includes(w));
+  if (values.json) return ctx.out(JSON.stringify({ task: t.id, added, workerProfiles: after.workerProfiles }));
+  ctx.out(added.length ? `added to ${t.id}: ${added.join(', ')}` : `${t.id} already has: ${[...new Set(workers)].join(', ')}`);
+}
+
 async function taskCmd(ctx: CliContext, args: string[]): Promise<void> {
   const [sub, ...rest] = args;
   switch (sub) {
@@ -396,6 +412,8 @@ async function taskCmd(ctx: CliContext, args: string[]): Promise<void> {
     case 'resume':
     case 'finish':
       return taskChange(ctx, sub, rest);
+    case 'add-worker':
+      return taskAddWorker(ctx, rest);
     default:
       throw new UsageError(USAGE['task']!);
   }

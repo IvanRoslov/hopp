@@ -43,7 +43,7 @@ export function makeProject(slug: string, over: Partial<Project> = {}): Project 
 export function makeTask(id: string, projectSlug: string, over: Partial<Task> = {}): Task {
   return {
     id, projectSlug, title: id, brief: 'Do ' + id, sessionId: id, dir: '/tmp/work/' + id, branch: null,
-    orchestratorProfile: 'claude-opus', workerProfiles: [], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0, ...over,
+    orchestratorProfile: 'claude-opus', workerProfiles: [], addedWorkerProfiles: [], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false, createdAt: 1, finishedAt: 0, ...over,
   };
 }
 
@@ -261,7 +261,7 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
         return fail('session_taken', `A session named ${id} exists.`, 'sessionName');
       const task: Task = {
         id, projectSlug: input.projectSlug, title, brief: input.brief, sessionId: id, dir: '/tmp/work/' + id, branch: null,
-        orchestratorProfile: input.orchestratorProfile, workerProfiles: input.workerProfiles,
+        orchestratorProfile: input.orchestratorProfile, workerProfiles: input.workerProfiles, addedWorkerProfiles: [],
         pipeline: input.pipelineId ? structuredClone(st.pipelines.find((p) => p.id === input.pipelineId) ?? null) : null,
         base: null, startedBy: null, status: 'active', hidden: false,
         createdAt: clock++, finishedAt: 0,
@@ -272,6 +272,18 @@ export function fakeShell(seed: ShellSeed = {}, daemonSessions: () => Session[] 
     }),
     stopTask: vi.fn(async (_id: string) => ok(null)),
     resumeTask: vi.fn(async (_id: string) => ok(null)),
+    addTaskWorkers: vi.fn(async (id: string, profiles: string[]): Promise<Result<Task>> => {
+      const t = st.tasks.find((x) => x.id === id);
+      if (!t) return fail('task_not_found', `No task "${id}"`);
+      for (const n of profiles) {
+        if (!t.workerProfiles.includes(n)) {
+          t.workerProfiles.push(n);
+          t.addedWorkerProfiles.push(n);
+        }
+      }
+      changed();
+      return ok(structuredClone(t));
+    }),
     finishTask: vi.fn(async (id: string) => {
       const t = st.tasks.find((x) => x.id === id)!;
       t.status = 'finished';

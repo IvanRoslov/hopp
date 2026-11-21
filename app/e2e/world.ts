@@ -72,7 +72,7 @@ export class World {
   seedTask(sessionId: string, title: string): Task {
     const task: Task = {
       id: sessionId, projectSlug: 'site', title, brief: title, sessionId, dir: join(this.root, sessionId), branch: null,
-      orchestratorProfile: 'sonnet', workerProfiles: ['sonnet'], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false,
+      orchestratorProfile: 'sonnet', workerProfiles: ['sonnet'], addedWorkerProfiles: [], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false,
       createdAt: Math.floor(Date.now() / 1000) - 3600, finishedAt: 0,
     };
     mkdirSync(task.dir, { recursive: true });

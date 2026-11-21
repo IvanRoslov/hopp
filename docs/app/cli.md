@@ -1,14 +1,14 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-18 — fact 5 by make app-test on task-new-latency (launchQueue.test.ts); the rest against the code on main (670ba12): app/src/cli (EXIT 1/2/3, the role refusal, the worker defaults), main/shell/server.ts (shell.sock 0600, /tmp/hopp-<uid>/), main/cliInstall.ts (ELECTRON_RUN_AS_NODE), startText.ts (started by)
+verified: 2026-11-20 — fact 1 (add-worker) against the code on add-task-workers (d57becf): app/src/cli/commands.ts, main/shell/server.ts; fact 5 by make app-test on task-new-latency (launchQueue.test.ts); the rest against the code on main (670ba12): app/src/cli (EXIT 1/2/3, the role refusal, the worker defaults), main/shell/server.ts (shell.sock 0600, /tmp/hopp-<uid>/), main/cliInstall.ts (ELECTRON_RUN_AS_NODE), startText.ts (started by)
 ---
 
 # The app's commands: hopp project, hopp pipeline, hopp task
 
 A long-lived agent uses projects, pipelines and tasks the way the human does in the window, from its terminal. This leaf says what the commands do, where they run and what a task started by an agent changes; what a launch does is in [[docs/app/shell]].
 
-1. `hopp project ls|show`, `hopp pipeline ls|show` and `hopp task ls|show|feed|new|stop|resume|finish` read the app's projects and pipelines and start and follow its tasks; every one takes `--json`. Projects and pipelines are created and edited only in the app.
+1. `hopp project ls|show`, `hopp pipeline ls|show` and `hopp task ls|show|feed|new|stop|resume|finish|add-worker` read the app's projects and pipelines and start, follow and change its tasks (`add-worker` allows more worker profiles in a task that is not finished); every one takes `--json`. Projects and pipelines are created and edited only in the app.
 2. They are external commands of `hopp` (see [[docs/daemon/boundaries]]): `hopp-project`, `hopp-pipeline` and `hopp-task` in `$HOPP_HOME/bin` are scripts that run one bundled program with the Node inside the app (`ELECTRON_RUN_AS_NODE`), so no system Node is needed. The app writes them at every start when they are missing or name another app, so of two installs (a checkout and `/Applications/hopp.app`) the one started last is the one they run; `make app-install-mac` and `make app-cli` also build `bin/hopp`, since a `hopp` older than its external commands says "unknown command".
 3. While the app runs, a command asks it over the socket `shell.sock` in the app home (mode 0600, so another user cannot connect; a path too long for a socket moves to a private folder `/tmp/hopp-<uid>/`), which serves only the calls the commands need. When the app is closed, the command runs the app's own service against the same store, so both give the same answers, and a task started with the app closed is in the app when it opens.
 4. The exit code is 1 for an error (an unknown project, pipeline, task or profile is named together with the ones that exist), 2 when the daemon is not running and 3 for a usage error.

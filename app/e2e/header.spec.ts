@@ -32,7 +32,7 @@ function seed(w: World) {
     mkdirSync(dir, { recursive: true });
     return {
       id, projectSlug: 'site', title, brief: title, sessionId: id, dir, branch: null, orchestratorProfile: 'sonnet',
-      workerProfiles: ['sonnet'], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false, createdAt: now - 3600, finishedAt: 0, ...over,
+      workerProfiles: ['sonnet'], addedWorkerProfiles: [], pipeline: null, base: null, startedBy: null, status: 'active', hidden: false, createdAt: now - 3600, finishedAt: 0, ...over,
     };
   };
   const agentDir = join(w.root, 'cto-home');

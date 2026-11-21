@@ -116,6 +116,9 @@ export interface Task {
   branch: string | null;
   orchestratorProfile: string;
   workerProfiles: string[];
+  // Worker profiles the human added after the launch; a subset of
+  // workerProfiles. The orchestrator's start text does not list them.
+  addedWorkerProfiles: string[];
   // A copy of the pipeline taken at launch; null for a task without one.
   // Later edits of the pipeline do not change it.
   pipeline: Pipeline | null;
@@ -473,6 +476,10 @@ export interface ShellBridge {
   stopTask(id: string): Promise<Result<null>>;
   // Restores the orchestrator's session after a stop.
   resumeTask(id: string): Promise<Result<null>>;
+  // Adds enabled worker profiles to an active task: writes the start text of
+  // a new harness and tells a running orchestrator. Profiles already on the
+  // task are skipped.
+  addTaskWorkers(id: string, profiles: string[]): Promise<Result<Task>>;
   // Stops everything and moves the task to Recent.
   finishTask(id: string): Promise<Result<null>>;
   hideTask(id: string): Promise<Result<null>>;

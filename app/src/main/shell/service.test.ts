@@ -553,6 +553,111 @@ describe('task lifecycle', () => {
   });
 });
 
+describe('adding worker profiles to a task', () => {
+  const ID = 'fix-the-header';
+  const texts = () => join(home, 'shell', 'tasks', ID);
+  const told = () => d.messages.filter((m) => m.to === ID);
+  const task = async () => (await svc.state()).tasks.find((t) => t.id === ID)!;
+  const opusLine = () => `- \`opus-max\` (claude-code): \`--system-prompt-file ${join(texts(), 'worker-claude-code.md')}\``;
+
+  beforeEach(async () => {
+    d.profiles.push(makeProfile('opus-max', { agent: 'claude-code' }), makeProfile('cheap-2', { agent: 'deepseek' }));
+    await project();
+    const r = await svc.createTask(taskInput());
+    expect(r.ok).toBe(true);
+  });
+
+  it('adds a profile of a new harness to a running task: stored, its start text written, the orchestrator told', async () => {
+    expect(existsSync(join(texts(), 'worker-claude-code.md'))).toBe(false);
+    const r = await svc.addTaskWorkers(ID, ['opus-max']);
+    expect(r.ok && r.value.workerProfiles).toEqual(['cheap', 'codex', 'opus-max']);
+    const t = await task();
+    expect(t.workerProfiles).toEqual(['cheap', 'codex', 'opus-max']);
+    expect(t.addedWorkerProfiles).toEqual(['opus-max']);
+    const text = readFileSync(join(texts(), 'worker-claude-code.md'), 'utf8');
+    expect(text).toContain('# Your role: worker');
+    expect(text).toContain('tool-for-claude-code');
+    expect(told()).toHaveLength(1);
+    expect(told()[0]!.body).toContain(opusLine());
+    expect(told()[0]!.body).toContain('in addition to the ones in your instructions');
+  });
+
+  it('skips a profile already on the task, and sends nothing when nothing is new', async () => {
+    const r = await svc.addTaskWorkers(ID, ['cheap', 'codex', 'cheap']);
+    expect(r.ok && r.value.workerProfiles).toEqual(['cheap', 'codex']);
+    const t = await task();
+    expect(t.workerProfiles).toEqual(['cheap', 'codex']);
+    expect(t.addedWorkerProfiles).toEqual([]);
+    expect(told()).toHaveLength(0);
+    // A mix: only the new one is added and named.
+    await svc.addTaskWorkers(ID, ['cheap', 'opus-max', 'opus-max']);
+    expect((await task()).workerProfiles).toEqual(['cheap', 'codex', 'opus-max']);
+    expect(told()).toHaveLength(1);
+    expect(told()[0]!.body).not.toContain('`cheap`');
+  });
+
+  it('keeps the start-text file of a harness that already has one', async () => {
+    const file = join(texts(), 'worker-deepseek.md');
+    writeFileSync(file, 'kept as it is');
+    const r = await svc.addTaskWorkers(ID, ['cheap-2']);
+    expect(r.ok).toBe(true);
+    expect(readFileSync(file, 'utf8')).toBe('kept as it is');
+    expect(told()[0]!.body).toContain(`- \`cheap-2\` (deepseek): \`--system-prompt-file ${file}\``);
+  });
+
+  it('a stopped task gets the profiles and the file but no message; Resume carries them', async () => {
+    await svc.stopTask(ID);
+    const r = await svc.addTaskWorkers(ID, ['opus-max']);
+    expect(r.ok).toBe(true);
+    expect((await task()).addedWorkerProfiles).toEqual(['opus-max']);
+    expect(existsSync(join(texts(), 'worker-claude-code.md'))).toBe(true);
+    expect(told()).toHaveLength(0);
+    expect((await svc.resumeTask(ID)).ok).toBe(true);
+    expect(told()).toHaveLength(1);
+    expect(told()[0]!.body).toContain('After a restart');
+    expect(told()[0]!.body).toContain(opusLine());
+  });
+
+  it('a task whose session is gone from the daemon is stored, not told', async () => {
+    d.sessions = [];
+    const r = await svc.addTaskWorkers(ID, ['opus-max']);
+    expect(r.ok).toBe(true);
+    expect((await task()).addedWorkerProfiles).toEqual(['opus-max']);
+    expect(d.messages).toHaveLength(0);
+  });
+
+  it('Resume without added profiles sends exactly the resume message', async () => {
+    await svc.stopTask(ID);
+    await svc.resumeTask(ID);
+    const { RESUMED_ORCHESTRATOR } = await import('./startText');
+    expect(told().map((m) => m.body)).toEqual([RESUMED_ORCHESTRATOR]);
+  });
+
+  it('a failed message after the store update says the profiles are saved and the orchestrator was not told', async () => {
+    d.override.set('POST /v1/messages', { status: 500, body: { error: { code: 'internal_error', message: 'disk full' } } });
+    const r = await svc.addTaskWorkers(ID, ['opus-max']);
+    expect(!r.ok && r.error.code).toBe('workers_message');
+    expect(!r.ok && r.error.message).toMatch(/^opus-max saved for fix-the-header, but telling the orchestrator failed: .*disk full.*Write to it in its terminal\.$/);
+    expect((await task()).addedWorkerProfiles).toEqual(['opus-max']);
+  });
+
+  it('refuses an unknown task, a finished task, an empty list and a profile that is not enabled', async () => {
+    const nope = await svc.addTaskWorkers('nope', ['opus-max']);
+    expect(!nope.ok && nope.error.code).toBe('task_not_found');
+    const empty = await svc.addTaskWorkers(ID, []);
+    expect(!empty.ok && empty.error.code).toBe('workers_empty');
+    const off = await svc.addTaskWorkers(ID, ['off']);
+    expect(!off.ok && off.error).toMatchObject({ code: 'profile_unknown', field: 'workerProfiles', message: '"off" is not an enabled profile' });
+    const ghost = await svc.addTaskWorkers(ID, ['opus-max', 'ghost']);
+    expect(!ghost.ok && ghost.error.code).toBe('profile_unknown');
+    expect((await task()).workerProfiles).toEqual(['cheap', 'codex']);
+    await svc.finishTask(ID);
+    const fin = await svc.addTaskWorkers(ID, ['opus-max']);
+    expect(!fin.ok && fin.error).toMatchObject({ code: 'task_finished', message: 'A finished task takes no new workers' });
+    expect(told()).toHaveLength(0);
+  });
+});
+
 describe('long-lived agents', () => {
   let folder: string;
   beforeEach(() => {

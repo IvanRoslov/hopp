@@ -46,11 +46,12 @@ import { copyProfileName, importProfileName, newProfileName, PROFILE_NAME_RE, un
 import { starterPipelines, validatePipeline } from './pipelines';
 import { expandHome, fail, MAX_SLUG, validateProject } from './projects';
 import {
+  addedWorkersMessage,
   agentText,
   allowedRepos,
   orchestratorText,
   RESUMED_AGENT,
-  RESUMED_ORCHESTRATOR,
+  resumedOrchestrator,
   triageLessonsBrief as triageBrief,
   workerText,
   type WorkerFile,
@@ -410,7 +411,7 @@ export class ShellService {
       }
     });
     const dir = workDir(id);
-    const textsDir = join(tasksDir, id);
+    const textsDir = this.textsDir(id);
     const made = { worktree: false, folder: false, texts: true };
     let taskBase: TaskBase | null = null;
     let spawnSent = false;
@@ -486,7 +487,7 @@ export class ShellService {
     const task: Task = {
       id, projectSlug: project.slug, title, brief, sessionId: id, dir,
       branch: project.orchestratorRepo ? 'hopp/' + id : null,
-      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), pipeline, base: taskBase, startedBy,
+      orchestratorProfile: orch.name, workerProfiles: workers.map((w) => w.name), addedWorkerProfiles: [], pipeline, base: taskBase, startedBy,
       status: 'active', hidden: false, createdAt: this.now(), finishedAt: 0,
     };
     const record = () =>
@@ -614,7 +615,82 @@ export class ShellService {
       if (!s) return fail('session_missing', `The task's session ${t.sessionId} is gone from the daemon`);
       if (LIVE.has(s.state)) return ok(null);
       await this.d.client.restoreSession(t.sessionId);
-      return this.tellRestarted(t.sessionId, RESUMED_ORCHESTRATOR);
+      // The restored start text lists only the launch's profiles: repeat the
+      // ones added since. A profile no longer enabled is left out.
+      const enabled = new Map((await this.listProfiles()).filter((p) => p.enabled).map((p) => [p.name, p]));
+      const added: WorkerFile[] = [];
+      for (const n of t.addedWorkerProfiles) {
+        const p = enabled.get(n);
+        if (p) added.push({ profile: n, harness: p.agent, file: this.workerFile(id, p.agent) });
+      }
+      return this.tellRestarted(t.sessionId, resumedOrchestrator(added));
+    });
+  }
+
+  // textsDir: the folder of a task's start texts.
+  private textsDir(id: string): string {
+    return join(this.d.home, 'shell', 'tasks', id);
+  }
+
+  private workerFile(id: string, harness: string): string {
+    return join(this.textsDir(id), `worker-${harness}.md`);
+  }
+
+  // addTaskWorkers adds enabled worker profiles to an active task. Profiles
+  // already on the task are skipped; a harness without a start-text file gets
+  // one; a running orchestrator is told, a stopped one hears of them on Resume.
+  addTaskWorkers(id: string, profiles: string[]): Promise<Result<Task>> {
+    return guard(async () => {
+      const t = await this.findTask(id);
+      if (!t) return fail('task_not_found', `No task "${id}"`);
+      if (t.status === 'finished') return fail('task_finished', 'A finished task takes no new workers');
+      if (profiles.length === 0) return fail('workers_empty', 'Choose at least one worker profile', 'workerProfiles');
+      const enabled = new Map((await this.listProfiles()).filter((p) => p.enabled).map((p) => [p.name, p]));
+      for (const n of profiles) {
+        if (!enabled.has(n)) return fail('profile_unknown', `"${n}" is not an enabled profile`, 'workerProfiles');
+      }
+      const fresh = [...new Set(profiles)].filter((n) => !t.workerProfiles.includes(n));
+      if (fresh.length === 0) return ok(t);
+      const project = (await this.d.store.read()).projects.find((p) => p.slug === t.projectSlug);
+      if (!project) return fail('project_not_found', `The task's project "${t.projectSlug}" is gone`);
+
+      // Start texts first, so a profile is never on the task without its file.
+      await mkdir(this.textsDir(id), { recursive: true });
+      const files: WorkerFile[] = [];
+      let lessons: Lesson[] | null = null;
+      for (const n of fresh) {
+        const harness = enabled.get(n)!.agent;
+        const file = this.workerFile(id, harness);
+        if (!existsSync(file)) {
+          lessons ??= await this.projectLessons(project.slug);
+          await writeAtomic(file, workerText({ project, taskId: id, title: t.title, toolsPrompt: await this.toolsPromptFor(harness), lessons }));
+        }
+        files.push({ profile: n, harness, file });
+      }
+
+      const updated = await this.d.store.update((st) => {
+        const x = st.tasks.find((k) => k.id === id);
+        if (!x) return null;
+        for (const n of fresh) {
+          if (!x.workerProfiles.includes(n)) x.workerProfiles.push(n);
+          if (!x.addedWorkerProfiles.includes(n)) x.addedWorkerProfiles.push(n);
+        }
+        return structuredClone(x);
+      });
+      if (!updated) return fail('task_not_found', `No task "${id}"`);
+
+      // A session gone from the daemon is not live: Resume reports that. Past
+      // the store update, any failure says the profiles are saved.
+      try {
+        const s = await this.sessionOrNull(t.sessionId);
+        if (s && LIVE.has(s.state)) await this.d.client.sendMessage({ to: t.sessionId, body: addedWorkersMessage(files) });
+      } catch (err) {
+        return fail(
+          'workers_message',
+          `${fresh.join(', ')} saved for ${id}, but telling the orchestrator failed: ${err instanceof Error ? err.message : String(err)}. Write to it in its terminal.`,
+        );
+      }
+      return ok(updated);
     });
   }
 
