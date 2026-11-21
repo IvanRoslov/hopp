@@ -161,6 +161,15 @@ button.row:active { background: var(--tree-pressed); }
 .menu-confirm { padding: 8px 8px 6px; max-width: 340px; white-space: normal; font-size: var(--fs-name); }
 .menu-confirm .btns { margin-top: 10px; }
 .menu .row.sticky-check { justify-content: flex-start; }
+/* A dropdown's list: short rows, the mark on the left, scrolls when long. */
+.menu.pick { max-height: min(420px, calc(100vh - 16px)); }
+.menu.pick .row { min-height: 28px; gap: 8px; }
+.menu.pick .row .t { overflow: hidden; text-overflow: ellipsis; }
+.menu.pick .pk { flex: none; width: 14px; height: 14px; display: grid; place-items: center; color: var(--text); }
+.menu.pick .pk.box { border: 1px solid var(--control-border); border-radius: 3px; }
+.menu.pick .pk.box.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.menu.pick .pk svg { width: 12px; height: 12px; }
+.menu.pick .row.clear { position: sticky; top: -6px; z-index: 1; background: var(--raise); border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 4px; }
 .menu .sep { height: 1px; background: var(--line); margin: 6px 2px; }
 
 /* ---------- page header and pages ---------- */

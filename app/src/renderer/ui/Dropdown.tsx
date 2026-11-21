@@ -1,5 +1,6 @@
 // Dropdown: a trigger button "Label: value" with a menu of options.
-// Single choice closes on pick; multiple choice stays open and toggles.
+// Single choice closes on pick; multiple choice stays open and toggles, marks
+// each row with a checkbox on the left and offers to clear the whole choice.
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { CheckIcon, DownIcon } from './icons';
 import { Popover } from './Popover';
@@ -7,6 +8,7 @@ import { Popover } from './Popover';
 export interface Option {
   value: string;
   label: string;
+  // Shown as the row's tooltip, not in the row: the list stays narrow.
   hint?: string;
   // A quiet tag after the label (a profile's effort).
   tag?: string;
@@ -57,8 +59,19 @@ export function Dropdown(
         <span className="label">{props.label}</span>
         <DownIcon className="arrow" />
       </button>
-      <Popover anchor={anchor} open={open} onClose={close}>
+      <Popover anchor={anchor} open={open} onClose={close} className="pick">
         {props.options.length === 0 && <div className="menu-note">{props.empty ?? 'Nothing to choose'}</div>}
+        {props.multiple && props.value.length > 0 && (
+          <button
+            type="button"
+            role="menuitem"
+            className="row quiet clear"
+            data-testid={props.testId ? props.testId + '-clear' : undefined}
+            onClick={() => props.multiple && props.onChange([])}
+          >
+            <span className="t">Clear selection ({props.value.length})</span>
+          </button>
+        )}
         {props.options.map((o) => (
           <button
             key={o.value}
@@ -66,14 +79,14 @@ export function Dropdown(
             role={props.multiple ? 'menuitemcheckbox' : 'menuitemradio'}
             aria-checked={selected(o.value)}
             className={'row' + (o.dim ? ' dim' : '')}
+            title={o.hint}
             onClick={() => pick(o.value)}
           >
+            <span className={'pk' + (props.multiple ? ' box' : '') + (selected(o.value) ? ' on' : '')}>{selected(o.value) && <CheckIcon />}</span>
             <span className="t">
               {o.label}
               {o.tag && <span className="tag">{o.tag}</span>}
-              {o.hint && <span className="muted"> · {o.hint}</span>}
             </span>
-            <span className="ck">{selected(o.value) && <CheckIcon />}</span>
           </button>
         ))}
       </Popover>

@@ -30,6 +30,8 @@ export interface WorkerFile {
   harness: string;
   // The start-text file for workers of that harness.
   file: string;
+  // What the profile is good for and what it costs, in the human's words.
+  description?: string;
 }
 
 export interface OrchestratorContext {
@@ -179,6 +181,8 @@ export function orchestratorText(c: OrchestratorContext): string {
     '',
     '   Use only these profiles; the model of a session cannot change after launch. The worker inherits this task\'s labels and folder limits.',
     '',
+    '   A profile\'s description, where it has one, says what the profile is good for and what it costs. For each piece pick the cheapest profile whose description fits it; a check of finished work rarely needs the most expensive one.',
+    '',
     '   A worker starts knowing nothing of this task. Its first message is its whole brief: the goal, the human\'s decisions that bind it, the paths to read, what to produce and where, and what to report. Write a long brief to a file and pass it with `--message-file <file>` instead of `-m`.',
     '',
     '3. A worker\'s report arrives in your input as a message, like the human\'s request did. Meanwhile brief the next piece, or wait; do not poll its folder, `git log` or `hopp ls` for it. `hopp ls --mine` shows your workers when you need their state. When a report is not enough, ask the worker with `hopp send <worker session> "<question>"` rather than open its files.',
@@ -216,10 +220,14 @@ export function orchestratorText(c: OrchestratorContext): string {
 }
 
 // workerProfileLines: one line per worker profile, with its harness and the
-// start-text file to launch it with. The start text, the message about added
-// profiles and the resume message all use these lines.
+// start-text file to launch it with, and the profile's description when it has
+// one. The start text, the message about added profiles and the resume message
+// all use these lines.
 export function workerProfileLines(workers: WorkerFile[]): string[] {
-  return workers.map((w) => `   - \`${w.profile}\` (${w.harness}): \`--system-prompt-file ${w.file}\``);
+  return workers.map((w) => {
+    const d = (w.description ?? '').replace(/\s+/g, ' ').trim();
+    return `   - \`${w.profile}\` (${w.harness}): \`--system-prompt-file ${w.file}\`` + (d ? ' — ' + d : '');
+  });
 }
 
 // addedWorkersMessage: what a running orchestrator is told when the human

@@ -450,7 +450,7 @@ export class ShellService {
         if (!workerFiles.some((f) => f.file === file)) {
           await writeAtomic(file, workerText({ project, taskId: id, title, toolsPrompt: toolsPrompt.get(w.agent) ?? '', lessons }));
         }
-        workerFiles.push({ profile: w.name, harness: w.agent, file });
+        workerFiles.push({ profile: w.name, harness: w.agent, file, description: w.description });
       }
       // Each stage's text is also a file, for the orchestrator to give workers.
       const stageFiles: Record<string, string> = {};
@@ -629,7 +629,7 @@ export class ShellService {
       const added: WorkerFile[] = [];
       for (const n of t.addedWorkerProfiles) {
         const p = enabled.get(n);
-        if (p) added.push({ profile: n, harness: p.agent, file: this.workerFile(id, p.agent) });
+        if (p) added.push({ profile: n, harness: p.agent, file: this.workerFile(id, p.agent), description: p.description });
       }
       return this.tellRestarted(t.sessionId, resumedOrchestrator(added));
     });
@@ -679,7 +679,7 @@ export class ShellService {
           lessons ??= await this.projectLessons(project.slug);
           await writeAtomic(file, workerText({ project, taskId: id, title: t.title, toolsPrompt: await this.toolsPromptFor(harness), lessons }));
         }
-        files.push({ profile: n, harness, file });
+        files.push({ profile: n, harness, file, description: enabled.get(n)!.description });
       }
 
       const updated = await this.d.store.update((st) => {

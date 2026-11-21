@@ -129,9 +129,16 @@ describe('new task', () => {
     await mount(f);
     expect(screen.getByText('A new worktree of /repos/hopp at its current commit; uncommitted changes are not included.')).toBeTruthy();
     fireEvent.click(screen.getByTestId('pick-orchestrator'));
-    expect(screen.getAllByRole('menuitemradio').map((b) => b.textContent)).toEqual(['opus · A profile', 'sonnet · A profile']);
+    // A row is the profile's name; its description is the tooltip.
+    expect(screen.getAllByRole('menuitemradio').map((b) => b.textContent)).toEqual(['opus', 'sonnet']);
+    expect(screen.getAllByRole('menuitemradio').map((b) => b.getAttribute('title'))).toEqual(['A profile', 'A profile']);
     fireEvent.click(screen.getAllByRole('menuitemradio')[1]!);
     fireEvent.click(screen.getByTestId('pick-workers'));
+    // One click clears the workers kept from the last launch.
+    fireEvent.click(screen.getByTestId('pick-workers-clear'));
+    expect(screen.getByTestId('pick-workers').textContent).toContain('none');
+    expect(screen.queryByTestId('pick-workers-clear')).toBeNull();
+    fireEvent.click(screen.getAllByRole('menuitemcheckbox')[0]!);
     fireEvent.click(screen.getAllByRole('menuitemcheckbox')[1]!);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByTestId('pick-workers').textContent).toContain('opus, sonnet');
