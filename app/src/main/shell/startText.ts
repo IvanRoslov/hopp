@@ -2,7 +2,7 @@
 // in layers: (1) hopp, (2) role, (3) project, (4) tools, then the human's
 // extra system prompt. A long-lived agent gets layers 1 and 4 only; its role
 // lives in its own folder.
-import type { Lesson, Pipeline, Project, TaskBase } from '../../shared/shell';
+import type { Lesson, Pipeline, PipelineStage, Project, TaskBase } from '../../shared/shell';
 import { LABEL } from '../../shared/shell';
 
 // hoppLayer: you run inside hopp, and the commands every session uses.
@@ -57,6 +57,8 @@ export interface OrchestratorContext {
   startedBy?: string | null;
   // The project's open lessons (hopp.about=project), newest first.
   lessons?: Lesson[];
+  // The file of each pipeline stage, by stage id (absolute paths).
+  stageFiles?: Record<string, string>;
 }
 
 export interface WorkerContext {
@@ -207,7 +209,7 @@ export function orchestratorText(c: OrchestratorContext): string {
     task,
     projectLayer(c.project, true, c.worktreesDir, c.repoBases),
     projectLessonsLayer(c.project.slug, c.lessons ?? []),
-    c.pipeline ? pipelineLayer(c.pipeline) : undefined,
+    c.pipeline ? pipelineLayer(c.pipeline, c.stageFiles) : undefined,
     toolsLayer(c.toolsPrompt),
     extra(c.extraSystemPrompt),
   ]);
@@ -333,14 +335,34 @@ function extra(text?: string): string | undefined {
   return '# From the human\n\n' + t;
 }
 
+// stageText: one stage of a pipeline as a file a worker can be pointed at.
+// A heading whose text is empty is left out.
+export function stageText(p: Pipeline, st: PipelineStage): string {
+  const parts = [
+    `# Stage: ${st.name} (stage id \`${st.id}\`)`,
+    `One stage of the pipeline "${p.name}". Your orchestrator's message says which part of it is yours. Where this text says to ask the human, or to post or publish to the feed, that is the orchestrator's: send it what it needs instead.`,
+  ];
+  const does = st.does.trim();
+  const result = st.result.trim();
+  if (does) parts.push('## What it does\n\n' + does);
+  if (result) parts.push('## What the result looks like\n\n' + result);
+  return parts.join('\n\n') + '\n';
+}
+
 // pipelineLayer: the stages in order, and the exact commands that keep the
 // human's feed, stages and artifacts in step with the work. The labels are
-// the contract with the app (LABEL in shared/shell.ts).
-export function pipelineLayer(p: Pipeline): string {
+// the contract with the app (LABEL in shared/shell.ts). stageFiles maps a
+// stage id to the file of that stage's text, for workers.
+export function pipelineLayer(p: Pipeline, stageFiles: Record<string, string> = {}): string {
+  const anyFile = Object.keys(stageFiles).length > 0;
+  const who =
+    'The stage texts say what must be done and what the result looks like. They are written to the task, not to you personally: under your role, workers make each stage\'s result, and you run the stage in the feed (start it, post, publish, submit, ask).';
   const lines = [
     `# Pipeline: ${p.name}`,
     '',
     'Work through these stages in order. The human follows the task in its feed, not in your terminal: everything they should see goes there with `hopp post`, `hopp artifact publish` and `hopp ask`, each labelled with its stage.',
+    '',
+    anyFile ? who + ' Give a worker the stage\'s file (the "For a worker" line) instead of retyping the stage, and add what is specific to its piece.' : who,
     '',
     '## Stages',
     '',
@@ -353,6 +375,8 @@ export function pipelineLayer(p: Pipeline): string {
     lines.push(`${i + 1}. **${st.name}** — stage id \`${st.id}\`; ${flags}.`);
     if (st.does) lines.push(`   What it does: ${st.does}`);
     if (st.result) lines.push(`   What the result looks like: ${st.result}`);
+    const file = stageFiles[st.id];
+    if (file) lines.push(`   For a worker: ${file}`);
   });
   const anySub = p.stages.some((s) => s.substages);
   lines.push(

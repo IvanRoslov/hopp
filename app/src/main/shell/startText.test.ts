@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Project } from '../../shared/shell';
+import type { Pipeline, PipelineStage, Project } from '../../shared/shell';
 import {
-  addedWorkersMessage, agentText, allowedRepos, hoppLayer, orchestratorText, RESUMED_ORCHESTRATOR, resumedOrchestrator, workerProfileLines, workerText,
+  addedWorkersMessage, agentText, allowedRepos, hoppLayer, orchestratorText, pipelineLayer, RESUMED_ORCHESTRATOR, resumedOrchestrator, stageText,
+  workerProfileLines, workerText,
 } from './startText';
 
 const project = (over: Partial<Project> = {}): Project => ({
@@ -202,6 +203,57 @@ describe('a task started by an agent', () => {
   });
 });
 
+
+describe('stage files', () => {
+  const st = (over: Partial<PipelineStage> = {}): PipelineStage => ({
+    id: 'spec', name: 'Spec', does: 'Write the spec.', result: 'A spec file.', substages: false, approval: true, ...over,
+  });
+  const pipe = (stages: PipelineStage[]): Pipeline => ({ id: 'dev', name: 'Development', stages, createdAt: 1, updatedAt: 1 });
+
+  it('a stage text has its name, id, pipeline, both parts, and ends with one newline', () => {
+    const s = st();
+    expect(stageText(pipe([s]), s)).toBe(
+      '# Stage: Spec (stage id `spec`)\n\n' +
+        'One stage of the pipeline "Development". Your orchestrator\'s message says which part of it is yours. Where this text says to ask the human, or to post or publish to the feed, that is the orchestrator\'s: send it what it needs instead.\n\n' +
+        '## What it does\n\nWrite the spec.\n\n' +
+        '## What the result looks like\n\nA spec file.\n',
+    );
+  });
+
+  it('a stage text leaves out a heading whose text is empty', () => {
+    const noResult = stageText(pipe([st({ result: '' })]), st({ result: '' }));
+    expect(noResult).toContain('## What it does\n\nWrite the spec.\n');
+    expect(noResult).not.toContain('What the result looks like');
+    expect(noResult.endsWith('Write the spec.\n')).toBe(true);
+    const noDoes = stageText(pipe([st({ does: '  ' })]), st({ does: '  ' }));
+    expect(noDoes).not.toContain('## What it does');
+    expect(noDoes).toContain('## What the result looks like\n\nA spec file.\n');
+  });
+
+  it('the pipeline layer names each stage file for a worker and says who does a stage', () => {
+    const p = pipe([st(), st({ id: 'build', name: 'Build', result: '' }), st({ id: 'ship', name: 'Ship', does: '', result: '' })]);
+    const t = pipelineLayer(p, { spec: '/h/t/stage-spec.md', build: '/h/t/stage-build.md', ship: '/h/t/stage-ship.md' });
+    expect(t).toContain('   What the result looks like: A spec file.\n   For a worker: /h/t/stage-spec.md\n');
+    expect(t).toContain('   What it does: Write the spec.\n   For a worker: /h/t/stage-build.md\n');
+    expect(t).toContain('stage id `ship`; waits for the human\'s approval; no substages.\n   For a worker: /h/t/stage-ship.md\n');
+    expect(t).toContain('Work through these stages in order. The human follows the task in its feed, not in your terminal: everything they should see goes there with `hopp post`, `hopp artifact publish` and `hopp ask`, each labelled with its stage.\n\n');
+    expect(t).toContain('The stage texts say what must be done and what the result looks like. They are written to the task, not to you personally: under your role, workers make each stage\'s result, and you run the stage in the feed (start it, post, publish, submit, ask). Give a worker the stage\'s file (the "For a worker" line) instead of retyping the stage, and add what is specific to its piece.');
+  });
+
+  it('without stage files the pipeline layer has no "For a worker" lines and the shorter paragraph', () => {
+    for (const t of [pipelineLayer(pipe([st()])), pipelineLayer(pipe([st()]), {})]) {
+      expect(t).not.toContain('For a worker');
+      expect(t).toContain('workers make each stage\'s result, and you run the stage in the feed (start it, post, publish, submit, ask).\n');
+      expect(t).not.toContain('instead of retyping the stage');
+    }
+  });
+
+  it('the orchestrator text passes its stage files to the pipeline layer', () => {
+    const t = orch({ pipeline: pipe([st()]), stageFiles: { spec: '/h/t/stage-spec.md' } });
+    expect(t).toContain('   For a worker: /h/t/stage-spec.md');
+    expect(orch()).not.toContain('# Pipeline');
+  });
+});
 
 describe('workers added after the launch', () => {
   const opus = { profile: 'opus-max', harness: 'claude-code', file: '/h/shell/tasks/t1/worker-claude-code.md' };

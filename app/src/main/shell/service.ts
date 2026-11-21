@@ -52,6 +52,7 @@ import {
   orchestratorText,
   RESUMED_AGENT,
   resumedOrchestrator,
+  stageText,
   triageLessonsBrief as triageBrief,
   workerText,
   type WorkerFile,
@@ -451,10 +452,17 @@ export class ShellService {
         }
         workerFiles.push({ profile: w.name, harness: w.agent, file });
       }
+      // Each stage's text is also a file, for the orchestrator to give workers.
+      const stageFiles: Record<string, string> = {};
+      for (const st of pipeline?.stages ?? []) {
+        const file = this.stageFile(id, st.id);
+        await writeAtomic(file, stageText(pipeline!, st));
+        stageFiles[st.id] = file;
+      }
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
         toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
-        repoBases, base: taskBase, startedBy, lessons,
+        repoBases, base: taskBase, startedBy, lessons, stageFiles,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
@@ -634,6 +642,12 @@ export class ShellService {
 
   private workerFile(id: string, harness: string): string {
     return join(this.textsDir(id), `worker-${harness}.md`);
+  }
+
+  // stageFile: the text of one pipeline stage, for workers. A stage id is a
+  // slug (validatePipeline), so it is safe in a file name.
+  private stageFile(id: string, stageId: string): string {
+    return join(this.textsDir(id), `stage-${stageId}.md`);
   }
 
   // addTaskWorkers adds enabled worker profiles to an active task. Profiles
