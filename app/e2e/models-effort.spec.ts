@@ -76,6 +76,21 @@ test('effort is shown on every profile row and in the pickers', async () => {
     if (check) await expect(opt('deepseek-flash-1m').locator('.tag')).toHaveCount(0);
     await page.keyboard.press('Escape');
 
+    // The workers' list marks the chosen profiles with a checkbox on the left,
+    // keeps descriptions out of the rows and clears the choice in one click.
+    await page.getByTestId('pick-workers').click();
+    const work = (n: string) => page.getByRole('menuitemcheckbox', { name: new RegExp(`^${n}(?![\\w-])`) });
+    await work('kimi-k3-1-pro-max').click();
+    await page.waitForTimeout(200);
+    await shot(page, '02b-new-task-workers');
+    if (check) await expect(work('kimi-k3-1-pro-max')).toHaveAttribute('aria-checked', 'true');
+    if (check) await expect(work('kimi-k3-1-pro-max')).toHaveAttribute('title', 'Воркеры по коду, трудные места');
+    if (check) await expect(work('kimi-k3-1-pro-max')).not.toContainText('Воркеры');
+    if (check) await page.getByTestId('pick-workers-clear').click();
+    if (check) await expect(page.getByRole('menuitemcheckbox', { checked: true })).toHaveCount(0);
+    if (check) await expect(page.getByTestId('pick-workers')).toContainText('none');
+    await page.keyboard.press('Escape');
+
     // So does the New agent form.
     await page.getByRole('button', { name: 'New agent' }).click();
     await page.getByTestId('pick-agent-profile').click();

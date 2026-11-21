@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/app/README]]
-verified: 2026-11-17 — against the code on main (e9468d7): Side, NewTask, ProjectForm, Settings, Models, Lessons; make app-test there
+verified: 2026-11-21 — the pickers of fact 8 against branch worker-profile-descriptions (ui/Dropdown.tsx, theme/base.css); the rest 2026-11-17 against the code on main (e9468d7): Side, NewTask, ProjectForm, Settings, Models, Lessons; make app-test there
 ---
 
 # The window
@@ -23,7 +23,7 @@ What the human sees in the app's window around the work: the left column, the fo
 ### Settings and looks
 
 7. Settings has four tabs: Projects (edit, add), Models, Tools (the preferences text with its save time, each tool with an on/off switch, a paid mark, its USAGE on click, broken tools by name) and Lessons.
-8. Models lists every profile of the daemon, on first then off, each with a switch, its harness and its effort as tags (`effort: default` only where its model has levels) and the default marked, with Add model, Copy…, Import models and in-place editing (see [[docs/app/models]]); the New task and New agent pickers show the same effort tag.
+8. Models lists every profile of the daemon, on first then off, each with a switch, its harness and its effort as tags (`effort: default` only where its model has levels) and the default marked, with Add model, Copy…, Import models and in-place editing (see [[docs/app/models]]); the New task and New agent pickers show the same effort tag and keep a profile's description as the row's tooltip, so the list stays narrow. A list with several choices (a task's workers) marks each chosen row with a checkbox on the left and clears the whole choice with one row.
 9. Lessons shows the open lessons by default (closed ones on a switch) in three groups, about hopp, about each project and unsorted, each lesson with its `#id`, its text as markdown, its author, task and age, and Close, Move to…, Add to Guardrails and Copy text (see [[docs/app/lessons]]). The open count shows on the tab, beside Settings in the left column and on a project's page.
 10. The look is the accepted prototype's, in English, dark or light: the theme follows the system until the human picks one, then stays. Artifact files that do not load show a placeholder, never a broken image; an SVG or a picture smaller than its tile is shown whole, not cropped.
 

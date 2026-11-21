@@ -268,6 +268,12 @@ describe('workers added after the launch', () => {
     expect(workerProfileLines([opus])).toEqual(['   ' + line]);
   });
 
+  it('a profile line ends with the description, on one line, and the text says to pick by it', () => {
+    expect(workerProfileLines([{ ...opus, description: 'Strong and expensive.\nHard bugs.' }])).toEqual(['   ' + line + ' — Strong and expensive. Hard bugs.']);
+    expect(workerProfileLines([{ ...opus, description: '  ' }])).toEqual(['   ' + line]);
+    expect(orch()).toContain('pick the cheapest profile whose description fits it');
+  });
+
   it('the message to a running orchestrator names each profile and its file', () => {
     const m = addedWorkersMessage([opus]);
     expect(m).toContain(line);
