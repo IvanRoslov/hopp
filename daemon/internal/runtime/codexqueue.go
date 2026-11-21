@@ -31,7 +31,8 @@ const minQueuedPrefix = 20
 
 // LooksLikeAgentQueued reports whether pane shows the agent's own pending
 // queue at the bottom of the screen holding marker — the injected text, or
-// a logical line of it. Today only Codex has such a queue:
+// a logical line of it. agy's queue has its own shape (looksLikeAgyQueued);
+// Codex's is:
 //
 //   - Messages to be submitted after next tool call (press esc to interrupt and send immediately)
 //     ↳ [from probe] MARKER-ALPHA please reply ACK-ALPHA
@@ -50,6 +51,9 @@ func LooksLikeAgentQueued(pane, marker string) bool {
 	want := stripWhitespace(marker)
 	if want == "" {
 		return false
+	}
+	if looksLikeAgyQueued(pane, marker) {
+		return true
 	}
 	lines := strings.Split(trimTrailingBlank(pane), "\n")
 

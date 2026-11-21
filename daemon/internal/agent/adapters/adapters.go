@@ -3,6 +3,7 @@
 package adapters
 
 import (
+	_ "github.com/IvanRoslov/hopp/internal/agent/agy"
 	_ "github.com/IvanRoslov/hopp/internal/agent/claudecode"
 	_ "github.com/IvanRoslov/hopp/internal/agent/codex"
 	_ "github.com/IvanRoslov/hopp/internal/agent/deepseek"

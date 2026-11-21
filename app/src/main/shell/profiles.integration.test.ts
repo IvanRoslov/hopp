@@ -82,10 +82,15 @@ describe.skipIf(!hasGo)('model profiles against the real daemon', () => {
     const cat = await svc.modelCatalog();
     expect(cat.ok).toBe(true);
     if (!cat.ok) return;
-    expect(cat.value.map((c) => c.agent).sort()).toEqual(['claude-code', 'codex', 'deepseek', 'kimi-code', 'pi']);
+    expect(cat.value.map((c) => c.agent).sort()).toEqual(['agy', 'claude-code', 'codex', 'deepseek', 'kimi-code', 'pi']);
     const first = await svc.importModels();
     expect(first.ok).toBe(true);
     if (first.ok) for (const p of first.value.added) expect(p.enabled).toBe(false);
+    // agy's models come in under "agy-": it also lists Claude models, whose
+    // ids are claude-code's own profile names.
+    const agy = first.ok ? first.value.added.filter((p) => p.agent === 'agy') : [];
+    expect(agy.length).toBeGreaterThan(0);
+    for (const p of agy) expect(p.name.startsWith('agy-')).toBe(true);
     const second = await svc.importModels();
     expect(second.ok && second.value.added).toEqual([]);
   });

@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/IvanRoslov/hopp/internal/agent"
-	_ "github.com/IvanRoslov/hopp/internal/agent/adapters" // the five harness adapters, for their Available checks
+	_ "github.com/IvanRoslov/hopp/internal/agent/adapters" // every harness adapter, for its Available check
 	"github.com/spf13/cobra"
 )
 
@@ -192,7 +192,7 @@ func checkStateDir() checkResult {
 
 // checkAgents reports each registered adapter's Available check by name.
 // An adapter that is not installed is a warning, not a failure: hopp works
-// with any subset of the five harnesses.
+// with any subset of the harnesses.
 func checkAgents() []checkResult {
 	reg := agent.Registry()
 	names := make([]string, 0, len(reg))
