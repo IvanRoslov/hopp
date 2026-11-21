@@ -1,14 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeDaemon, makeLesson, makeProfile, makeSession } from '../../../test/fakeDaemon';
-import type { ProjectInput, ShellState, TaskInput } from '../../shared/shell';
+import type { PipelineInput, ProjectInput, ShellState, TaskInput } from '../../shared/shell';
 import { DaemonClient } from '../daemon/client';
 import { makeRunner, RunError, type Runner } from './exec';
 import { expandHome } from './projects';
 import { ShellService, taskTitle, uniqueId } from './service';
+import { stageText } from './startText';
 import { ShellStore } from './store';
 
 // Every test gets a temp HOPP_HOME, a fake daemon and throwaway git
@@ -655,6 +656,68 @@ describe('adding worker profiles to a task', () => {
     const fin = await svc.addTaskWorkers(ID, ['opus-max']);
     expect(!fin.ok && fin.error).toMatchObject({ code: 'task_finished', message: 'A finished task takes no new workers' });
     expect(told()).toHaveLength(0);
+  });
+});
+
+describe('stage files', () => {
+  const ID = 'fix-the-header';
+  const texts = () => join(home, 'shell', 'tasks', ID);
+  const stageFiles = () => (existsSync(texts()) ? readdirSync(texts()).filter((f) => f.startsWith('stage-')).sort() : []);
+  const stage = (name: string, over: Partial<PipelineInput['stages'][number]> = {}) => ({ name, does: 'does ' + name, result: 'result ' + name, substages: false, approval: true, ...over });
+  const pipeline = async () => {
+    const p = await svc.createPipeline({ name: 'Two', stages: [stage('Spec'), stage('Build', { result: '' })] });
+    if (!p.ok) throw new Error(JSON.stringify(p.error));
+    return p.value;
+  };
+
+  beforeEach(() => {
+    d.profiles.push(makeProfile('opus-max', { agent: 'claude-code' }));
+  });
+
+  it('a task with a pipeline gets one file per stage, and its orchestrator text names each', async () => {
+    await project();
+    const p = await pipeline();
+    const r = await svc.createTask(taskInput({ pipelineId: p.id }));
+    expect(r.ok).toBe(true);
+    expect(stageFiles()).toEqual(['stage-build.md', 'stage-spec.md']);
+    for (const st of p.stages) {
+      const file = join(texts(), `stage-${st.id}.md`);
+      expect(readFileSync(file, 'utf8')).toBe(stageText(p, st));
+    }
+    const sp = String(d.created.at(-1)!['system_prompt']);
+    expect(sp).toContain(`   For a worker: ${join(texts(), 'stage-spec.md')}`);
+    expect(sp).toContain(`   For a worker: ${join(texts(), 'stage-build.md')}`);
+    expect(sp).toContain('instead of retyping the stage');
+  });
+
+  it('a task without a pipeline gets no stage files', async () => {
+    await project();
+    expect((await svc.createTask(taskInput())).ok).toBe(true);
+    expect(existsSync(join(texts(), 'orchestrator.md'))).toBe(true);
+    expect(stageFiles()).toEqual([]);
+    expect(String(d.created.at(-1)!['system_prompt'])).not.toContain('For a worker');
+  });
+
+  it('a failed launch leaves no stage files', async () => {
+    await project();
+    const p = await pipeline();
+    d.override.set('POST /v1/sessions', { status: 400, body: { error: { code: 'dir_not_allowed', message: 'nope' } } });
+    const r = await svc.createTask(taskInput({ pipelineId: p.id }));
+    expect(r.ok).toBe(false);
+    expect(existsSync(texts())).toBe(false);
+  });
+
+  it('adding workers and Resume leave the stage files as they are', async () => {
+    await project();
+    const p = await pipeline();
+    expect((await svc.createTask(taskInput({ pipelineId: p.id }))).ok).toBe(true);
+    const file = join(texts(), 'stage-spec.md');
+    writeFileSync(file, 'kept as it is');
+    expect((await svc.addTaskWorkers(ID, ['opus-max'])).ok).toBe(true);
+    expect((await svc.stopTask(ID)).ok).toBe(true);
+    expect((await svc.resumeTask(ID)).ok).toBe(true);
+    expect(readFileSync(file, 'utf8')).toBe('kept as it is');
+    expect(stageFiles()).toEqual(['stage-build.md', 'stage-spec.md']);
   });
 });
 

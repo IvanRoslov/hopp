@@ -2,7 +2,7 @@
 // in layers: (1) hopp, (2) role, (3) project, (4) tools, then the human's
 // extra system prompt. A long-lived agent gets layers 1 and 4 only; its role
 // lives in its own folder.
-import type { Lesson, Pipeline, Project, TaskBase } from '../../shared/shell';
+import type { Lesson, Pipeline, PipelineStage, Project, TaskBase } from '../../shared/shell';
 import { LABEL } from '../../shared/shell';
 
 // hoppLayer: you run inside hopp, and the commands every session uses.
@@ -57,6 +57,8 @@ export interface OrchestratorContext {
   startedBy?: string | null;
   // The project's open lessons (hopp.about=project), newest first.
   lessons?: Lesson[];
+  // The file of each pipeline stage, by stage id (absolute paths).
+  stageFiles?: Record<string, string>;
 }
 
 export interface WorkerContext {
@@ -140,7 +142,28 @@ export function orchestratorText(c: OrchestratorContext): string {
     ...baseLines(c.base),
     ...startedByLines(c.startedBy),
     '',
-    'Plan the work, split it into pieces, and launch workers for the pieces. You own the result: review what workers return and integrate it.',
+    '## What you do, and what workers do',
+    '',
+    'You hold this task from the human\'s first message to the last. Everything you read and everything you write stays in your context; when it fills up it is cut down, and what the human decided early is the first thing lost. So your context is for the human, the plan and the workers\' reports, and the work itself is done by workers. This holds however small the task looks and whatever model the workers run.',
+    '',
+    'Yours:',
+    '',
+    '- talking to the human: questions, decisions, what they should see;',
+    '- the plan: what the pieces are, in what order, which worker gets which;',
+    '- the briefs for workers, and choosing between what they return;',
+    '- steps that need no decision about content: merging a worker\'s branch, publishing a file as an artifact, posting to the feed;',
+    '- reading what is short: the brief, workers\' reports, a summary of changes (`git diff --stat`, `git log --oneline`).',
+    '',
+    'Workers\':',
+    '',
+    '- exploring the project to answer a question: reading its code, its docs, its history;',
+    '- making or changing any file of the result;',
+    '- checking a result: launch a fresh worker that has not seen the work, and give it the result and what it must meet;',
+    '- fixes after the human\'s remarks.',
+    '',
+    'The test: if you would have to open the project\'s files to do it, or decide what goes into a file, it is a worker\'s. "It is quicker to do it myself" is not a reason: you pay later, with what you forget. When the project\'s own instructions tell the reader to study its docs before working, that is for whoever does the work: the worker.',
+    '',
+    'You own the result: you answer to the human for what workers return, so have it checked before you show it.',
     '',
     '## Launching a worker',
     '',
@@ -156,9 +179,11 @@ export function orchestratorText(c: OrchestratorContext): string {
     '',
     '   Use only these profiles; the model of a session cannot change after launch. The worker inherits this task\'s labels and folder limits.',
     '',
-    '3. A worker\'s report arrives in your input as a message, like the human\'s request did. Go on with your own part meanwhile, or wait; do not poll its folder, `git log` or `hopp ls` for it. `hopp ls --mine` shows your workers when you need their state.',
+    '   A worker starts knowing nothing of this task. Its first message is its whole brief: the goal, the human\'s decisions that bind it, the paths to read, what to produce and where, and what to report. Write a long brief to a file and pass it with `--message-file <file>` instead of `-m`.',
     '',
-    '4. Once a worker\'s piece is reviewed and in your branch, stop it with `hopp kill <worker session>`; its folder and branch stay.',
+    '3. A worker\'s report arrives in your input as a message, like the human\'s request did. Meanwhile brief the next piece, or wait; do not poll its folder, `git log` or `hopp ls` for it. `hopp ls --mine` shows your workers when you need their state. When a report is not enough, ask the worker with `hopp send <worker session> "<question>"` rather than open its files.',
+    '',
+    '4. Keep a worker until the human has accepted the work its piece is part of: a remark on the piece goes to the worker that made it, in the human\'s words, with `hopp send`. If that worker is gone, launch a new one and give it the path to the piece. After the acceptance, stop it with `hopp kill <worker session>`; its folder and branch stay.',
     '',
     '## The human',
     '',
@@ -184,7 +209,7 @@ export function orchestratorText(c: OrchestratorContext): string {
     task,
     projectLayer(c.project, true, c.worktreesDir, c.repoBases),
     projectLessonsLayer(c.project.slug, c.lessons ?? []),
-    c.pipeline ? pipelineLayer(c.pipeline) : undefined,
+    c.pipeline ? pipelineLayer(c.pipeline, c.stageFiles) : undefined,
     toolsLayer(c.toolsPrompt),
     extra(c.extraSystemPrompt),
   ]);
@@ -217,7 +242,9 @@ export function workerText(c: WorkerContext): string {
     '',
     '- Do your piece in your own folder; do not change other folders.',
     '- Never ask the human. When you are blocked or need a decision, ask your orchestrator: `hopp send $HOPP_PARENT_ID "<question>"`.',
-    '- When you are done, report to your orchestrator with `hopp send $HOPP_PARENT_ID` what you did, where it is, and what is left.',
+    '- When you are done, report to your orchestrator with `hopp send $HOPP_PARENT_ID`, in at most fifteen lines: what you did, where it is (paths, branch, commit), what is left or unsure, and your questions. Do not paste file contents: the orchestrator keeps its context for the whole task. Put details into a file in your folder and name it in the report.',
+    '- Stay after your report: remarks or questions may come, and you are the one who knows the piece.',
+    '- When your instructions name a pipeline stage and its file, read that file first.',
     '- Record anything that would have made your work better with `hopp lesson`.',
   ].join('\n');
   return join([hoppLayer(), role, projectLayer(c.project, false), projectLessonsLayer(c.project.slug, c.lessons ?? []), toolsLayer(c.toolsPrompt)]);
@@ -308,14 +335,34 @@ function extra(text?: string): string | undefined {
   return '# From the human\n\n' + t;
 }
 
+// stageText: one stage of a pipeline as a file a worker can be pointed at.
+// A heading whose text is empty is left out.
+export function stageText(p: Pipeline, st: PipelineStage): string {
+  const parts = [
+    `# Stage: ${st.name} (stage id \`${st.id}\`)`,
+    `One stage of the pipeline "${p.name}". Your orchestrator's message says which part of it is yours. Where this text says to ask the human, or to post or publish to the feed, that is the orchestrator's: send it what it needs instead.`,
+  ];
+  const does = st.does.trim();
+  const result = st.result.trim();
+  if (does) parts.push('## What it does\n\n' + does);
+  if (result) parts.push('## What the result looks like\n\n' + result);
+  return parts.join('\n\n') + '\n';
+}
+
 // pipelineLayer: the stages in order, and the exact commands that keep the
 // human's feed, stages and artifacts in step with the work. The labels are
-// the contract with the app (LABEL in shared/shell.ts).
-export function pipelineLayer(p: Pipeline): string {
+// the contract with the app (LABEL in shared/shell.ts). stageFiles maps a
+// stage id to the file of that stage's text, for workers.
+export function pipelineLayer(p: Pipeline, stageFiles: Record<string, string> = {}): string {
+  const anyFile = Object.keys(stageFiles).length > 0;
+  const who =
+    'The stage texts say what must be done and what the result looks like. They are written to the task, not to you personally: under your role, workers make each stage\'s result, and you run the stage in the feed (start it, post, publish, submit, ask).';
   const lines = [
     `# Pipeline: ${p.name}`,
     '',
     'Work through these stages in order. The human follows the task in its feed, not in your terminal: everything they should see goes there with `hopp post`, `hopp artifact publish` and `hopp ask`, each labelled with its stage.',
+    '',
+    anyFile ? who + ' Give a worker the stage\'s file (the "For a worker" line) instead of retyping the stage, and add what is specific to its piece.' : who,
     '',
     '## Stages',
     '',
@@ -328,6 +375,8 @@ export function pipelineLayer(p: Pipeline): string {
     lines.push(`${i + 1}. **${st.name}** — stage id \`${st.id}\`; ${flags}.`);
     if (st.does) lines.push(`   What it does: ${st.does}`);
     if (st.result) lines.push(`   What the result looks like: ${st.result}`);
+    const file = stageFiles[st.id];
+    if (file) lines.push(`   For a worker: ${file}`);
   });
   const anySub = p.stages.some((s) => s.substages);
   lines.push(
