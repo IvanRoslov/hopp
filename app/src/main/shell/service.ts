@@ -443,12 +443,11 @@ export class ShellService {
         made.folder = true;
       }
 
-      const lessons = await this.projectLessons(project.slug);
       const workerFiles: WorkerFile[] = [];
       for (const w of workers) {
         const file = join(textsDir, `worker-${w.agent}.md`);
         if (!workerFiles.some((f) => f.file === file)) {
-          await writeAtomic(file, workerText({ project, taskId: id, title, toolsPrompt: toolsPrompt.get(w.agent) ?? '', lessons }));
+          await writeAtomic(file, workerText({ project, taskId: id, title, toolsPrompt: toolsPrompt.get(w.agent) ?? '' }));
         }
         workerFiles.push({ profile: w.name, harness: w.agent, file, description: w.description });
       }
@@ -462,7 +461,7 @@ export class ShellService {
       const systemPrompt = orchestratorText({
         project, taskId: id, title, taskDir: dir, worktreesDir, workers: workerFiles,
         toolsPrompt: toolsPrompt.get(orch.agent) ?? '', extraSystemPrompt: input.extraSystemPrompt, pipeline, brief,
-        repoBases, base: taskBase, startedBy, lessons, stageFiles,
+        repoBases, base: taskBase, startedBy, stageFiles,
       });
       await writeAtomic(join(textsDir, 'orchestrator.md'), systemPrompt);
 
@@ -671,13 +670,11 @@ export class ShellService {
       // Start texts first, so a profile is never on the task without its file.
       await mkdir(this.textsDir(id), { recursive: true });
       const files: WorkerFile[] = [];
-      let lessons: Lesson[] | null = null;
       for (const n of fresh) {
         const harness = enabled.get(n)!.agent;
         const file = this.workerFile(id, harness);
         if (!existsSync(file)) {
-          lessons ??= await this.projectLessons(project.slug);
-          await writeAtomic(file, workerText({ project, taskId: id, title: t.title, toolsPrompt: await this.toolsPromptFor(harness), lessons }));
+          await writeAtomic(file, workerText({ project, taskId: id, title: t.title, toolsPrompt: await this.toolsPromptFor(harness) }));
         }
         files.push({ profile: n, harness, file, description: enabled.get(n)!.description });
       }
@@ -953,19 +950,6 @@ export class ShellService {
       await this.d.client.closeLesson(id);
       return ok(null);
     });
-  }
-
-  // projectLessons: the project's open lessons about the project, newest
-  // first, for the start texts. A daemon that cannot list them leaves them
-  // out; the launch itself reports a daemon that is down.
-  private async projectLessons(slug: string): Promise<Lesson[]> {
-    try {
-      const list = await this.d.client.listLessons('new', { [LABEL.project]: slug, [LABEL.about]: 'project' });
-      return [...list].sort((a, b) => b.id - a.id);
-    } catch (err) {
-      console.warn(`hopp: the lessons of ${slug} were not read for the start text: ${(err as Error).message}`);
-      return [];
-    }
   }
 
   // setLessonAbout sorts a lesson: about hopp, about a project, or unsorted.

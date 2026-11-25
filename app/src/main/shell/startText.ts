@@ -2,7 +2,7 @@
 // in layers: (1) hopp, (2) role, (3) project, (4) tools, then the human's
 // extra system prompt. A long-lived agent gets layers 1 and 4 only; its role
 // lives in its own folder.
-import type { Lesson, Pipeline, PipelineStage, Project, TaskBase } from '../../shared/shell';
+import type { Pipeline, PipelineStage, Project, TaskBase } from '../../shared/shell';
 import { LABEL } from '../../shared/shell';
 
 // hoppLayer: you run inside hopp, and the commands every session uses.
@@ -15,10 +15,11 @@ export function hoppLayer(): string {
     '- `hopp send <session> "<text>"` sends a message to another session; for multi-line or markdown text write it to a file first and use `hopp send <session> --file <path>` (`--file -` reads stdin only when something is piped in; an empty text is refused, never sent). Messages to you arrive in your input.',
     '- `hopp ls --mine` lists the sessions you launched; `hopp ls` lists every running session.',
     '- `hopp ask "<question>" [--option <choice>]... [--wait]` asks the human; the answer comes back as a message (and as the output of `--wait`). Offer options only when they cover the cases: the human may answer in their own words instead. When the human settles your question some other way (a message, a line in the feed), withdraw the ask with `hopp ask withdraw <id>` so it does not stay waiting; an ask the human dismisses as not relevant gets no answer, so go by what was said since.',
-    '- `hopp lesson` records what cost you time, so the next agent does not lose it again. Two kinds:',
-    '  - `hopp lesson --label hopp.about=project "<what the next agent in this project must know>"`: a fact about the project\'s repository, its tools or environments.',
-    '  - `hopp lesson --label hopp.about=hopp "<what in hopp got in the way or is missing>"`: its commands, start texts, pipelines, tools or the app.',
-    '  One lesson is one fact, written so that someone without your context can act on it: say what you ran and what fixed it. Outside a project, use hopp.about=hopp, or name the project in the text.',
+    '- `hopp lesson` reports a defect in what you were given, so that it is fixed at its source: the project\'s context, hopp or a tool. No agent is shown lessons; each one is triaged into a fix. Two kinds:',
+    '  - `hopp lesson --label hopp.about=project "<what the project\'s context says or lacks, and what is true>"`: the project\'s docs, agent instructions or rules are wrong, outdated or silent about something any task in this repository needs (they say the landing is built with React, and the code is Vue).',
+    '  - `hopp lesson --label hopp.about=hopp "<what in hopp or a tool got in the way or is missing>"`: its commands, start texts, pipelines, tools or the app.',
+    '  A lesson is not a diary of the task. What you met in the task itself is not a lesson: a site that was hard to open, the subject of the task, a reference or a choice of the human. Ask: would fixing this in the docs, in hopp or in a tool help an agent with a different task? If not, do not write it.',
+    '  One lesson is one defect, written so that someone without your context can fix it: where it is, what you saw instead, what to change. Outside a project, use hopp.about=hopp, or name the project in the text.',
     '- `hopp tools list`, `hopp tools show <name>` and `hopp tools rules` describe the tools you may use.',
   ].join('\n');
 }
@@ -57,8 +58,6 @@ export interface OrchestratorContext {
   repoBases?: Record<string, string>;
   // The agent session that started the task; absent when the human did.
   startedBy?: string | null;
-  // The project's open lessons (hopp.about=project), newest first.
-  lessons?: Lesson[];
   // The file of each pipeline stage, by stage id (absolute paths).
   stageFiles?: Record<string, string>;
 }
@@ -68,8 +67,6 @@ export interface WorkerContext {
   taskId: string;
   title: string;
   toolsPrompt: string;
-  // The project's open lessons (hopp.about=project), newest first.
-  lessons?: Lesson[];
 }
 
 export interface AgentContext {
@@ -199,7 +196,7 @@ export function orchestratorText(c: OrchestratorContext): string {
       ? 'The task follows a pipeline (below): the human accepts it stage by stage in the feed. When the last stage is accepted, post a short summary of the whole task to the feed.'
       : 'When the work is ready, say so with `hopp ask "Ready for review: <what is done and where, in one line>" --option Accept --option Revise` and wait for the answer. On Revise, continue with what the human asked for.',
     '',
-    'Record anything that would have made this task go better with `hopp lesson`.',
+    'When the project\'s context, hopp or a tool was wrong or lacked something, report it with `hopp lesson`.',
     '',
     '## After a restart',
     '',
@@ -212,7 +209,6 @@ export function orchestratorText(c: OrchestratorContext): string {
     role,
     task,
     projectLayer(c.project, true, c.worktreesDir, c.repoBases),
-    projectLessonsLayer(c.project.slug, c.lessons ?? []),
     c.pipeline ? pipelineLayer(c.pipeline, c.stageFiles) : undefined,
     toolsLayer(c.toolsPrompt),
     extra(c.extraSystemPrompt),
@@ -253,45 +249,14 @@ export function workerText(c: WorkerContext): string {
     '- When you are done, report to your orchestrator with `hopp send $HOPP_PARENT_ID`, in at most fifteen lines: what you did, where it is (paths, branch, commit), what is left or unsure, and your questions. Do not paste file contents: the orchestrator keeps its context for the whole task. Put details into a file in your folder and name it in the report.',
     '- Stay after your report: remarks or questions may come, and you are the one who knows the piece.',
     '- When your instructions name a pipeline stage and its file, read that file first.',
-    '- Record anything that would have made your work better with `hopp lesson`.',
+    '- When the project\'s context, hopp or a tool was wrong or lacked something, report it with `hopp lesson`.',
   ].join('\n');
-  return join([hoppLayer(), role, projectLayer(c.project, false), projectLessonsLayer(c.project.slug, c.lessons ?? []), toolsLayer(c.toolsPrompt)]);
+  return join([hoppLayer(), role, projectLayer(c.project, false), toolsLayer(c.toolsPrompt)]);
 }
-
-// What a start text carries of a project's open lessons at most.
-export const LESSONS_MAX = 20;
-export const LESSONS_MAX_BYTES = 4096;
 
 // projectLessonsCommand: how to list a project's open lessons, whole.
 export function projectLessonsCommand(slug: string): string {
   return `hopp lessons --label ${LABEL.project}=${slug} --label hopp.about=project --full`;
-}
-
-// projectLessonsLayer: the project's open lessons (newest first, as given),
-// each with its id, at most LESSONS_MAX of them and about LESSONS_MAX_BYTES;
-// the rest are counted with the command that lists them all.
-export function projectLessonsLayer(slug: string, lessons: Lesson[]): string | undefined {
-  if (lessons.length === 0) return undefined;
-  const lines = [
-    '## Lessons from earlier tasks in this project',
-    '',
-    `Agents before you wrote these down: the open lessons of this project (labels ${LABEL.project}=${slug} and hopp.about=project). When your work makes one obsolete (the fact is now in the repository's docs, a script or a fix), close it with \`hopp lessons close <id>\` and say so in your report; do not close a lesson you only read. All of them, whole: \`${projectLessonsCommand(slug)}\`.`,
-    '',
-  ];
-  let bytes = 0;
-  let shown = 0;
-  for (const l of lessons) {
-    const body = l.body.trim().replace(/\n+/g, '\n  ');
-    const line = `- #${l.id} ${body}`;
-    const size = Buffer.byteLength(line) + 1;
-    if (shown >= LESSONS_MAX || (shown > 0 && bytes + size > LESSONS_MAX_BYTES)) break;
-    lines.push(line);
-    bytes += size;
-    shown++;
-  }
-  const rest = lessons.length - shown;
-  if (rest > 0) lines.push('', `${rest} more: \`${projectLessonsCommand(slug)}\``);
-  return lines.join('\n');
 }
 
 // triageLessonsBrief: the brief of a task that works through a project's open
@@ -300,9 +265,9 @@ export function triageLessonsBrief(slug: string): string {
   return [
     `Work through this project's open lessons: \`${projectLessonsCommand(slug)}\`.`,
     '',
-    'For each lesson, put the knowledge where the next agent will find it without hopp: the repository\'s agent docs, toolbox or README, a script, or a code fix. Commit it on your branch, then close the lesson with `hopp lessons close <id>`.',
+    'A lesson reports a defect in the project\'s context; no agent is shown lessons, so one helps only once it is fixed. For each lesson, fix its source where the next agent will find it without hopp: the repository\'s agent docs, toolbox or README, a script, or a code fix. Commit it on your branch, then close the lesson with `hopp lessons close <id>`.',
     'A lesson that is really about hopp itself (its commands, start texts, pipelines, tools or the app): relabel it with `hopp lessons label <id> hopp.about=hopp` and leave it open.',
-    'A lesson that is wrong or no longer true: close it and say why.',
+    'A lesson that is wrong or no longer true, or that is a note about one task and not a defect of the context (a site that was hard to open, a reference, a choice of the human): close it and say why.',
     '',
     'At the end, list what you did with each lesson, by its id.',
   ].join('\n');
