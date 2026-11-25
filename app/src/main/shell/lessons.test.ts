@@ -1,5 +1,5 @@
-// Lessons by kind: what a launch tells agents about their project's open
-// lessons, and how the human sorts lessons and moves one into Guardrails.
+// Lessons by kind: a launch never shows agents their project's lessons, and
+// how the human sorts lessons and moves one into Guardrails.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,39 +9,11 @@ import type { Lesson } from '../../shared/shell';
 import { DaemonClient } from '../daemon/client';
 import { makeRunner, type Runner } from './exec';
 import { ShellService } from './service';
-import { LESSONS_MAX, projectLessonsCommand, projectLessonsLayer, triageLessonsBrief } from './startText';
+import { projectLessonsCommand, triageLessonsBrief } from './startText';
 import { ShellStore } from './store';
 
 const projectLesson = (id: number, slug: string, body = `fact ${id}`, over: Partial<Lesson> = {}): Lesson =>
   makeLesson(id, { body, labels: { 'hopp.project': slug, 'hopp.about': 'project' }, ...over });
-
-describe('projectLessonsLayer', () => {
-  it('says nothing when there are none', () => {
-    expect(projectLessonsLayer('site', [])).toBeUndefined();
-  });
-
-  it('lists each with its id, how to close one and how to list them all', () => {
-    const t = projectLessonsLayer('site', [projectLesson(9, 'site', 'crane needs DOCKER_CONFIG\nset it to an empty dir'), projectLesson(4, 'site'), projectLesson(2, 'site')])!;
-    expect(t).toContain('## Lessons from earlier tasks in this project');
-    expect(t).toContain('- #9 crane needs DOCKER_CONFIG\n  set it to an empty dir\n- #4 fact 4\n- #2 fact 2');
-    expect(t).toContain('close it with `hopp lessons close <id>`');
-    expect(t).toContain('do not close a lesson you only read');
-    expect(t).toContain('`hopp lessons --label hopp.project=site --label hopp.about=project --full`');
-    expect(t).not.toContain('more:');
-  });
-
-  it('caps a long list and counts the rest', () => {
-    const many = Array.from({ length: 40 }, (_, i) => projectLesson(40 - i, 'site'));
-    const t = projectLessonsLayer('site', many)!;
-    expect(t.match(/^- #/gm)).toHaveLength(LESSONS_MAX);
-    expect(t).toContain(`20 more: \`${projectLessonsCommand('site')}\``);
-    // And by size: long lessons stop before ~4 KB.
-    const long = Array.from({ length: 10 }, (_, i) => projectLesson(i + 1, 'site', 'x'.repeat(1000)));
-    const t2 = projectLessonsLayer('site', long)!;
-    expect(t2.match(/^- #/gm)).toHaveLength(4);
-    expect(t2).toContain('6 more:');
-  });
-});
 
 describe('triageLessonsBrief', () => {
   it('lists the lessons, says where knowledge goes, and how to treat lessons about hopp', () => {
@@ -50,6 +22,7 @@ describe('triageLessonsBrief', () => {
     expect(b).toContain('`hopp lessons close <id>`');
     expect(b).toContain('`hopp lessons label <id> hopp.about=hopp`');
     expect(b).toContain('list what you did with each lesson');
+    expect(b).toContain('a note about one task and not a defect of the context');
   });
 });
 
@@ -84,27 +57,17 @@ const launch = async () => {
   return { orch: String(d.created.at(-1)!['system_prompt']), worker: readFileSync(join(home, 'shell', 'tasks', r.value.id, 'worker-claude-code.md'), 'utf8') };
 };
 
-describe('a launch carries the open lessons of its own project', () => {
-  it('newest first, open ones only, never another project\'s or one about hopp', async () => {
+describe('a launch shows no lessons', () => {
+  it('neither the orchestrator nor a worker gets the project\'s open lessons', async () => {
     d.lessons = [
       projectLesson(1, 'site', 'old site fact'),
-      projectLesson(2, 'shop', 'a shop fact'),
-      projectLesson(3, 'site', 'closed site fact', { status: 'closed' }),
       makeLesson(4, { body: 'hopp send lost my text', labels: { 'hopp.project': 'site', 'hopp.about': 'hopp' } }),
-      makeLesson(5, { body: 'unsorted', labels: { 'hopp.project': 'site' } }),
       projectLesson(6, 'site', 'new site fact'),
     ];
     for (const t of Object.values(await launch())) {
-      expect(t).toContain('- #6 new site fact\n- #1 old site fact');
-      for (const no of ['a shop fact', 'closed site fact', 'hopp send lost', 'unsorted']) expect(t).not.toContain(no);
+      for (const no of ['old site fact', 'new site fact', 'hopp send lost', 'Lessons from earlier tasks']) expect(t).not.toContain(no);
+      expect(t).toContain('`hopp lesson --label hopp.about=project');
     }
-  });
-
-  it('a lesson closed since the last launch is gone from the next one', async () => {
-    d.lessons = [projectLesson(1, 'site', 'soon obsolete')];
-    expect((await launch()).orch).toContain('#1 soon obsolete');
-    await svc.closeLesson(1);
-    expect((await launch()).orch).not.toContain('Lessons from earlier tasks');
   });
 });
 

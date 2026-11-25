@@ -31,9 +31,12 @@ describe('hoppLayer', () => {
     expect(t).toContain('Offer options only when they cover the cases: the human may answer in their own words instead.');
     expect(t).toContain('withdraw the ask with `hopp ask withdraw <id>` so it does not stay waiting');
     // Lessons of two kinds, both commands spelled out.
-    expect(t).toContain('`hopp lesson --label hopp.about=project "<what the next agent in this project must know>"`');
-    expect(t).toContain('`hopp lesson --label hopp.about=hopp "<what in hopp got in the way or is missing>"`');
-    expect(t).toContain('One lesson is one fact');
+    expect(t).toContain('`hopp lesson --label hopp.about=project "<what the project\'s context says or lacks, and what is true>"`');
+    expect(t).toContain('`hopp lesson --label hopp.about=hopp "<what in hopp or a tool got in the way or is missing>"`');
+    expect(t).toContain('One lesson is one defect');
+    // A lesson is a defect report, never a note about the task itself.
+    expect(t).toContain('A lesson is not a diary of the task');
+    expect(t).toContain('No agent is shown lessons');
     // Multi-line text goes through a file; stdin only when piped (lesson #3).
     expect(t).toContain('write it to a file first and use `hopp send <session> --file <path>`');
     expect(t).toContain('`--file -` reads stdin only when something is piped in');

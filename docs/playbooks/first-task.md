@@ -45,7 +45,7 @@ You want to run work through the hopp desktop app for the first time: create a p
    - When a stage is done the orchestrator submits it: the feed shows the submitted versions with **Accept**, **Return** (say what to fix) and **All artifacts**.
    - **Stages** opens the stages and their state; **Artifacts** opens every version with a viewer (image, video, HTML, text), a version picker and side-by-side compare; **Terminal** opens the orchestrator's terminal.
 9. **Tools and preferences.** **Settings → Tools**: write your **Preferences** (which tool or model to use for what; saved as `$HOPP_HOME/tools/rules.md`, which agents read), switch tools on or off, see which are **paid** (an agent asks you with `hopp ask` before each paid call), and click a tool for its usage.
-10. **Lessons.** Agents record what would have made the work better with `hopp lesson`; read them in **Settings → Lessons** and mark each as done once you have acted on it.
+10. **Lessons.** Agents report what was wrong or missing in the project's context, in hopp or in a tool with `hopp lesson`; read them in **Settings → Lessons** and mark each as done once you have acted on it.
 
 ## Verify
 
