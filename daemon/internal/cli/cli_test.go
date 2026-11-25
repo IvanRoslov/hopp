@@ -1248,3 +1248,18 @@ func TestReplyInOwnWordsAndDismiss(t *testing.T) {
 		}
 	}
 }
+
+// `hopp ask list` is not a subcommand: it is refused instead of asking the
+// human the word "list", and it names the command that lists asks.
+func TestAskListIsRefused(t *testing.T) {
+	t.Setenv("HOPP_SESSION_ID", "s1")
+	for _, word := range []string{"list", "ls"} {
+		f := newFakeAPI(t)
+		if _, errOut, code := runCLI(t, f, "ask", word); code != 3 || !strings.Contains(errOut, "hopp asks") {
+			t.Fatalf("ask %s: exit %d stderr %q", word, code, errOut)
+		}
+		if len(f.all()) != 0 {
+			t.Errorf("ask %s sent a request: %+v", word, f.all())
+		}
+	}
+}

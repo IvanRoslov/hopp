@@ -273,3 +273,34 @@ func TestTerminalParentGetsNothing(t *testing.T) {
 		t.Errorf("message.queued events = %d, want 0", n)
 	}
 }
+
+// While the parent or one of its children waits for the human on an open
+// ask, the parent has nothing to unblock: no summary wakes it. Once the ask
+// is closed the summary comes again.
+func TestNoSummaryWhileTheHumanIsAsked(t *testing.T) {
+	for _, asker := range []string{"p", "c1"} {
+		t.Run("ask from "+asker, func(t *testing.T) {
+			st := openTestStore(t)
+			addSession(t, st, "p", "", "running", "idle", 0)
+			addSession(t, st, "c1", "p", "running", "idle", stale())
+			id, err := st.AddAsk(store.Ask{FromSession: asker, Body: "Accept?", Status: store.AskOpen, CreatedAt: time.Now().Unix()})
+			if err != nil {
+				t.Fatalf("AddAsk: %v", err)
+			}
+
+			hb := New(st, bus.New(st), testConfig(), unknownActivity, func(string) {})
+			tick(t, hb)
+			if msgs := messagesTo(t, st, "p"); len(msgs) != 0 {
+				t.Fatalf("messages = %+v, want none while an ask of %s is open", msgs, asker)
+			}
+
+			if _, err := st.AnswerAsk(id, "", "yes", time.Now().Unix()); err != nil {
+				t.Fatalf("AnswerAsk: %v", err)
+			}
+			tick(t, hb)
+			if msgs := messagesTo(t, st, "p"); len(msgs) != 1 {
+				t.Fatalf("messages = %+v, want one once the ask is answered", msgs)
+			}
+		})
+	}
+}

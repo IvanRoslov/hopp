@@ -114,6 +114,16 @@ func (h *Heartbeat) tickOne(parent store.Session) error {
 		return nil
 	}
 
+	// The parent or one of its children waits for the human: there is
+	// nothing the parent can unblock, and each summary would only wake it.
+	waiting, err := h.waitsForHuman(parent.ID, children)
+	if err != nil {
+		return fmt.Errorf("list open asks: %w", err)
+	}
+	if waiting {
+		return nil
+	}
+
 	if !h.antiSpamOK(parent.ID, now, h.cfg.HeartbeatInterval) {
 		return nil
 	}
@@ -140,6 +150,25 @@ func (h *Heartbeat) tickOne(parent store.Session) error {
 	}
 
 	return nil
+}
+
+// waitsForHuman reports whether the parent or one of its children has an
+// open ask.
+func (h *Heartbeat) waitsForHuman(parentID string, children []store.Session) (bool, error) {
+	ids := []string{parentID}
+	for _, c := range children {
+		ids = append(ids, c.ID)
+	}
+	for _, id := range ids {
+		asks, err := h.st.ListAsks(store.AskFilter{Status: store.AskOpen, From: id})
+		if err != nil {
+			return false, err
+		}
+		if len(asks) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // liveSession reports whether s is still a live session — one that can
