@@ -35,16 +35,16 @@ const order = () =>
   );
 
 describe('the work view header', () => {
-  it('is one row: title, Stop, Questions, the picker, then the menu; no line above the terminal', async () => {
+  it('is one row: title, Stop, Questions, Artifacts, the picker, then the menu; no line above the terminal', async () => {
     await openTask();
-    expect(order()).toEqual(['title', 'task-stop', 'questions-button', 'session-picker', 'actions-menu']);
+    expect(order()).toEqual(['title', 'task-stop', 'questions-button', 'artifacts-button', 'session-picker', 'actions-menu']);
     expect(screen.getByTestId('work-view').querySelector('.top-alert')).toBeNull();
     expect(screen.getByTestId('work-view').querySelector('.term-bar, .status-line')).toBeNull();
   });
 
   it('a stopped task offers Resume before Questions and says so quietly, whole in the tooltip', async () => {
     await openTask({ state: 'killed' });
-    expect(order()).toEqual(['title', 'task-resume', 'questions-button', 'session-picker', 'status', 'actions-menu']);
+    expect(order()).toEqual(['title', 'task-resume', 'questions-button', 'artifacts-button', 'session-picker', 'status', 'actions-menu']);
     const st = screen.getByTestId('work-status');
     expect(st.textContent).toBe('Stopped.');
     expect(st.getAttribute('title')).toBe('Stopped.');

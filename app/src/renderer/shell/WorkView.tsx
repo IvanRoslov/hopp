@@ -157,13 +157,20 @@ export function WorkView(props: {
   // Shown in place of the terminal when it cannot be.
   noTerminal: ReactNode;
   details: ReactNode;
+  // A task's artifacts: their number for the header button and the column's
+  // body. Without it (a long-lived agent) there is no Artifacts button.
+  artifacts?: { count: number; body: ReactNode };
+  // The artifacts an ask attaches, drawn under its text.
+  askAttachments?: (refs: string[]) => ReactNode;
   refreshSession: (id: string) => void;
 }) {
   const { bridge, selectedId } = props;
   const selected = props.tree.find((s) => s.id === selectedId) ?? null;
   const { asks, reload: reloadAsks } = useAsks(bridge.daemon, selectedId, props.stream);
   const count = asks.filter((a) => a.status === 'open').length + (selected?.question ? 1 : 0);
-  const open = props.panel !== null;
+  const panel: Panel = props.panel === 'artifacts' && !props.artifacts ? null : props.panel;
+  const open = panel !== null;
+  const colTitle = panel === 'details' ? 'Details' : panel === 'artifacts' ? 'Artifacts' : 'Questions';
   const split = useSplit();
   // Where the terminal's picker goes: the header, or the terminal's head
   // while a column is open.
@@ -185,13 +192,24 @@ export function WorkView(props: {
           {props.action}
           <button
             type="button"
-            className={'c-btn' + (props.panel === 'questions' ? ' on' : '')}
+            className={'c-btn' + (panel === 'questions' ? ' on' : '')}
             data-testid="questions-button"
-            aria-pressed={props.panel === 'questions'}
-            onClick={() => props.onPanel(props.panel === 'questions' ? null : 'questions')}
+            aria-pressed={panel === 'questions'}
+            onClick={() => props.onPanel(panel === 'questions' ? null : 'questions')}
           >
             {count > 0 ? `Questions · ${count}` : 'Questions'}
           </button>
+          {props.artifacts && (
+            <button
+              type="button"
+              className={'c-btn' + (panel === 'artifacts' ? ' on' : '')}
+              data-testid="artifacts-button"
+              aria-pressed={panel === 'artifacts'}
+              onClick={() => props.onPanel(panel === 'artifacts' ? null : 'artifacts')}
+            >
+              {props.artifacts.count > 0 ? `Artifacts · ${props.artifacts.count}` : 'Artifacts'}
+            </button>
+          )}
           <span className="top-slot" ref={setHeadSlot} />
           {props.status && (
             <span className="top-status" title={props.status} data-testid="work-status">
@@ -204,16 +222,18 @@ export function WorkView(props: {
         {props.alert && <div className="top-alert">{props.alert}</div>}
       </div>
       {open && (
-        <section className="task-q" data-testid="zone-middle" aria-label={props.panel === 'details' ? 'Details' : 'Questions'}>
+        <section className="task-q" data-testid="zone-middle" aria-label={colTitle}>
           <div className="q-head">
-            <span>{props.panel === 'details' ? 'Details' : 'Questions'}</span>
+            <span>{colTitle}</span>
             <span className="sp" />
             <button type="button" className="c-btn icon" aria-label="Close the column" onClick={() => props.onPanel(null)}>
               <CloseIcon />
             </button>
           </div>
-          {props.panel === 'details' ? (
+          {panel === 'details' ? (
             <div className="q-body">{props.details}</div>
+          ) : panel === 'artifacts' ? (
+            <div className="ptask-panel-body">{props.artifacts?.body}</div>
           ) : (
             <QuestionsPanel
               daemon={bridge.daemon}
@@ -222,6 +242,7 @@ export function WorkView(props: {
               asks={asks}
               reloadAsks={reloadAsks}
               reloadSession={props.refreshSession}
+              attachments={props.askAttachments}
             />
           )}
         </section>

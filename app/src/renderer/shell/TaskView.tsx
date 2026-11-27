@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { RepoLabel } from './repos';
 import { BaseRows, BaseWarning, useBaseDismissal } from './TaskBase';
 import type { HoppBridge } from '../../shared/bridge';
-import type { ModelProfile, Project, Result, Task } from '../../shared/shell';
+import type { Artifact, ModelProfile, Project, Result, Task } from '../../shared/shell';
 import { useModelCatalog } from '../data/hooks';
 import { Dropdown } from '../ui/Dropdown';
 import { profileEffortTag } from '../ui/effort';
@@ -12,6 +12,11 @@ import { STARTING_GRACE_MS, taskSessions, toMs } from '../model/shellModel';
 import type { Go, Panel, PipelinePanel } from './route';
 import { ActionsMenu, ConfirmButton, TerminalArea, WorkView, type MenuItem } from './WorkView';
 import { PipelineTaskView } from '../feed/PipelineTaskView';
+import { findArtifact, latestByName } from '../feed/model';
+import { useTaskFeed } from '../feed/useTaskFeed';
+import { ArtifactsPanel } from '../artifacts/ArtifactsPanel';
+import { ArtifactTile } from '../artifacts/Tile';
+import '../feed/feed.css';
 
 function when(ms: number): string {
   if (!ms) return '—';
@@ -292,9 +297,10 @@ export function TaskView(props: {
   }
 
   return (
-    <WorkView
+    <PlainTaskView
       bridge={bridge}
       stream={props.stream}
+      task={task}
       title={task.title}
       tree={tree}
       selectedId={selectedId}
@@ -309,6 +315,57 @@ export function TaskView(props: {
       noTerminal={noTerminal}
       details={<TaskDetails task={task} project={props.project} shell={shell} />}
       refreshSession={props.refreshSession}
+    />
+  );
+}
+
+// PlainTaskView: a task without a pipeline. The work view, plus the task's
+// artifacts: an Artifacts column with the grid and the viewer, and under an
+// ask the tiles of what it attaches.
+function PlainTaskView(props: Omit<React.ComponentProps<typeof WorkView>, 'artifacts' | 'askAttachments'> & { task: Task }) {
+  const { task, ...work } = props;
+  const shell = props.bridge.shell;
+  const { feed } = useTaskFeed(shell, task.id);
+  const [viewing, setViewing] = useState<Artifact | null>(null);
+  const open = (a: Artifact) => {
+    setViewing(a);
+    if (props.panel !== 'artifacts') props.onPanel('artifacts');
+  };
+  return (
+    <WorkView
+      {...work}
+      onPanel={(p) => {
+        // The header button opens the grid, not the artifact seen last.
+        if (p === 'artifacts') setViewing(null);
+        props.onPanel(p);
+      }}
+      artifacts={{
+        count: latestByName(feed.artifacts).length,
+        body: (
+          <ArtifactsPanel
+            shell={shell}
+            pipeline={null}
+            artifacts={feed.artifacts}
+            asks={feed.asks}
+            stageFilter=""
+            onStageFilter={() => {}}
+            viewing={viewing}
+            onView={setViewing}
+            onOpenSubmission={() => props.onPanel('questions')}
+          />
+        ),
+      }}
+      askAttachments={(refs) => {
+        const tiles = refs.map((r) => findArtifact(feed.artifacts, r)).filter((a): a is Artifact => !!a);
+        if (tiles.length === 0) return null;
+        return (
+          <div className="af-row">
+            {tiles.map((a) => (
+              <ArtifactTile key={a.id} shell={shell} artifact={a} onOpen={open} size="feed" />
+            ))}
+          </div>
+        );
+      }}
     />
   );
 }

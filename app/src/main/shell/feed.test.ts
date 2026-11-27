@@ -234,6 +234,19 @@ describe('the feed', () => {
     expect(svc.feedTaskOf({ id: 1, ts: 1, type: 'session.spawned', data: { labels: { 'hopp.task': 't4' } } })).toBeNull();
     expect(svc.feedTaskOf({ id: 1, ts: 1, type: 'post.added', data: {} })).toBeNull();
   });
+
+  it('names the task of an artifact published without labels by its scope', async () => {
+    await svc.createProject({ name: 'Site', description: '', orchestratorRepo: null, workerRepos: [], guardrails: '' });
+    const made = await svc.createTask({ projectSlug: 'site', brief: 'Make it', orchestratorProfile: 'p', workerProfiles: [] });
+    if (!made.ok) throw new Error(JSON.stringify(made.error));
+    const task = made.value;
+    expect(task.pipeline).toBeNull();
+    const published = (scope: string, labels = {}) => ({ id: 1, ts: 1, type: 'artifact.published', data: { scope, artifact_labels: labels } });
+    expect(await svc.feedTaskFor(published(task.sessionId))).toBe(task.id);
+    expect(await svc.feedTaskFor(published('someone-else'))).toBeNull();
+    expect(await svc.feedTaskFor(published('someone-else', { 'hopp.task': 't9' }))).toBe('t9');
+    expect(await svc.feedTaskFor({ id: 1, ts: 1, type: 'session.spawned', data: { scope: task.sessionId } })).toBeNull();
+  });
 });
 
 describe('artifact files', () => {
