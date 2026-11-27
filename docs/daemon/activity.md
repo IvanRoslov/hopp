@@ -1,7 +1,7 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (a01bc9a) and the live checks of 2026-11-15 against ~/.hopp
+verified: 2026-11-15 — against the code on main (a01bc9a) and the live checks of 2026-11-15 against ~/.hopp; fact 7's open-ask rule by go test on hopp-lessons-fixes, 2026-11-25
 ---
 
 # Activity, alerts to a parent, and the event stream
@@ -14,7 +14,7 @@ The daemon watches what each agent is doing, tells a parent when a child needs h
 4. A session whose pane lost its agent (only a bare shell is left, or the tmux session is gone) shows `exited` while its state stays `running`; `hopp restore` relaunches it.
 5. When Codex, Kimi Code or Claude Code stops on a start screen before its first turn (Claude Code's is its folder-trust screen, in both harnesses that run Claude Code, looked for until the root's journal shows a turn of this launch), or a Claude Code permission dialog or question is open, the session's question is recorded (the session JSON's `question`, a `?` in `hopp ls`) and the session waits; hopp presses keys only when a client answers through `hopp answer` or the API, else a human answers in the terminal.
 6. A child stuck on a start screen, or whose turn failed (for example a Kimi quota error), is reported once: as a `[hopp]` system message to its parent when the parent is running, else as a `session.alert` event.
-7. Every `heartbeat_interval` (5 minutes) a running session with stalled children gets one `[hopp] Session <id> status:` message naming them, unless it is busy itself. A child is stalled when it is `exited`, or `idle`, `blocked` or `waiting_input` for longer than `child_stall_threshold` (15 minutes).
+7. Every `heartbeat_interval` (5 minutes) a running session with stalled children gets one `[hopp] Session <id> status:` message naming them, unless it is busy itself or it or one of its children has an open ask: while the human is asked there is nothing for it to unblock, and each message would only wake it. A child is stalled when it is `exited`, or `idle`, `blocked` or `waiting_input` for longer than `child_stall_threshold` (15 minutes).
 8. A child that has ended (`done`, `killed` or `errored`) is never named in that summary, so a parent is not told when the reconcile at daemon start marks a child `errored`.
 9. Every change is appended to the event log with the session's labels in its data. `hopp events --follow` streams it live from `/v1/events/stream` and can be narrowed by `--session` and `--label`; it exits cleanly on Ctrl-C and when the daemon stops.
 

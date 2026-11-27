@@ -46,6 +46,11 @@ func newAskCmd() *cobra.Command {
 			if len(args) == 1 {
 				arg = args[0]
 			}
+			// `hopp ask list` is not a subcommand: without this it asks the
+			// human the one word "list".
+			if (arg == "list" || arg == "ls") && len(options) == 0 && file == "" {
+				return &usageError{message: "hopp ask " + arg + " would ask the human the word \"" + arg + "\"; `hopp asks` lists the open asks"}
+			}
 			text, err := readBody(cmd, arg, len(args) == 1, file, "question", false)
 			if err != nil {
 				return err

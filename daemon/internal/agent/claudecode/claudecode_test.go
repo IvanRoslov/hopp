@@ -414,7 +414,7 @@ func TestSetupWorkspaceWiresQuizHookMatchers(t *testing.T) {
 			hookList, _ := group["hooks"].([]any)
 			for _, hRaw := range hookList {
 				h, _ := hRaw.(map[string]any)
-				if cmd, _ := h["command"].(string); cmd == "sh .hopp/quiz-hook.sh resolved" {
+				if cmd, _ := h["command"].(string); cmd == quizHookCommand(tmpDir, "resolved") {
 					found = true
 				}
 			}
@@ -434,7 +434,7 @@ func TestSetupWorkspaceWiresQuizHookMatchers(t *testing.T) {
 		}
 
 		var found bool
-		want := "sh .hopp/quiz-hook.sh " + phase
+		want := quizHookCommand(tmpDir, phase)
 		for _, raw := range groups {
 			group, ok := raw.(map[string]any)
 			if !ok {
@@ -503,7 +503,7 @@ func TestSetupWorkspaceWritesFreshSettingsJSON(t *testing.T) {
 	}
 	for event, state := range wantEventState {
 		cmd := findHookCommand(t, hooks, event)
-		want := "sh .hopp/activity-hook.sh " + state
+		want := activityHookCommand(tmpDir, state)
 		if cmd != want {
 			t.Errorf("hooks[%s] command = %q, want %q", event, cmd, want)
 		}
@@ -571,7 +571,7 @@ func TestSetupWorkspacePreservesForeignSettingsAndAppendsHooks(t *testing.T) {
 			if matcher == "Bash" && cmd == "echo custom" {
 				foundCustom = true
 			}
-			if matcher == "*" && cmd == "sh .hopp/activity-hook.sh active" {
+			if matcher == "*" && cmd == activityHookCommand(tmpDir, "active") {
 				foundOurs = true
 			}
 		}
@@ -1222,5 +1222,65 @@ func TestSetupWorkspaceTrustsMainRepoOfLinkedWorktree(t *testing.T) {
 func TestMainRepoRootOutsideAGitRepository(t *testing.T) {
 	if got := mainRepoRoot(t.TempDir()); got != "" {
 		t.Errorf("mainRepoRoot = %q, want empty", got)
+	}
+}
+
+// A hook command names its script by an absolute path, so it still runs
+// after the agent changes directory, and the relative form written by
+// earlier versions is removed instead of being left to fail beside it.
+func TestSetupWorkspaceHooksUseAbsolutePathsAndDropRelativeOnes(t *testing.T) {
+	tmpDir := filepath.Join(t.TempDir(), "it's a tree")
+	claudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"hooks":{
+  "Stop":[{"hooks":[{"type":"command","command":"sh .hopp/activity-hook.sh ready"},{"type":"command","command":"sh .hopp/quiz-hook.sh resolved"},{"type":"command","command":"echo mine"}]}],
+  "SessionEnd":[{"hooks":[{"type":"command","command":"sh .hopp/activity-hook.sh exited"}]}]
+}}`
+	if err := os.WriteFile(filepath.Join(claudeDir, "settings.local.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := New().SetupWorkspace(agent.LaunchSpec{WorktreePath: tmpDir}); err != nil {
+		t.Fatalf("SetupWorkspace failed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(claudeDir, "settings.local.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Hooks map[string][]hookMatcherGroup `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatal(err)
+	}
+	var stop []string
+	for _, g := range s.Hooks["Stop"] {
+		for _, h := range g.Hooks {
+			stop = append(stop, h.Command)
+		}
+	}
+	script := filepath.Join(tmpDir, ".hopp", "activity-hook.sh")
+	want := "sh '" + strings.ReplaceAll(script, "'", `'\''`) + "' ready"
+	var haveAbs, haveMine bool
+	for _, c := range stop {
+		if strings.HasPrefix(c, "sh .hopp/") {
+			t.Errorf("a relative hook command is left: %q", c)
+		}
+		haveAbs = haveAbs || c == want
+		haveMine = haveMine || c == "echo mine"
+	}
+	if !haveAbs || !haveMine {
+		t.Errorf("Stop hooks = %q, want %q and the foreign hook kept", stop, want)
+	}
+	// The command runs from another directory and finds the script.
+	sub := filepath.Join(tmpDir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command("sh", "-c", want)
+	c.Dir = sub
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Errorf("the hook command failed from a subdirectory: %v: %s", err, out)
 	}
 }

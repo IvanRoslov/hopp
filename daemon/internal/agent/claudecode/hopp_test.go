@@ -26,6 +26,9 @@ func TestSetupWorkspaceWritesNothingNamedRocket(t *testing.T) {
 		// test's own name, which contains "Rocket".
 		rel, _ := filepath.Rel(dir, p)
 		b, _ := os.ReadFile(p)
+		// The hook commands name their scripts by the worktree's absolute
+		// path, which is dir itself.
+		b = bytes.ReplaceAll(b, []byte(dir), nil)
 		if strings.Contains(strings.ToLower(rel), "rocket") || bytes.Contains(bytes.ToLower(b), []byte("rocket")) {
 			t.Errorf("%s mentions rocket", rel)
 		}

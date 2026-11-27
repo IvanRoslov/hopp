@@ -74,8 +74,9 @@ func (c *ClaudeCode) SetupWorkspace(spec agent.LaunchSpec) error {
 }
 
 // activityHookRelPath is the hook script's path relative to the worktree
-// root. Claude Code hooks run with cwd set to the project directory, so
-// commands reference it relatively.
+// root. The hook commands name it by its absolute path: Claude Code runs a
+// hook in the session's current directory, which is no longer the worktree
+// root once the agent has changed directory.
 const activityHookRelPath = ".hopp/activity-hook.sh"
 
 // activityHookScript is a POSIX shell script that reports an activity state
@@ -209,8 +210,8 @@ const quizHookMatcher = "AskUserQuestion"
 
 // quizHookCommand builds the shell command rocket wires into
 // settings.local.json hooks for the given phase.
-func quizHookCommand(phase string) string {
-	return "sh " + quizHookRelPath + " " + phase
+func quizHookCommand(worktreePath, phase string) string {
+	return "sh " + shellQuote(filepath.Join(worktreePath, quizHookRelPath)) + " " + phase
 }
 
 // activityHookEvents maps the Claude Code hook events rocket wires up to the
@@ -235,12 +236,50 @@ func hookMatcherFor(event string) string {
 	}
 }
 
-// activityHookCommand builds the shell command rocket wires into
-// settings.local.json hooks for the given state. It uses the project-relative
-// form ("sh .hopp/activity-hook.sh <state>") since Claude Code runs hook
-// commands with cwd set to the project root.
-func activityHookCommand(state string) string {
-	return "sh " + activityHookRelPath + " " + state
+// activityHookCommand builds the shell command hopp wires into
+// settings.local.json hooks for the given state. The script is named by its
+// absolute path: Claude Code runs a hook in the session's current directory,
+// so a relative path stops resolving once the agent runs cd, the Stop hook
+// fails, and the daemon keeps the session busy and delivers nothing to it.
+func activityHookCommand(worktreePath, state string) string {
+	return "sh " + shellQuote(filepath.Join(worktreePath, activityHookRelPath)) + " " + state
+}
+
+// legacyHookCommand is the relative form earlier versions wrote
+// ("sh .hopp/activity-hook.sh <state>"); upsertClaudeSettings removes it.
+func legacyHookCommand(relPath, arg string) string {
+	return "sh " + relPath + " " + arg
+}
+
+// shellQuote wraps s in single quotes, escaping embedded single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// removeHookCommand drops cmd from every matcher group of hooks[event], and
+// a group (or the event) that is left without hooks.
+func removeHookCommand(hooks map[string][]hookMatcherGroup, event, cmd string) {
+	groups := hooks[event]
+	kept := groups[:0]
+	for _, g := range groups {
+		hs := g.Hooks[:0]
+		for _, h := range g.Hooks {
+			if h.Type == "command" && h.Command == cmd {
+				continue
+			}
+			hs = append(hs, h)
+		}
+		if len(hs) == 0 {
+			continue
+		}
+		g.Hooks = hs
+		kept = append(kept, g)
+	}
+	if len(kept) == 0 {
+		delete(hooks, event)
+		return
+	}
+	hooks[event] = kept
 }
 
 // hookCommand is the {"type":"command","command":"..."} shape of a single
@@ -330,7 +369,8 @@ func upsertClaudeSettings(worktreePath string) error {
 	}
 
 	for event, state := range activityHookEvents {
-		mergeHookEntry(hooks, event, hookMatcherFor(event), activityHookCommand(state))
+		removeHookCommand(hooks, event, legacyHookCommand(activityHookRelPath, state))
+		mergeHookEntry(hooks, event, hookMatcherFor(event), activityHookCommand(worktreePath, state))
 	}
 	for event, phase := range quizHookEvents {
 		// Tool-use events are scoped to AskUserQuestion; Stop is a
@@ -340,7 +380,8 @@ func upsertClaudeSettings(worktreePath string) error {
 		if event == "Stop" {
 			matcher = ""
 		}
-		mergeHookEntry(hooks, event, matcher, quizHookCommand(phase))
+		removeHookCommand(hooks, event, legacyHookCommand(quizHookRelPath, phase))
+		mergeHookEntry(hooks, event, matcher, quizHookCommand(worktreePath, phase))
 	}
 
 	hooksRaw, err := json.Marshal(hooks)
