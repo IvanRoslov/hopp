@@ -19,6 +19,8 @@ export function QuestionsPanel(props: {
   asks: Ask[];
   reloadAsks: () => void;
   reloadSession: (id: string) => void;
+  // What an ask attaches, drawn under its text (a task's artifacts).
+  attachments?: (refs: string[]) => React.ReactNode;
 }) {
   const open = props.asks.filter((a) => a.status === 'open');
   const closed = props.asks.filter((a) => a.status !== 'open').sort((a, b) => (b.closed_at ?? 0) - (a.closed_at ?? 0));
@@ -37,7 +39,7 @@ export function QuestionsPanel(props: {
         />
       )}
       {open.map((a, i) => (
-        <OpenAsk key={a.id} daemon={props.daemon} ask={a} reload={props.reloadAsks} lead={!q && i === 0} />
+        <OpenAsk key={a.id} daemon={props.daemon} ask={a} reload={props.reloadAsks} lead={!q && i === 0} attachments={props.attachments} />
       ))}
       {closed.length > 0 && (
         <div data-testid="answered">
@@ -175,7 +177,7 @@ function AnsweredRow(props: { ask: Ask }) {
   );
 }
 
-function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; lead?: boolean }) {
+function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; lead?: boolean; attachments?: (refs: string[]) => React.ReactNode }) {
   const { ask } = props;
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -214,6 +216,7 @@ function OpenAsk(props: { daemon: DaemonBridge; ask: Ask; reload: () => void; le
     <section className="ask-block" data-testid={`ask-${ask.id}`}>
       <div className="q">{head}</div>
       {rest.join('\n').trim() && <Markdown variant="compact" className="sub" text={rest.join('\n').trim()} />}
+      {props.attachments && (ask.attachments?.length ?? 0) > 0 && props.attachments(ask.attachments!)}
       <div className="body">
         {options.length > 0 ? (
           <div className="btns">

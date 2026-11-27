@@ -1119,6 +1119,17 @@ export class ShellService {
     return null;
   }
 
+  // feedTaskFor: feedTaskOf, and for an artifact published without the
+  // task's label (a task without a pipeline is not told to label them) the
+  // task whose orchestrator's session is the artifact's scope.
+  async feedTaskFor(e: DaemonEvent): Promise<string | null> {
+    const byLabel = this.feedTaskOf(e);
+    if (byLabel || e.type !== 'artifact.published') return byLabel;
+    const scope = e.data?.['scope'];
+    if (typeof scope !== 'string' || !scope) return null;
+    return (await this.d.store.read()).tasks.find((t) => t.sessionId === scope)?.id ?? null;
+  }
+
   // ---- artifacts ---------------------------------------------------------------
 
   // artifactFile returns the stored file of an artifact version, only when it

@@ -41,11 +41,11 @@ export function ArtifactsPanel(props: {
     <div className="arts" data-testid="artifacts-panel">
       <div className="arts-tools">
         <input className="text-input" type="search" placeholder="Find an artifact" aria-label="Find an artifact" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <Dropdown label={cur.label} testId="artifacts-stage" options={stageOptions} value={props.stageFilter} onChange={props.onStageFilter} />
+        {props.pipeline && <Dropdown label={cur.label} testId="artifacts-stage" options={stageOptions} value={props.stageFilter} onChange={props.onStageFilter} />}
       </div>
       <div className="arts-scroll">
         {props.artifacts.length === 0 ? (
-          <div className="q-empty">No artifacts yet. The orchestrator publishes them with hopp artifact publish.</div>
+          <div className="q-empty">No artifacts yet. The task's agents publish them with hopp artifact publish.</div>
         ) : shown.length === 0 ? (
           <div className="q-empty">Nothing matches.</div>
         ) : (

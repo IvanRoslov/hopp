@@ -133,8 +133,12 @@ app.whenReady().then(() => {
     (err) => console.error('hopp: the shell socket for `hopp task` is not served:', (err as Error).message),
   );
   stream.on('event', (e) => {
-    const task = shellService.feedTaskOf(e);
-    if (task) send(SHELL_FEED_CHANGED, task);
+    void shellService.feedTaskFor(e).then(
+      (task) => {
+        if (task) send(SHELL_FEED_CHANGED, task);
+      },
+      (err) => console.error('hopp: could not name the task of a feed event:', (err as Error).message),
+    );
   });
   // The commands `hopp project|pipeline|task`, refreshed at every start so
   // they run this app; never a reason not to start.

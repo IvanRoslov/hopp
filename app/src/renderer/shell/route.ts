@@ -1,6 +1,7 @@
 // The page's routes. The left column and the work area render from one.
 export type SettingsTab = 'projects' | 'models' | 'tools' | 'lessons';
-export type Panel = 'questions' | 'details' | null;
+// 'artifacts' is offered only by a task (see TaskView); an agent has none.
+export type Panel = 'questions' | 'details' | 'artifacts' | null;
 // The right-hand panels of a task with a pipeline (see feed/PipelineTaskView).
 export type PipelinePanel = 'stages' | 'artifacts' | 'terminal' | 'details';
 
