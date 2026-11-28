@@ -93,7 +93,7 @@ func newSendCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&filePath, "file", "", "file with the message text ('-' reads stdin)")
-	cmd.Flags().BoolVar(&wait, "wait", false, "poll until message is delivered or failed (accepted is announced on the way)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the recipient has the message (accepted or delivered) or it failed")
 
 	return cmd
 }
@@ -108,10 +108,9 @@ type msgResp struct {
 }
 
 // waitForMessage polls GET /v1/messages/{id} every pollInterval until the
-// message reaches a terminal status. "queued", "delivering" and "accepted"
-// are non-terminal and keep the loop going — "accepted" (the text is in a
-// Codex recipient's hands, journal confirmation pending) is announced once;
-// "delivered" and "failed" are terminal. Any other status is treated as non-terminal too (logged, not
+// message is in the recipient's hands or lost. "queued" and "delivering" keep
+// the loop going; "accepted" (the recipient holds the text, the journal's
+// proof is pending), "delivered" and "failed" end it. Any other status is treated as non-terminal too (logged, not
 // errored) so that future statuses added server-side don't break existing
 // clients.
 func waitForMessage(cmd *cobra.Command, c *client.Client, msgID int64) error {
@@ -120,7 +119,6 @@ func waitForMessage(cmd *cobra.Command, c *client.Client, msgID int64) error {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	announcedAccepted := false
 	waitReason := ""
 	for {
 		select {
@@ -153,11 +151,15 @@ func waitForMessage(cmd *cobra.Command, c *client.Client, msgID int64) error {
 				}
 				return fmt.Errorf("message delivery failed")
 			case "accepted":
-				if !announcedAccepted && !flags.JSON {
-					cmd.Printf("%s accepted (the agent has it; waiting for confirmation)\n", label)
+				// The recipient holds the text and reads it at its next step.
+				// Waiting on for the journal's proof would hang two sessions
+				// that send to each other at once: each sits in its own
+				// command and reads nothing until that command returns.
+				if flags.JSON {
+					return printResult(msg)
 				}
-				announcedAccepted = true
-				continue
+				cmd.Printf("%s accepted (the agent has it and reads it after its current step)\n", label)
+				return nil
 			case "queued", "delivering":
 				// Still in flight, continue polling. A queued message on the
 				// Claude route may carry why it waits; name it once per change.

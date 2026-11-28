@@ -1,14 +1,14 @@
 ---
 kind: leaf
 up: [[docs/daemon/README]]
-verified: 2026-11-15 — against the code on main (1ddc9bd) and the live checks of 2026-11-15 on all five harnesses against ~/.hopp; fact 7's text sources by go test on lessons-1; facts 2 and 5 (the failure notice, the retry of an unsent Claude send) by go test on lessons-daemon, 2026-11-18; agy in facts 3 and 6 by a live run of agy 1.5.14 against a throwaway daemon on branch agy-harness, 2026-11-21; fact 5's journal folder rule against Claude Code 2.1.327's code and the folders it made, on branch session-id-100
+verified: 2026-11-15 — against the code on main (1ddc9bd) and the live checks of 2026-11-15 on all five harnesses against ~/.hopp; fact 7's text sources by go test on lessons-1; facts 2 and 5 (the failure notice, the retry of an unsent Claude send) by go test on lessons-daemon, 2026-11-18; agy in facts 3 and 6 by a live run of agy 1.5.14 against a throwaway daemon on branch agy-harness, 2026-11-21; fact 5's journal folder rule against Claude Code 2.1.327's code and the folders it made, on branch session-id-100; fact 1's `--wait` by go test on send-wait-returns-on-accepted, 2026-11-28
 ---
 
 # Messages between sessions
 
 A message goes from a session, a human or the daemon to one live session. This leaf says how it travels, what holds it back and what the sender learns.
 
-1. `hopp send` stores the message and returns at once; delivery runs in the background, one message at a time per recipient and in order, and `--wait` follows the message until it is delivered or failed (exit 1). A message to an id that does not exist is refused with 404, and one to a session that has ended with 409, unless a mailbox of that name holds it (fact 12).
+1. `hopp send` stores the message and returns at once; delivery runs in the background, one message at a time per recipient and in order, and `--wait` follows the message until the recipient has it (`accepted` or `delivered`) or it failed (exit 1). It does not wait for the proof of an accepted message, because two sessions that send to each other at once would each wait inside its own command. A message to an id that does not exist is refused with 404, and one to a session that has ended with 409, unless a mailbox of that name holds it (fact 12).
 2. Inside a session the sender is that session (`HOPP_SESSION_ID`), and the recipient sees `[from <id>]` before the text; a message from a plain terminal or from the daemon carries no sender. When a message from a live session fails for any reason, the sender gets one `[hopp] Message <n> to <id> was not delivered: <reason>` notice; the notice has no sender, so its own failure makes no further notice.
 3. Each harness has one transport: Claude Code and DeepSeek get the message through Claude Code's own session socket, Pi through its socket channel, and Codex, Kimi Code and agy have it typed into their tmux pane (agy's interactive screen takes no input from outside). A message on the Claude Code socket route never falls back to typing.
 4. The socket route delivers only to the exact Claude Code process hopp launched in that pane (its registry entry, pane and process ancestry must match), so a Claude Code started by a human or by rocket in the same folder never receives a hopp message.
