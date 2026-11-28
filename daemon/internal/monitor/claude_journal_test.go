@@ -161,7 +161,9 @@ func TestClaudeJournalConservativeRecords(t *testing.T) {
 		{"zero timestamp", `{"type":"assistant","sessionId":"SESSION","timestamp":"0001-01-01T00:00:00Z"}` + "\n"},
 		{"before root", `{"type":"user","sessionId":"SESSION","timestamp":"2000-01-01T00:00:00Z"}` + "\n"},
 		{"future timestamp", `{"type":"user","sessionId":"SESSION","timestamp":"2999-01-01T00:00:00Z"}` + "\n"},
-		{"unknown missing timestamp", `{"type":"unknown","sessionId":"SESSION"}` + "\n"},
+		{"unknown invalid timestamp", `{"type":"unknown","sessionId":"SESSION","timestamp":"invalid"}` + "\n"},
+		{"unknown error missing timestamp", `{"type":"unknown","sessionId":"SESSION","isApiErrorMessage":true}` + "\n"},
+		{"queue operation missing timestamp", `{"type":"queue-operation","sessionId":"SESSION"}` + "\n"},
 		{"meaningful system missing timestamp", `{"type":"system","subtype":"api_error","sessionId":"SESSION"}` + "\n"},
 		{"metadata error missing timestamp", `{"type":"mode","sessionId":"SESSION","isApiErrorMessage":true}` + "\n"},
 		{"metadata invalid timestamp", `{"type":"mode","sessionId":"SESSION","timestamp":"invalid"}` + "\n"},
@@ -176,6 +178,27 @@ func TestClaudeJournalConservativeRecords(t *testing.T) {
 				t.Fatalf("uncertainty became activity: %q %v %v", state, ts, err)
 			}
 		})
+	}
+}
+
+// Record types the monitor has never heard of, written without a timestamp
+// (what Claude Code 2.1.332 adds), leave the turn's own records in charge.
+func TestClaudeJournalUnknownBookkeepingIsSkipped(t *testing.T) {
+	at := time.Now().Add(-time.Minute).UTC()
+	valid := journalFixtureText(`{"type":"assistant","sessionId":"SESSION","timestamp":"STAMP","message":{"stop_reason":"end_turn"}}`+"\n", at)
+	tail := ""
+	for _, typ := range []string{"data-flow-records", "cost-state", "derived-from", "artifact-comment-monitor", "data-flow-incomplete", "something-new"} {
+		tail += `{"type":"` + typ + `","sessionId":"SESSION","records":[{"timestamp":"2000-01-01T00:00:00Z"}]}` + "\n"
+	}
+	id := journalFixtureIdentity(t, valid+journalFixtureText(tail, at))
+	state, ts, endTurn, err := claudeJournalTurn(context.Background(), id)
+	if err != nil || state != activity.Ready || !ts.Equal(at) || !endTurn {
+		t.Fatalf("state=%q at=%v endTurn=%v err=%v; want ready at %v, end of turn", state, ts, endTurn, err, at)
+	}
+	// Alone they establish nothing.
+	id = journalFixtureIdentity(t, journalFixtureText(tail, at))
+	if state, _, err := claudeJournalActivity(context.Background(), id); !errors.Is(err, agent.ErrNoSignal) || state != "" {
+		t.Fatalf("bookkeeping alone became activity: %q %v", state, err)
 	}
 }
 
