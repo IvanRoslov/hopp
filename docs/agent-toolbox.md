@@ -51,7 +51,7 @@ The daemon's state is one SQLite database, `~/.hopp/hopp.db`. Read it without wr
 
 ## 5. Verify the running system
 
-Run `bin/hopp daemon status` (pid and version), then `bin/hopp doctor`. To see a session really run, launch one in a scratch folder with `bin/hopp run <dir> --agent <harness>`, check `bin/hopp ls` and the pane with `tmux capture-pane -p -t '=<id>:'`, then stop it with `bin/hopp kill <id>`. `bin/hopp events --session <id>` shows what happened to it. To see a message travel, run `bin/hopp send --wait <id> '<text>'` (it prints `queued`, `accepted`, any wait reason, and `delivered` or `failed`), `bin/hopp messages <id>` for the history with each message's status and reason, and `bin/hopp events --follow --session <id>` to watch activity and delivery live.
+Run `bin/hopp daemon status` (pid and version), then `bin/hopp doctor`. To see a session really run, launch one in a scratch folder with `bin/hopp run <dir> --agent <harness>`, check `bin/hopp ls` and the pane with `tmux capture-pane -p -t '=<id>:'`, then stop it with `bin/hopp kill <id>`. `bin/hopp events --session <id>` shows what happened to it. To see a message travel, run `bin/hopp send --wait <id> '<text>'` (it prints `queued`, any wait reason, and `accepted`, `delivered` or `failed`), `bin/hopp messages <id>` for the history with each message's status and reason, and `bin/hopp events --follow --session <id>` to watch activity and delivery live.
 
 The human's commands:
 

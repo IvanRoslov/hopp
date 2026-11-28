@@ -164,14 +164,14 @@ func setPollIntervalForTest(t *testing.T, d time.Duration) func() {
 	return func() { pollInterval = old }
 }
 
-// TestWaitForMessageAcceptedPrintedOnce: "accepted" (pasted into a Codex
-// recipient, journal confirmation pending) is an intermediate status: it is
-// announced once on stdout and polling continues until "delivered".
-func TestWaitForMessageAcceptedPrintedOnce(t *testing.T) {
+// TestWaitForMessageReturnsOnAccepted: "accepted" (the recipient holds the
+// text, the journal's proof is pending) ends the wait. Two sessions that send
+// to each other with --wait would otherwise each sit in its own command.
+func TestWaitForMessageReturnsOnAccepted(t *testing.T) {
 	restore := setPollIntervalForTest(t, 10*time.Millisecond)
 	defer restore()
 
-	statuses := []string{"delivering", "accepted", "accepted", "accepted", "delivered"}
+	statuses := []string{"delivering", "accepted", "accepted"}
 	var seq int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/messages/9", func(w http.ResponseWriter, r *http.Request) {
@@ -192,11 +192,11 @@ func TestWaitForMessageAcceptedPrintedOnce(t *testing.T) {
 	if err := waitForMessage(cmd, c, 9); err != nil {
 		t.Fatalf("waitForMessage: %v", err)
 	}
-	if n := strings.Count(out.String(), "message 9 accepted"); n != 1 {
-		t.Fatalf("accepted announced %d times, want 1; stdout=%q", n, out.String())
+	if got := atomic.LoadInt32(&seq); got != 2 {
+		t.Fatalf("polled %d times, want 2: the wait ends at the first accepted", got)
 	}
-	if !strings.HasSuffix(strings.TrimSpace(out.String()), "message 9 delivered") {
-		t.Fatalf("stdout = %q, want to end with the delivered line", out.String())
+	if !strings.HasPrefix(out.String(), "message 9 accepted") || strings.Contains(out.String(), "delivered") {
+		t.Fatalf("stdout = %q, want the accepted line only", out.String())
 	}
 	if strings.Contains(errBuf.String(), "unrecognized status") {
 		t.Fatalf("accepted treated as unknown: %q", errBuf.String())
