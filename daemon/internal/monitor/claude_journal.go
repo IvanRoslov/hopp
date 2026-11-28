@@ -107,6 +107,15 @@ func claudeJournalTurn(ctx context.Context, id claudeinstance.Identity) (activit
 				}
 			}
 		}
+		// Claude Code adds bookkeeping record types with each release
+		// (data-flow-records, cost-state, derived-from, ...). One that carries
+		// no timestamp and no error says nothing about the turn; reading it as
+		// uncertainty erased the activity of every session on every sweep, and
+		// delivery waited on "unknown". Only a conversation record must be
+		// timed.
+		if record.Timestamp.IsZero() && !record.Error && !record.Message.Error && !claudeConversationRecord(record.Type) {
+			continue
+		}
 		if record.Timestamp.IsZero() || record.Timestamp.Before(id.ProcessStart) || record.Timestamp.After(time.Now()) {
 			return "", time.Time{}, false, agent.ErrNoSignal
 		}
@@ -128,4 +137,15 @@ func claudeJournalTurn(ctx context.Context, id claudeinstance.Identity) (activit
 		return activity.Active, lastAt, endTurn, nil
 	}
 	return activity.Ready, lastAt, endTurn, nil
+}
+
+// claudeConversationRecord reports whether a journal record of this type is
+// part of the conversation itself, so it always carries a timestamp: a turn's
+// input, output, system notice or queued message.
+func claudeConversationRecord(typ string) bool {
+	switch typ {
+	case "user", "assistant", "system", "queue-operation":
+		return true
+	}
+	return false
 }
